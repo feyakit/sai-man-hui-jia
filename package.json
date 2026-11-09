@@ -18,6 +18,7 @@
     "art:templates": "node --import tsx tools/art-templates.ts"
   },
   "devDependencies": {
+    "@cocos/creator-types": "^3.8.8",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "4.1.4",
     "tsx": "^4.23.15",

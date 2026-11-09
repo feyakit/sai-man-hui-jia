@@ -5,5 +5,12 @@
     "tests/**/*.ts",
     "vitest.config.ts",
     "tools/**/*.ts"
-  ]
+  ],
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "types": [
+      "node",
+      "@cocos/creator-types/engine"
+    ]
+  }
 }
