@@ -71,3 +71,14 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 | `npm run --silent levels:evaluate -- --vehicle wuling --samples 200` | 200 行 CSV。每局 8 个解、首解 28,810 个节点，单局约 271–547 毫秒 |
 | [首次官方编辑器构建](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42622598981) | 编辑器安装包传输耗时约 7 分钟，原 5 分钟传输限制触发重试，随后达到任务时限 |
 | 修正 Windows 下载限制 | 单次下载放宽到 15 分钟，任务上限 32 分钟，缓存已下载的完整安装包 |
+
+## 2026-11-09 · M3 私密浏览器试玩
+
+| 执行 | 结果 |
+| --- | --- |
+| Cocos 3.8.8 引擎预览包 | 从 `6f6aa2a` 的游戏源码构建，编译 Web 引擎与 UI 材质，使用官方默认 2D 场景 |
+| `node --import tsx tools/cocos/smoke-web-mobile.mjs <试玩目录> <截图目录>` | 桌面鼠标和 Pixel 7 模拟触屏均通关两关。非法落点、点按旋转、拖回托盘、URL 直达挑战与冻结 10 秒后的倒计时均通过 |
+| [部署私密试玩](https://sai-man-hui-jia-playtest.feya0517.chatgpt.site) | 仅项目所有者可访问。部署源码版本 `202433254ed06bc1918453b38a6d161bae552043` |
+| [官方 Web Mobile 构建](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42625147699) | 已启用调整后的下载时限。正式编辑器出包和真机复测仍待确认 |
+
+试玩直接使用 Cocos 开源 Web 引擎和同一套游戏源码。测试环境使用 Chromium 软件 WebGL。试玩页会在浏览器无法启动 WebGL 时提示，实体手机、微信和官方 Web Mobile 导出不计入本轮通过项。
