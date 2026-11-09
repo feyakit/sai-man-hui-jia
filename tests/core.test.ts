@@ -24,7 +24,8 @@ describe('core rules', () => {
   expect(validateSolution(level,valid,4).ok).toBe(false);
  });
  it('defines vehicle boards within limits and rotations by date', () => {
-  for (const v of VEHICLES) {
+  // Daily templates retain their original 80–95 cell contract; V1 has its own tests.
+  for (const v of VEHICLES.slice(0,6)) {
    expect(v.width).toBeLessThanOrEqual(11); expect(v.height).toBeLessThanOrEqual(11);
    expect(v.width*v.height-v.blocked.length).toBeGreaterThanOrEqual(80);
    expect(v.width*v.height-v.blocked.length).toBeLessThanOrEqual(95);

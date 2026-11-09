@@ -6,6 +6,11 @@ import type { DifficultyStats, Level, LevelSolution, Placement, Rotation, ShapeI
 
 export interface GeneratorConfig {
   date: string;
+  stage?: Level['stage'];
+  timeLimitSec?: number;
+  maxSameShape?: number;
+  minSolutions?: number;
+  randomInitialRotation?: boolean;
   minPieces: number;
   maxPieces: number;
   minLargeFraction: number;
@@ -22,10 +27,11 @@ interface Candidate { shape: ShapeId; rotation: Rotation; x: number; y: number; 
 
 export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, seed: string): { level: Level; solution: LevelSolution; stats: DifficultyStats } {
   const integerLimits = [cfg.minPieces, cfg.maxPieces, cfg.minSix, cfg.maxSix, cfg.maxSmall,
-    cfg.maxSolutions, cfg.minNodesToFirst, cfg.maxNodes, cfg.maxPartitionTries, cfg.maxAttempts];
+    cfg.maxSameShape ?? 1, cfg.minSolutions ?? 1, cfg.timeLimitSec ?? 180, cfg.maxSolutions, cfg.minNodesToFirst, cfg.maxNodes, cfg.maxPartitionTries, cfg.maxAttempts];
   if (integerLimits.some(value => !Number.isSafeInteger(value) || value < 0) ||
       cfg.minPieces > cfg.maxPieces || cfg.minSix > cfg.maxSix ||
-      cfg.maxSolutions < 1 || cfg.maxNodes < 1 || cfg.maxPartitionTries < 1 || cfg.maxAttempts < 1 ||
+      (cfg.stage !== undefined && ![1,2,3].includes(cfg.stage)) ||
+      (cfg.maxSameShape !== undefined && cfg.maxSameShape < 1) || (cfg.minSolutions ?? 1) > cfg.maxSolutions || cfg.maxSolutions < 1 || cfg.maxNodes < 1 || cfg.maxPartitionTries < 1 || cfg.maxAttempts < 1 ||
       !Number.isFinite(cfg.minLargeFraction) || cfg.minLargeFraction < 0 || cfg.minLargeFraction > 1) {
     throw new Error('invalid generator configuration');
   }
@@ -40,14 +46,14 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
   const blocked = new Set(template.blocked.map(([x,y]) => y*template.width+x));
   const usable = template.width*template.height-blocked.size;
   const board = {
-    date:cfg.date, stage:2 as const, vehicle:template.id, width:template.width, height:template.height,
-    blocked:template.blocked.map(([x,y]): [number,number] => [x,y]), timeLimitSec:180,
+    date:cfg.date, stage:cfg.stage ?? 2, vehicle:template.id, width:template.width, height:template.height,
+    blocked:template.blocked.map(([x,y]): [number,number] => [x,y]), timeLimitSec:cfg.timeLimitSec ?? 180,
   };
   const acceptableInventory = (shapes: readonly ShapeId[]) => {
     const sizes = shapes.map(shape => SHAPES[shape].length);
     const six = sizes.filter(size => size === 6).length;
     const small = sizes.filter(size => size <= 3).length;
-    return shapes.length >= cfg.minPieces && shapes.length <= cfg.maxPieces &&
+    return shapes.every(shape => shapes.filter(entry => entry === shape).length <= (cfg.maxSameShape ?? Infinity)) && shapes.length >= cfg.minPieces && shapes.length <= cfg.maxPieces &&
       six >= cfg.minSix && six <= cfg.maxSix && small <= cfg.maxSmall &&
       (shapes.length-six-small)/shapes.length >= cfg.minLargeFraction &&
       sizes.reduce((total,size) => total+size,0) === usable;
@@ -58,14 +64,14 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       ...board,
       pieces:indices.map((source,index) => ({
         id:index+1, shape:shapes[source], item:ITEMS[shapes[source]].key,
-        initialRotation:Math.floor(random()*4) as Rotation,
+        initialRotation:(cfg.randomInitialRotation === false ? 0 : Math.floor(random()*4)) as Rotation,
       })),
     };
     const placements = indices.map((source,index) => {
       const {x,y,rotation} = pieces[source];
       return {x,y,rotation,pieceId:index+1};
     });
-    const solution: LevelSolution = {date:cfg.date,stage:2,placements};
+    const solution: LevelSolution = {date:cfg.date,stage:board.stage,placements};
     const stats: DifficultyStats = {
       solutionCount:result.solutionCount, solutionCountCapped:false,
       nodesToFirst:result.nodesToFirst,totalNodes:result.totalNodes,
@@ -90,7 +96,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       solutionLimitFailures++;
       return;
     }
-    if (!result.firstSolution || result.nodesToFirst < cfg.minNodesToFirst) { difficultyFailures++; return; }
+    if (!result.firstSolution || result.solutionCount < (cfg.minSolutions ?? 1) || result.nodesToFirst < cfg.minNodesToFirst) { difficultyFailures++; return; }
     return result;
   };
   let attempt = 0;
@@ -130,10 +136,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
     const partition = (): boolean => {
       if (++visits > cfg.maxPartitionTries) return false;
       if (occupied.size === template.width*template.height) {
-        const six = placed.filter(item => item.cells.length === 6).length;
-        const small = placed.filter(item => item.cells.length <= 3).length;
-        const large = placed.filter(item => item.cells.length === 4 || item.cells.length === 5).length;
-        return placed.length >= cfg.minPieces && placed.length <= cfg.maxPieces && six >= cfg.minSix && six <= cfg.maxSix && small <= cfg.maxSmall && large/placed.length >= cfg.minLargeFraction;
+        return acceptableInventory(placed.map(piece => piece.shape));
       }
       if (placed.length >= cfg.maxPieces) return false;
       let first = 0;
@@ -142,6 +145,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       const small = placed.filter(item => item.cells.length <= 3).length;
       const options = candidates[first].filter(candidate =>
         !candidate.cells.some(cell => occupied.has(cell)) &&
+        placed.filter(piece => piece.shape === candidate.shape).length < (cfg.maxSameShape ?? Infinity) &&
         (candidate.cells.length !== 6 || six < cfg.maxSix) &&
         (candidate.cells.length > 3 || small < cfg.maxSmall));
       for (const candidate of shuffle(options, random)) {
@@ -165,7 +169,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
     }
   }
   throw new Error(
-    `Failed to generate a level in ${cfg.maxAttempts} attempts: partition=${partitionFailures}, ` +
+    `Failed constraints (pieces=${cfg.minPieces}–${cfg.maxPieces}, maxSameShape=${cfg.maxSameShape ?? "unlimited"}, six=${cfg.minSix}–${cfg.maxSix}, solutions=${cfg.minSolutions ?? 1}–${cfg.maxSolutions}, minNodesToFirst=${cfg.minNodesToFirst}) in ${cfg.maxAttempts} attempts: partition=${partitionFailures}, ` +
     `nodeLimit=${nodeLimitFailures}, solutionLimit=${solutionLimitFailures}, difficulty=${difficultyFailures}`,
   );
 }
