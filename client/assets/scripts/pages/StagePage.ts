@@ -71,6 +71,10 @@ export class StagePage {
     this.packed = this.caption('Packed','',25,-174,325,muted);
     this.notice = this.caption('Notice','',24,0,972,ink);
     this.caption('ControlsHint','拖年货进车厢 · 点按转向 · 横滑托盘',21,0,1275,muted);
+    if (level.stage === 1) {
+      this.caption('TrunkOpen','后备箱已打开',23,0,405,muted);
+      this.caption('FirstLeg','装好这车年货，就能出发。',26,0,893,muted);
+    }
     for (const piece of level.pieces) {
       const item = this.caption(`Item${piece.id}`,'',22,0,0,cream);
       this.itemLabels.set(piece.id,item);
@@ -222,7 +226,12 @@ export class StagePage {
       if (right > left) {
         this.rectangle({x:left,y:rect.y,w:right-left,h:119},new Color(255,244,222),9);
       }
-      this.paintPiece(piece,this.session.rotationFor(piece.id),rect.x+13,rect.y+6,19,undefined,this.tray);
+      const rotation = this.session.rotationFor(piece.id);
+      const cells = rotate(SHAPES[piece.shape],rotation);
+      const columns = Math.max(...cells.map(([column]) => column))+1;
+      const rows = Math.max(...cells.map(([,row]) => row))+1;
+      const size = Math.floor(Math.min(34,(rect.w-18)/columns,80/rows));
+      this.paintPiece(piece,rotation,rect.x+(rect.w-columns*size)/2,rect.y+(90-rows*size)/2,size,undefined,this.tray);
       if (right-left >= 105) {
         this.positionItem(piece,ITEMS[piece.shape].name,(left+right)/2,rect.y+104,ink);
       }
