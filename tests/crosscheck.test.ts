@@ -41,3 +41,17 @@ it('matches independent exhaustive enumeration for all small two-piece cases',()
   expect(result.solutionCount,`${a},${b}`).toBe(expected);
  }
 });
+
+it('counts mixed repeated shapes with a blocked cell without label permutations', () => {
+ const shapes: ShapeId[] = ['I2','O4','I2'];
+ for (const blocked of [[[0,0]],[[1,1]],[[2,1]]] as const) {
+  const level: Level = {
+   date:'2027-01-01', stage:2, vehicle:'test', width:3, height:3, blocked:[...blocked], timeLimitSec:180,
+   pieces:shapes.map((shape,index) => ({id:index+1,shape,item:'',initialRotation:0})),
+  };
+  const result = solve(level,{maxSolutions:1000,maxNodes:100000});
+  expect(result.nodeLimitReached).toBe(false);
+  expect(result.solutionCount).toBe(enumerate(level));
+  if (result.firstSolution) expect(validateSolution(level,result.firstSolution)).toEqual({ok:true});
+ }
+});
