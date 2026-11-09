@@ -77,15 +77,16 @@ export function solve(level: Level, options: { maxSolutions: number; maxNodes: n
   let firstSolution: Placement[] | undefined;
   let nodeLimitReached = false, solutionCountCapped = false;
   const chosen: Placement[] = [];
+  const shapesById = new Map(pieces.map(piece => [piece.id, piece.shape]));
+  const chosenByShape = new Map<string, Placement[]>();
   const compatible = (p: Placement) => {
-    const piece = pieces.find(item => item.id === p.pieceId)!;
+    const shape = shapesById.get(p.pieceId)!;
     const anchor = p.y * level.width + p.x;
-    return chosen.every(other => {
-      const otherPiece = pieces.find(item => item.id === other.pieceId)!;
-      if (otherPiece.shape !== piece.shape) return true;
+    for (const other of chosenByShape.get(shape) ?? []) {
       const otherAnchor = other.y * level.width + other.x;
-      return other.pieceId < p.pieceId ? otherAnchor < anchor : otherAnchor > anchor;
-    });
+      if (other.pieceId < p.pieceId ? otherAnchor >= anchor : otherAnchor <= anchor) return false;
+    }
+    return true;
   };
   const search = (): void => {
     if (nodeLimitReached || solutionCountCapped) return;
@@ -96,10 +97,23 @@ export function solve(level: Level, options: { maxSolutions: number; maxNodes: n
       return;
     }
     let column = root.right as Column;
-    for (let next = column.right; next !== root; next = next.right) {
-      if ((next as Column).size < column.size) column = next as Column;
+    let smallest = column.size;
+    for (let next: Link = root.right; next !== root; next = next.right) {
+      const candidate = next as Column;
+      let size = candidate.size;
+      if (candidate.name.startsWith('p')) {
+        const shape = shapesById.get(Number(candidate.name.slice(1)))!;
+        if ((chosenByShape.get(shape)?.length ?? 0) > 0) {
+          size = 0;
+          for (let row = candidate.down; row !== candidate && size < smallest; row = row.down) {
+            if (compatible(row.placement!)) size++;
+          }
+        }
+      }
+      if (size < smallest) { column = candidate; smallest = size; }
+      if (smallest === 0) return;
     }
-    if (column.size === 0) return;
+    if (smallest === 0) return;
     cover(column);
     for (let row = column.down; row !== column; row = row.down) {
       if (totalNodes >= options.maxNodes) { nodeLimitReached = true; break; }
@@ -107,10 +121,15 @@ export function solve(level: Level, options: { maxSolutions: number; maxNodes: n
       const placement = row.placement!;
       if (!compatible(placement)) continue;
       chosen.push(placement);
+      const shape = shapesById.get(placement.pieceId)!;
+      const sameShape = chosenByShape.get(shape) ?? [];
+      sameShape.push(placement);
+      chosenByShape.set(shape, sameShape);
       for (let node = row.right; node !== row; node = node.right) cover(node.column);
       search();
       for (let node = row.left; node !== row; node = node.left) uncover(node.column);
       chosen.pop();
+      sameShape.pop();
       if (nodeLimitReached || solutionCountCapped) break;
     }
     uncover(column);

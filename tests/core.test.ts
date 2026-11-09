@@ -65,3 +65,19 @@ it('keeps all vehicle regions connected in groups of at least six cells', () => 
   }
  }
 });
+
+it('uses the specified number of cells for every shape', () => {
+ const sizes = {I2:2,I3:3,L3:3,I4:4,O4:4,L4:4,J4:4,T4:4,S4:4,Z4:4,P5:5,L5:5,T5:5,U5:5,V5:5,Z5:5,N5:5,Y5:5,R6:6};
+ for (const [shape,expected] of Object.entries(sizes)) {
+  const cells=SHAPES[shape as keyof typeof SHAPES];
+  expect(cells).toHaveLength(expected);
+  expect(new Set(cells.map(([x,y]) => `${x},${y}`)).size).toBe(expected);
+ }
+});
+
+it('rejects malformed boards before validating placements', () => {
+ const level=stage1('2027-01-01');
+ expect(validateSolution({...level,blocked:[[0,0],[0,0]]},[])).toEqual({ok:false,reason:'invalid level'});
+ expect(validateSolution({...level,blocked:[[4,0]]},[])).toEqual({ok:false,reason:'invalid level'});
+ expect(validateSolution({...level,pieces:[level.pieces[0],level.pieces[0]]},[])).toEqual({ok:false,reason:'invalid level'});
+});

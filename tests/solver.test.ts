@@ -47,3 +47,10 @@ describe('generator', () => {
   expect(shuffle([1,2,3,4],createRng('x'))).toEqual(shuffle([1,2,3,4],createRng('x')));
  });
 });
+
+it('rejects invalid budgets and vehicle templates before searching', () => {
+ expect(() => generateLevel(template,{...cfg,maxAttempts:Infinity},'bad')).toThrow('invalid generator configuration');
+ expect(() => generateLevel(template,{...cfg,minPieces:10,maxPieces:1},'bad')).toThrow('invalid generator configuration');
+ expect(() => generateLevel({...template,blocked:[[0,0],[0,0]]},cfg,'bad')).toThrow('invalid vehicle template');
+ expect(() => generateLevel({...template,blocked:[[4,0]]},cfg,'bad')).toThrow('invalid vehicle template');
+});
