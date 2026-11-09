@@ -17,6 +17,10 @@ jobs:
     timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/trunk-cocos/creator.zip
+          key: cocos-creator-win-3.8.8-121518
       - name: Build with Cocos Creator 3.8.8
         shell: pwsh
         run: ./tools/cocos/build-web-mobile.ps1
@@ -31,3 +35,28 @@ jobs:
           name: trunk-home-web-mobile
           path: client/build/web-mobile
           if-no-files-found: error
+
+  browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: trunk-home-web-mobile
+          path: client/build/web-mobile
+      - run: npx playwright install --with-deps chromium
+      - name: Play both stages with mouse and touch
+        run: node --import tsx tools/cocos/smoke-web-mobile.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-mobile-browser-evidence
+          path: tools/out/web-mobile-smoke
+          if-no-files-found: ignore
