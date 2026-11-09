@@ -52,6 +52,9 @@ async function game(page) {
     return {
       level:stage.level.stage,board,cell,message,remaining:session.remainingSeconds,
       placements:session.placements,
+      route:stage.node.getChildByName('Route')?.getComponent(cc.Label)?.string,
+      packed:stage.node.getChildByName('Packed')?.getComponent(cc.Label)?.string,
+      firstItem:stage.node.getChildByName('Item1')?.getComponent(cc.Label)?.string,
       slots:slots.map(({piece,rect}) => ({id:piece.id,rotation:session.rotationFor(piece.id),rect})),
       buttons:buttons.map(({rect}) => rect),
     };
@@ -143,6 +146,10 @@ async function exercise(name,context) {
       const state = await game(page);
       return state.level === 1 && state;
     },'stage one');
+    assert.deepEqual(view.placements,[],'The trunk starts empty');
+    assert.equal(view.route,'从打拼的城市，到亮着灯的老家');
+    assert.equal(view.packed,'已装车 0 / 4 件');
+    assert.equal(view.firstItem,'甘蔗');
     await page.screenshot({path:join(evidence,`${name}-stage-one.png`)});
     await tap(page,touch,slotPoint(view.slots[0]));
     await until(async () => (await game(page)).slots?.[0].rotation === 3,'clockwise tap');
@@ -159,6 +166,7 @@ async function exercise(name,context) {
     await page.screenshot({path:join(evidence,`${name}-stage-two.png`)});
     await clear(page,touch,1);
     await until(async () => (await game(page)).message === '行李塞满了，回家！','stage two clear');
+    await page.screenshot({path:join(evidence,`${name}-arrival.png`)});
 
     await page.goto(url+'?level=demo');
     await until(async () => (await game(page)).level === 2,'query-selected challenge');

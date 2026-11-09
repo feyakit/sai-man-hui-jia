@@ -1,13 +1,14 @@
-import { _decorator, Component, Director, Layers, Node, ResolutionPolicy, director, view } from 'cc';
+import { _decorator, Color, Component, Director, Graphics, Layers, Node, ResolutionPolicy, director, view } from 'cc';
 import { EDITOR } from 'cc/env';
-import { GAME_TITLE } from './config/brand';
+import { GAME_SUBTITLE, GAME_TITLE } from './config/brand';
 import { shanghaiDate } from './core/date';
 import { stage1 } from './core/stage1';
 import type { Level } from './core/types';
 import { StagePage } from './pages/StagePage';
 import { WebPlatform } from './platform/WebPlatform';
 import { Api } from './services/Api';
-import { label, uiNode } from './ui/UIKit';
+import { fill, label, uiNode } from './ui/UIKit';
+import { drawHomeRoad, drawWelcomeHome } from './ui/JourneyArt';
 
 const {ccclass} = _decorator;
 
@@ -33,7 +34,7 @@ export class Bootstrap extends Component {
   }
 
   private async challenge(): Promise<void> {
-    this.message('正在装载今天的挑战关');
+    this.message('年货装上车，准备跑最后一程');
     try {
       const level = await this.api.loadChallenge();
       if (this.node.isValid) this.show(level);
@@ -46,10 +47,28 @@ export class Bootstrap extends Component {
     this.stage = undefined;
     this.node.destroyAllChildren();
     const size = view.getVisibleSize();
-    const screen = uiNode('Message',this.node,size.width,size.height);
-    label(screen,'Brand',GAME_TITLE,62,0,90);
-    label(screen,'Message',text,32,0,0);
-    if (onTap) screen.once('touch-end',onTap);
+    const width = 750;
+    const height = 1334;
+    const screen = uiNode('Message',this.node,width,height);
+    const scale = Math.min(size.width/width,size.height/height);
+    screen.setScale(scale,scale,1);
+    const art = screen.addComponent(Graphics);
+    fill(art,new Color(255,246,229),-width/2,-height/2,width,height);
+    drawHomeRoad(art,width,height,0);
+    label(screen,'Brand',GAME_TITLE,62,0,549).color = new Color(255,246,229);
+    label(screen,'Subtitle',GAME_SUBTITLE,25,0,488).color = new Color(255,222,181);
+    const arrived = text === '行李塞满了，回家！';
+    if (arrived) {
+      drawWelcomeHome(art);
+      label(screen,'Arrival','春运这一程 · 平安到家',26,0,320);
+      label(screen,'Message',text,48,0,-66);
+      label(screen,'Family','家里还亮着灯，年夜饭等你开席。',28,0,-139);
+      fill(art,new Color(158,45,41),-148,-300,296,64,16);
+      label(screen,'Again','再跑一趟',29,0,-268).color = new Color(255,246,229);
+    } else {
+      label(screen,'Message',text,32,0,0);
+    }
+    if (onTap) screen.once(Node.EventType.TOUCH_END,onTap);
   }
 }
 
