@@ -10,7 +10,7 @@ $log = Join-Path $root 'cocos-build.log'
 New-Item -ItemType Directory -Force $work, $build | Out-Null
 if (!(Test-Path $archive) -or (Get-Item $archive).Length -ne 1027270586) {
   Write-Host 'Downloading Cocos Creator 3.8.8'
-  curl.exe --fail --location --retry 2 --max-time 300 'https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-win-121518.zip' -o $archive
+  curl.exe --fail --location --no-progress-meter --retry 2 --retry-max-time 1200 --max-time 900 'https://download.cocos.com/CocosCreator/v3.8.8/CocosCreator-v3.8.8-win-121518.zip' -o $archive
   if ($LASTEXITCODE -ne 0) { throw 'Cocos Creator archive download failed' }
   if ((Get-Item $archive).Length -ne 1027270586) { throw 'Unexpected Cocos Creator archive size' }
 }

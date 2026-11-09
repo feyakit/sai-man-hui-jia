@@ -62,3 +62,12 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - GitHub Actions 新增 Windows 构建任务。它从 Cocos Creator 3.8.8 安装包复制官方 Empty 2D 模板和 2D 场景，由编辑器导入资源、生成元数据并构建 Web Mobile。游戏通过场景启动事件挂载 Bootstrap。
 
 - 新增 Chromium 验收脚本，驱动真实 Web Mobile 构建的鼠标和触摸事件。检查两关通关、非法吸附、顺时针旋转、拖回托盘、URL 直达挑战关和冻结 10 秒后的倒计时。GitHub Actions 保留浏览器验收截图。
+
+## 2026-11-09 · M3 云端构建复核
+
+| 执行 | 结果 |
+| --- | --- |
+| [核心 CI](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42623132608) | 类型检查、28 项测试、五菱性能测试和七天关卡校验通过 |
+| `npm run --silent levels:evaluate -- --vehicle wuling --samples 200` | 200 行 CSV。每局 8 个解、首解 28,810 个节点，单局约 271–547 毫秒 |
+| [首次官方编辑器构建](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42622598981) | 编辑器安装包传输耗时约 7 分钟，原 5 分钟传输限制触发重试，随后达到任务时限 |
+| 修正 Windows 下载限制 | 单次下载放宽到 15 分钟，任务上限 32 分钟，缓存已下载的完整安装包 |
