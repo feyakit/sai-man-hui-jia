@@ -56,4 +56,5 @@ export const VEHICLES: VehicleTemplate[] = [
    ['J4','Z5','L3','Z5','O4','J4','O4','O4','O4','Z4','Z5','O4','Z5','I2','Z5','Z4','Z5','L3','O4','Z4','R6'],
   ],
  },
+ {id:'sedan_v1',name:'小轿车 V1',width:8,height:6,blocked:[[0,5],[7,5]]},
 ];

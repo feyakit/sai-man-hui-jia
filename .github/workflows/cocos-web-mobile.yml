@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'client/**'
+      - 'package*.json'
+      - 'tools/config/v1-levels.json'
+      - 'tools/generate-v1-levels.ts'
       - 'tools/cocos/**'
       - '.github/workflows/cocos-web-mobile.yml'
   workflow_dispatch:
@@ -28,7 +31,9 @@ jobs:
         if: always()
         with:
           name: cocos-build-log
-          path: cocos-build.log
+          path: |
+            cocos-build.log
+            cocos-diagnostics
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
@@ -39,7 +44,7 @@ jobs:
   browser:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,3 +65,15 @@ jobs:
           name: web-mobile-browser-evidence
           path: tools/out/web-mobile-smoke
           if-no-files-found: ignore
+
+      - name: Optional Netlify preview
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        shell: bash
+        run: |
+          if [[ -z "$NETLIFY_AUTH_TOKEN" || -z "$NETLIFY_SITE_ID" ]]; then
+            echo 'Preview deployment skipped: configure NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID. Download trunk-home-web-mobile to play locally.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node tools/cocos/deploy-preview.mjs

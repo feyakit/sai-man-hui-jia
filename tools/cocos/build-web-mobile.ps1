@@ -33,12 +33,26 @@ $package = Join-Path $project 'package.json'
 } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $package
 
 Write-Host 'Starting Web Mobile build'
-$options = "platform=web-mobile;debug=true;buildPath=$build;outputName=web-mobile;logDest=$log"
-$process = Start-Process (Join-Path $editor 'CocosCreator.exe') -PassThru -ArgumentList ('--project "{0}" --build "{1}"' -f $project, $options)
-if (!$process.WaitForExit(360000)) {
-  Stop-Process -Id $process.Id -Force
-  throw 'Cocos Creator did not exit after six minutes'
+# Forward slashes avoid backslash escapes in Creator's build-option parser.
+$options = "platform=web-mobile;debug=true;buildPath=$($build.Replace('\','/'));outputName=web-mobile;logDest=$($log.Replace('\','/'))"
+$diagnostics = Join-Path $root 'cocos-diagnostics'
+New-Item -ItemType Directory -Force $diagnostics | Out-Null
+$process = Start-Process (Join-Path $editor 'CocosCreator.exe') -PassThru -RedirectStandardOutput (Join-Path $diagnostics 'stdout.log') -RedirectStandardError (Join-Path $diagnostics 'stderr.log') -ArgumentList ('--project "{0}" --build "{1}"' -f $project, $options)
+try {
+  if (!$process.WaitForExit(360000)) {
+    Stop-Process -Id $process.Id -Force
+    throw 'Cocos Creator did not exit after six minutes'
+  }
+} finally {
+  foreach ($directory in @((Join-Path $project 'temp'), (Join-Path $project 'profiles'), (Join-Path $env:APPDATA 'CocosCreator'))) {
+    if (Test-Path $directory) {
+      Get-ChildItem $directory -Recurse -File -Include '*.log' | ForEach-Object {
+        Copy-Item $_.FullName (Join-Path $diagnostics (([guid]::NewGuid().ToString()) + '-' + $_.Name))
+      }
+    }
+  }
+  if (Test-Path $log) { Get-Content $log -Tail 100 }
+  Get-Content (Join-Path $diagnostics 'stderr.log') -Tail 100
 }
-if (Test-Path $log) { Get-Content $log -Tail 100 }
 if ($process.ExitCode -ne 36) { throw "Cocos Creator exited with code $($process.ExitCode)" }
 if (!(Test-Path (Join-Path $build 'web-mobile/index.html'))) { throw 'Web Mobile index.html missing' }

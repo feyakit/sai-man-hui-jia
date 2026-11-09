@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -136,10 +136,11 @@ async function clear(page,touch,index) {
 
 async function exercise(name,context) {
   const page = await context.newPage();
+  const video = page.video();
   const errors = [];
   page.on('pageerror',error => errors.push(error.message));
   const cdp = await context.newCDPSession(page);
-  const touch = name === 'mobile' ? cdp : undefined;
+  const touch = name !== 'desktop' ? cdp : undefined;
   try {
     await page.goto(url);
     const view = await until(async () => {
@@ -190,6 +191,7 @@ async function exercise(name,context) {
     throw error;
   } finally {
     await context.close();
+    if (video) await video.saveAs(join(evidence,`${name}-playthrough.webm`));
   }
 }
 
@@ -199,8 +201,11 @@ try {
     args:['--use-angle=swiftshader','--enable-unsafe-swiftshader'],
   });
   await exercise('desktop',await browser.newContext({viewport:{width:1280,height:900}}));
-  await exercise('mobile',await browser.newContext({...devices['Pixel 7'],defaultBrowserType:undefined}));
+  await exercise('mobile',await browser.newContext({...devices['Pixel 7'],defaultBrowserType:undefined,recordVideo:{dir:join(evidence,'video-tmp')}}));
+  await exercise('iphone-se',await browser.newContext({viewport:{width:375,height:667},isMobile:true,hasTouch:true,deviceScaleFactor:2,recordVideo:{dir:join(evidence,'video-tmp')}}));
+  await exercise('tall-412',await browser.newContext({viewport:{width:412,height:915},isMobile:true,hasTouch:true,deviceScaleFactor:2}));
 } finally {
   await browser?.close();
   server.close();
+  await rm(join(evidence,'video-tmp'),{recursive:true,force:true});
 }
