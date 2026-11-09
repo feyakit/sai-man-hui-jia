@@ -95,3 +95,9 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - [第一轮官方构建及浏览器 CI](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42633780090) 已通过。最后一版优化年货卡片尺寸，并关闭性能面板。
 - [新版官方导出](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950/artifacts/13681543848) 来自 `82a69cd`。发布前用该导出包复跑桌面和模拟手机两关，保留两关和到家画面截图。
 - [原私密试玩页](https://example.feyakit.dev) 已替换为正式 Web Mobile 导出。网页入口增加中文标题与 WebGL 不可用提示，游戏逻辑沿用导出产物。部署源码版本 `91a10bd23937543f1a9459d9a82ae2adc2bd15a7`。
+
+## 2026-11-09 · 任务 1：CI、证据与 V1 关卡地基（进行中）
+
+- 从最新 `origin/work/m1-core`（4099f11）创建 `codex/v1-1-foundation`，不修改画面或操作。
+- 检查 `gh run view 42635027666 --log-failed`：Creator 退出码 34，下载及解压已成功；原 workflow 未收集到编辑器日志。增加标准输出、错误输出及内部日志收集，继续在 CI 定位。
+- 本轮结果及人工验收事项在完成验证后补记。
