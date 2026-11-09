@@ -89,3 +89,9 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - [上一轮 Cocos 官方构建](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42625294962) 已出包。桌面验收失败，调试发现编辑器把 Map 值迭代器的展开编译成数组拼接，空盘面被误读为含一条记录。
 - 使用 `Array.from` 明确读取盘面。用临时诊断包验证该改动后，官方引擎的桌面鼠标和手机模拟触屏均通关两关。仓库只修改 TypeScript 源码，由 CI 重新导出。
 - `npm test` 28 项通过，独立性能测试通过。正式验收增加空盘面、归家叙事、年货标签、装车进度及到家截图检查。
+
+### 春运试玩交付
+
+- [第一轮官方构建及浏览器 CI](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42633780090) 已通过。最后一版优化年货卡片尺寸，并关闭性能面板。
+- [新版官方导出](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950/artifacts/13681543848) 来自 `82a69cd`。发布前用该导出包复跑桌面和模拟手机两关，保留两关和到家画面截图。
+- [原私密试玩页](https://sai-man-hui-jia-playtest.feya0517.chatgpt.site) 已替换为正式 Web Mobile 导出。网页入口增加中文标题与 WebGL 不可用提示，游戏逻辑沿用导出产物。部署源码版本 `91a10bd23937543f1a9459d9a82ae2adc2bd15a7`。
