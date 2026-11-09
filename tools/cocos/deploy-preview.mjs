@@ -23,7 +23,7 @@ async function request(path,options = {}) {
 await walk(root);
 const deploy = await request(`/sites/${encodeURIComponent(process.env.NETLIFY_SITE_ID)}/deploys`,{
   method:'POST',headers:{'content-type':'application/json'},
-  body:JSON.stringify({files:Object.fromEntries([...files].map(([path,file]) => [path,file.sha]))}),
+  body:JSON.stringify({draft:true,files:Object.fromEntries([...files].map(([path,file]) => [path,file.sha]))}),
 });
 for (const sha of deploy.required ?? []) {
   const [path,file] = [...files].find(([,file]) => file.sha === sha);

@@ -136,9 +136,6 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
     const partition = (): boolean => {
       if (++visits > cfg.maxPartitionTries) return false;
       if (occupied.size === template.width*template.height) {
-        const six = placed.filter(item => item.cells.length === 6).length;
-        const small = placed.filter(item => item.cells.length <= 3).length;
-        const large = placed.filter(item => item.cells.length === 4 || item.cells.length === 5).length;
         return acceptableInventory(placed.map(piece => piece.shape));
       }
       if (placed.length >= cfg.maxPieces) return false;

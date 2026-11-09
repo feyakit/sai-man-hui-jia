@@ -1,0 +1,66 @@
+{
+  "date": "2026-11-09",
+  "stage": 3,
+  "placements": [
+    {
+      "pieceId": 1,
+      "x": 4,
+      "y": 3,
+      "rotation": 0
+    },
+    {
+      "pieceId": 2,
+      "x": 0,
+      "y": 0,
+      "rotation": 1
+    },
+    {
+      "pieceId": 3,
+      "x": 1,
+      "y": 2,
+      "rotation": 0
+    },
+    {
+      "pieceId": 9,
+      "x": 3,
+      "y": 3,
+      "rotation": 1
+    },
+    {
+      "pieceId": 4,
+      "x": 5,
+      "y": 0,
+      "rotation": 1
+    },
+    {
+      "pieceId": 5,
+      "x": 6,
+      "y": 2,
+      "rotation": 0
+    },
+    {
+      "pieceId": 6,
+      "x": 4,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "pieceId": 7,
+      "x": 0,
+      "y": 2,
+      "rotation": 0
+    },
+    {
+      "pieceId": 8,
+      "x": 1,
+      "y": 0,
+      "rotation": 3
+    },
+    {
+      "pieceId": 10,
+      "x": 1,
+      "y": 5,
+      "rotation": 0
+    }
+  ]
+}
