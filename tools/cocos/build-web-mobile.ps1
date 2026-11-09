@@ -18,19 +18,27 @@ Write-Host 'Extracting the editor archive'
 7z x "-o$editor" -y -bso0 -bsp0 $archive
 if ($LASTEXITCODE -ne 0) { throw 'Cocos Creator archive extraction failed' }
 
-Copy-Item -Recurse (Join-Path $editor 'resources/templates/empty-2d') $project
-Copy-Item -Recurse (Join-Path $root 'client/assets') $project
-$scenes = Join-Path $project 'assets/scenes'
-New-Item -ItemType Directory -Force $scenes | Out-Null
-$template = Join-Path $editor 'resources/resources/3d/engine/editor/assets/default_file_content/scene/scene-2d.scene'
-Copy-Item $template (Join-Path $scenes 'Main.scene')
+function Prepare-Project {
+  # Always start from a pristine synthetic project. A failed attempt can leave the
+  # editor's asset DB resumable, and a resumed build can finish with exit code 36 while
+  # silently dropping the script bundles from the output, so retries never reuse state.
+  if (Test-Path $project) { Remove-Item -Recurse -Force $project }
+  if (Test-Path (Join-Path $env:APPDATA 'CocosCreator')) { Remove-Item -Recurse -Force (Join-Path $env:APPDATA 'CocosCreator') }
+  Copy-Item -Recurse (Join-Path $editor 'resources/templates/empty-2d') $project
+  Copy-Item -Recurse (Join-Path $root 'client/assets') $project
+  $scenes = Join-Path $project 'assets/scenes'
+  New-Item -ItemType Directory -Force $scenes | Out-Null
+  $template = Join-Path $editor 'resources/resources/3d/engine/editor/assets/default_file_content/scene/scene-2d.scene'
+  Copy-Item $template (Join-Path $scenes 'Main.scene')
 
-$package = Join-Path $project 'package.json'
-@{
-  name = 'trunk-home'
-  uuid = [guid]::NewGuid().ToString()
-  creator = @{ version = '3.8.8' }
-} | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $package
+  $package = Join-Path $project 'package.json'
+  @{
+    name = 'trunk-home'
+    uuid = [guid]::NewGuid().ToString()
+    creator = @{ version = '3.8.8' }
+  } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $package
+}
+Prepare-Project
 
 Write-Host 'Starting Web Mobile build'
 # Forward slashes avoid backslash escapes in Creator's build-option parser.
@@ -68,7 +76,7 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
   if ($exitCode -eq 36) { $succeeded = $true; break }
   Write-Warning "Cocos Creator exited with code $exitCode on attempt $attempt; retrying"
   if (Test-Path (Join-Path $build 'web-mobile')) { Remove-Item -Recurse -Force (Join-Path $build 'web-mobile') }
-  if (Test-Path (Join-Path $project 'temp')) { Remove-Item -Recurse -Force (Join-Path $project 'temp') }
+  Prepare-Project
 }
 if (-not $succeeded) { throw "Cocos Creator failed after $maxAttempts attempts (last exit code $exitCode)" }
 if (!(Test-Path (Join-Path $build 'web-mobile/index.html'))) { throw 'Web Mobile index.html missing' }
