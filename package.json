@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:performance": "RUN_M1_PERFORMANCE=1 vitest run tests/performance.test.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

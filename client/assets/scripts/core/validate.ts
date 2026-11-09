@@ -12,6 +12,12 @@ export function canPlace(level: Level, occupied: ReadonlySet<string>, placement:
 }
 
 export function validateSolution(level: Level, placements: readonly Placement[], removedPieceId?: number): { ok: true } | { ok: false; reason: string } {
+  if (!Number.isSafeInteger(level.width) || !Number.isSafeInteger(level.height) || level.width < 1 || level.height < 1 ||
+      new Set(level.pieces.map(piece => piece.id)).size !== level.pieces.length ||
+      level.blocked.some(([x,y]) => !Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= level.width || y >= level.height) ||
+      new Set(level.blocked.map(([x,y]) => `${x},${y}`)).size !== level.blocked.length) {
+    return { ok:false, reason:'invalid level' };
+  }
   if (removedPieceId !== undefined && !level.pieces.some(p => p.id === removedPieceId)) return { ok:false, reason:'unknown removed piece' };
   const occupied = new Set<string>(), seen = new Set<number>();
   for (const p of placements) {
