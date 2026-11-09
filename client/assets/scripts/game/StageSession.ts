@@ -26,7 +26,8 @@ export class StageSession {
     return Math.max(0,Math.ceil((this.deadline-this.now())/1000));
   }
 
-  get placements(): readonly Placement[] { return [...this.state.placements.values()]; }
+  // Cocos Web Mobile can compile iterator spreads into array concatenation.
+  get placements(): readonly Placement[] { return Array.from(this.state.placements.values()); }
   get solved(): boolean {
     return this.state.placements.size === this.level.pieces.length &&
       validateSolution(this.level,this.placements).ok;

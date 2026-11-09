@@ -1,15 +1,28 @@
 import { Color, EventTouch, Graphics, Label, Node, UITransform, Vec3, view } from 'cc';
+import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
 import { rotate, SHAPES } from '../core/shapes';
-import type { Level, PieceDef, Rotation } from '../core/types';
+import type { Level, PieceDef, Rotation, ShapeId } from '../core/types';
 import { VEHICLES } from '../core/vehicles';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
 import { fill, label, uiNode } from '../ui/UIKit';
+import { drawHomeRoad } from '../ui/JourneyArt';
 
 interface Rect { x: number; y: number; w: number; h: number }
-const palette = [[215,69,57],[240,162,54],[91,133,128],[104,106,169],[182,105,132]];
+const ink = new Color(74,44,26);
+const red = new Color(158,45,41);
+const cream = new Color(255,246,229);
+const gold = new Color(255,201,119);
+const muted = new Color(132,91,72);
+const palette = [[174,64,53],[157,99,36],[65,115,97],[95,87,140],[152,70,106]];
+const packageColors: Record<ShapeId,number> = {
+  I2:0,I3:0,L3:3,I4:2,O4:3,L4:1,J4:3,T4:1,S4:2,Z4:0,
+  P5:4,L5:3,T5:3,U5:1,V5:0,Z5:4,N5:2,Y5:0,R6:1,
+};
+const stamps = {I2:'酒',I3:'腊',L3:'煲',I4:'蔗',O4:'奶',L4:'箱',J4:'包',T4:'礼',S4:'鱼',Z4:'鸭',
+  P5:'被',L5:'冻',T5:'视',U5:'笼',V5:'蟹',Z5:'画',N5:'藕',Y5:'联',R6:'箱'};
 const inRect = (point: Point, rect: Rect) =>
   point.x >= rect.x && point.y >= rect.y && point.x < rect.x+rect.w && point.y < rect.y+rect.h;
 
@@ -19,12 +32,14 @@ export class StagePage {
   private readonly session: StageSession;
   private readonly clock: Label;
   private readonly notice: Label;
+  private readonly packed: Label;
   private readonly board: Rect;
   private readonly tray: Rect;
   private readonly cell: number;
   private readonly width: number;
   private readonly height: number;
   private readonly buttons: {rect: Rect; action: () => void; duringDrag: boolean}[] = [];
+  private readonly itemLabels = new Map<number,Label>();
   private slots: {piece: PieceDef; rect: Rect}[] = [];
   private readonly drag = new DragController();
   private selected?: PieceDef;
@@ -38,17 +53,28 @@ export class StagePage {
     this.width = 750;
     this.height = 1334;
     this.node = uiNode('StagePage',parent,this.width,this.height);
-    this.graphics = this.node.addComponent(Graphics);
+    const backdrop = uiNode('JourneyBackdrop',this.node,this.width,this.height).addComponent(Graphics);
+    fill(backdrop,cream,-this.width/2,-this.height/2,this.width,this.height);
+    drawHomeRoad(backdrop,this.width,this.height,0);
+    this.graphics = uiNode('LuggageGraphics',this.node,this.width,this.height).addComponent(Graphics);
     this.session = new StageSession(level,now);
-    const top = 164;
-    const bottom = Math.max(top+460,this.height-250);
-    this.cell = Math.floor(Math.min(96,(this.width-48)/level.width,(bottom-top)/level.height));
-    this.board = {x:(this.width-this.cell*level.width)/2,y:top,w:this.cell*level.width,h:this.cell*level.height};
-    this.tray = {x:24,y:Math.min(this.height-196,this.board.y+this.board.h+70),w:this.width-48,h:136};
-    const name = VEHICLES.find(vehicle => vehicle.id === level.vehicle)?.name ?? '小轿车';
-    label(this.node,'Title',`第 ${level.stage} 关 · ${name}`,38,0,this.height/2-52);
-    this.clock = label(this.node,'Clock','',32,0,this.height/2-105);
-    this.notice = label(this.node,'Notice','拖动行李，填满后备箱',26,0,this.height/2-(this.tray.y-30));
+    this.cell = Math.floor(Math.min(110,640/level.width,568/level.height));
+    const boardHeight = this.cell*level.height;
+    this.board = {x:(this.width-this.cell*level.width)/2,y:349+(568-boardHeight)/2,w:this.cell*level.width,h:boardHeight};
+    this.tray = {x:24,y:1001,w:this.width-48,h:145};
+    const vehicle = VEHICLES.find(entry => entry.id === level.vehicle)?.name ?? '小轿车';
+    this.caption('Kicker','春运归家 · 年前最后一趟',23,0,53,gold);
+    this.caption('Title',GAME_TITLE,65,0,118,cream);
+    this.caption('Route','从打拼的城市，到亮着灯的老家',26,0,179,new Color(255,222,181));
+    this.caption('Vehicle',`第 ${level.stage} 关 · ${vehicle}`,34,0,285,ink);
+    this.clock = this.caption('Clock','',25,174,325,red);
+    this.packed = this.caption('Packed','',25,-174,325,muted);
+    this.notice = this.caption('Notice','',24,0,972,ink);
+    this.caption('ControlsHint','拖年货进车厢 · 点按转向 · 横滑托盘',21,0,1275,muted);
+    for (const piece of level.pieces) {
+      const item = this.caption(`Item${piece.id}`,'',22,0,0,cream);
+      this.itemLabels.set(piece.id,item);
+    }
     const controlsY = this.tray.y+this.tray.h+14;
     this.button('旋转 90°',this.width/2-235,controlsY,() => this.rotateSelected(),true);
     this.button('撤销',this.width/2-75,controlsY,() => { this.session.undo(); this.paint(); });
@@ -79,8 +105,8 @@ export class StagePage {
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
       this.displayedSeconds = seconds;
-      this.clock.string = seconds ? `剩余 ${seconds} 秒` : '时间到，点「重开」再试';
-      this.clock.color = seconds <= 30 ? new Color(215,51,43) : new Color(74,44,26);
+      this.clock.string = seconds ? `距出发 ${seconds} 秒` : '时间到 · 重装一趟';
+      this.clock.color = seconds <= 30 ? new Color(215,51,43) : red;
     }
     if ((resized || !seconds) && this.drag.cancel()) this.paint();
   }
@@ -98,29 +124,71 @@ export class StagePage {
     title.color = new Color(255,246,229);
   }
 
+  private caption(name: string, text: string, size: number, x: number, y: number, color: Color): Label {
+    const result = label(this.node,name,text,size,x,this.height/2-y);
+    result.color = color;
+    return result;
+  }
+
+  private positionItem(piece: PieceDef, text: string, x: number, y: number, color: Color): void {
+    const item = this.itemLabels.get(piece.id)!;
+    item.string = text;
+    item.color = color;
+    item.node.setPosition(x-this.width/2,this.height/2-y);
+    item.node.active = true;
+  }
+
   private rectangle(rect: Rect, color: Color, radius = 0): void {
     fill(this.graphics,color,rect.x-this.width/2,this.height/2-rect.y-rect.h,rect.w,rect.h,radius);
   }
 
   private paintPiece(piece: PieceDef, rotation: Rotation, x: number, y: number, size: number, tint?: Color, clip?: Rect): void {
-    const [r,g,b] = palette[(piece.id-1)%palette.length];
+    const [r,g,b] = palette[packageColors[piece.shape]];
     const color = tint ?? new Color(r,g,b);
-    for (const [dx,dy] of rotate(SHAPES[piece.shape],rotation)) {
-      const tile = {x:x+dx*size+2,y:y+dy*size+2,w:size-4,h:size-4};
+    const cells = rotate(SHAPES[piece.shape],rotation);
+    const box = (tile: Rect, boxColor: Color, radius: number) => {
       if (clip) {
         const left = Math.max(tile.x,clip.x), right = Math.min(tile.x+tile.w,clip.x+clip.w);
-        if (left >= right) continue;
+        if (left >= right) return;
         tile.x = left;
         tile.w = right-left;
       }
-      this.rectangle(tile,color,Math.min(7,tile.w/2));
+      this.rectangle(tile,boxColor,Math.min(radius,tile.w/2,tile.h/2));
+    };
+    const inset = Math.max(2,size*.07);
+    const labelInk = new Color(255,236,191,85);
+    for (const [dx,dy] of cells) {
+      const left = x+dx*size;
+      const top = y+dy*size;
+      box({x:left+inset,y:top+inset,w:size-2*inset,h:size-2*inset},color,Math.min(8,size*.17));
+      if (tint) continue;
+      if (cells.some(([cx,cy]) => cx === dx+1 && cy === dy)) {
+        box({x:left+size-2*inset,y:top+inset,w:4*inset,h:size-2*inset},color,0);
+      }
+      if (cells.some(([cx,cy]) => cx === dx && cy === dy+1)) {
+        box({x:left+inset,y:top+size-2*inset,w:size-2*inset,h:4*inset},color,0);
+      }
+      box({x:left+size*.2,y:top+size*.20,w:size*.6,h:Math.max(2,size*.055)},labelInk,2);
     }
   }
 
   private paint(): void {
     this.graphics.clear();
-    this.rectangle({x:0,y:0,w:this.width,h:this.height},new Color(255,246,229));
-    this.rectangle(this.board,new Color(232,217,191),10);
+    for (const item of this.itemLabels.values()) item.node.active = false;
+    const {x,y,w,h} = this.board;
+    this.rectangle({x:x+w*.22,y:y-31,w:w*.56,h:20},new Color(82,58,54),7);
+    this.rectangle({x:x+w*.3,y:y-27,w:w*.4,h:7},new Color(180,132,115),3);
+    this.rectangle({x:x-30,y:y+8,w:21,h:55},new Color(61,48,50),7);
+    this.rectangle({x:x+w+9,y:y+8,w:21,h:55},new Color(61,48,50),7);
+    this.rectangle({x:x-30,y:y+h-57,w:21,h:55},new Color(61,48,50),7);
+    this.rectangle({x:x+w+9,y:y+h-57,w:21,h:55},new Color(61,48,50),7);
+    this.rectangle({x:x-25,y:y-19,w:w+50,h:h+49},new Color(106,47,43),22);
+    this.rectangle({x:x-16,y:y-12,w:w+32,h:h+36},new Color(174,67,55),17);
+    this.rectangle({x:x-6,y:y-6,w:w+12,h:h+12},new Color(82,58,54),11);
+    this.rectangle(this.board,new Color(231,205,170),8);
+    this.rectangle({x:x-13,y:y+h+9,w:54,h:9},gold,4);
+    this.rectangle({x:x+w-41,y:y+h+9,w:54,h:9},gold,4);
+    this.rectangle({x:x+w/2-37,y:y+h+10,w:74,h:13},new Color(63,66,92),4);
     const blocked = new Set(this.level.blocked.map(([x,y]) => `${x},${y}`));
     for (let y=0;y<this.level.height;y++) for (let x=0;x<this.level.width;x++) {
       this.rectangle({
@@ -128,13 +196,19 @@ export class StagePage {
       },blocked.has(`${x},${y}`) ? new Color(146,126,106) : new Color(255,241,212),4);
     }
     const held = this.drag.active?.mode === 'drag' ? this.drag.active : undefined;
-    for (const placement of this.session.placements) {
+    const placements = this.session.placements;
+    for (const placement of placements) {
       if (held?.piece?.id === placement.pieceId) continue;
       const piece = this.level.pieces.find(item => item.id === placement.pieceId)!;
-      this.paintPiece(piece,placement.rotation,this.board.x+placement.x*this.cell,this.board.y+placement.y*this.cell,this.cell);
+      const left = x+placement.x*this.cell;
+      const top = y+placement.y*this.cell;
+      this.paintPiece(piece,placement.rotation,left,top,this.cell);
+      const [dx,dy] = rotate(SHAPES[piece.shape],placement.rotation)[0];
+      this.positionItem(piece,stamps[piece.shape],left+(dx+.5)*this.cell,top+(dy+.5)*this.cell,cream);
     }
-    this.rectangle(this.tray,new Color(239,222,192),14);
-    const placed = new Set(this.session.placements.map(placement => placement.pieceId));
+    this.rectangle(this.tray,new Color(231,208,174),16);
+    this.packed.string = `已装车 ${placements.length} / ${this.level.pieces.length} 件`;
+    const placed = new Set(placements.map(placement => placement.pieceId));
     const pieces = this.level.pieces.filter(piece => !placed.has(piece.id));
     this.scrollLimit = Math.max(0,pieces.length*139-this.tray.w+20);
     this.scroll = Math.min(this.scroll,this.scrollLimit);
@@ -143,10 +217,19 @@ export class StagePage {
       const rect = {x:this.tray.x+10+index*139-this.scroll,y:this.tray.y+14,w:130,h:108};
       this.slots.push({piece,rect});
       if (held?.piece?.id === piece.id) continue;
-      this.paintPiece(piece,this.session.rotationFor(piece.id),rect.x+5,rect.y+5,24,undefined,this.tray);
+      const left = Math.max(rect.x,this.tray.x+4);
+      const right = Math.min(rect.x+rect.w,this.tray.x+this.tray.w-4);
+      if (right > left) {
+        this.rectangle({x:left,y:rect.y,w:right-left,h:119},new Color(255,244,222),9);
+      }
+      this.paintPiece(piece,this.session.rotationFor(piece.id),rect.x+13,rect.y+6,19,undefined,this.tray);
+      if (right-left >= 105) {
+        this.positionItem(piece,ITEMS[piece.shape].name,(left+right)/2,rect.y+104,ink);
+      }
     }
-    for (const {rect} of this.buttons) this.rectangle(rect,new Color(215,51,43),13);
-    this.notice.string = this.selected ? ITEMS[this.selected.shape].name : '拖动行李，填满后备箱';
+    for (const {rect} of this.buttons) this.rectangle(rect,red,13);
+    const mission = this.level.stage === 1 ? '先把给家里带的年货装上车' : '年前最后一程，把剩下的年货带回家';
+    this.notice.string = this.selected ? `正在装车 · ${ITEMS[this.selected.shape].name}` : mission;
     if (held?.piece) {
       const placement = this.drag.placement(held,this.board,this.cell);
       if (placement && inRect(held.current,this.board)) {
