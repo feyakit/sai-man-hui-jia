@@ -6,4 +6,11 @@ export interface Placement { pieceId: number; rotation: Rotation; x: number; y: 
 export interface Level { date: string; stage: 1 | 2; vehicle: string; width: number; height: number; blocked: Cell[]; timeLimitSec: number; pieces: PieceDef[] }
 export interface LevelSolution { date: string; stage: 1 | 2; placements: Placement[] }
 export interface DifficultyStats { solutionCount: number; solutionCountCapped: boolean; nodesToFirst: number; totalNodes: number }
-export interface VehicleTemplate { id: string; name: string; width: number; height: number; blocked: Cell[] }
+export interface VehicleTemplate {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  blocked: Cell[];
+  preferredInventories?: readonly (readonly ShapeId[])[];
+}

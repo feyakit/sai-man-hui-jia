@@ -1,5 +1,5 @@
-import { orientations } from './shapes';
-import type { DifficultyStats, Level, Placement } from './types';
+import { orientations, SHAPES } from './shapes';
+import type { DifficultyStats, Level, Placement, Rotation, ShapeId } from './types';
 
 interface Link {
   left: Link;
@@ -7,129 +7,157 @@ interface Link {
   up: Link;
   down: Link;
   column: Column;
-  placement?: Placement;
+  row?: Row;
 }
-interface Column extends Link { size: number; name: string }
+interface Column extends Link { size: number }
+interface Group { column: Column; ids: number[]; remaining: number }
+interface Row { group: Group; rotation: Rotation; x: number; y: number }
 export interface SolveResult extends DifficultyStats {
   firstSolution?: Placement[];
   nodeLimitReached: boolean;
 }
 
-function makeColumn(name: string): Column {
+function makeColumn(): Column {
   const column = {} as Column;
-  Object.assign(column, { left: column, right: column, up: column, down: column, column, size: 0, name });
+  Object.assign(column, { left: column, right: column, up: column, down: column, column, size: 0 });
   return column;
 }
 
-export function solve(level: Level, options: { maxSolutions: number; maxNodes: number }): SolveResult {
-  if (!Number.isInteger(options.maxSolutions) || options.maxSolutions < 1 || !Number.isInteger(options.maxNodes) || options.maxNodes < 1) throw new Error('invalid solver limits');
-  const root = makeColumn('root');
-  const columns = new Map<string, Column>();
-  const addColumn = (name: string) => {
-    const col = makeColumn(name);
-    col.left = root.left; col.right = root;
-    root.left.right = col; root.left = col;
-    columns.set(name, col);
-  };
-  const blocked = new Set(level.blocked.map(([x,y]) => `${x},${y}`));
-  for (let y=0; y<level.height; y++) for (let x=0; x<level.width; x++) {
-    const key = `${x},${y}`;
-    if (!blocked.has(key)) addColumn(key);
+function cover(column: Column): void {
+  column.right.left = column.left;
+  column.left.right = column.right;
+  for (let row = column.down; row !== column; row = row.down) {
+    for (let node = row.right; node !== row; node = node.right) {
+      node.down.up = node.up;
+      node.up.down = node.down;
+      node.column.size--;
+    }
   }
+}
+
+function uncover(column: Column): void {
+  for (let row = column.up; row !== column; row = row.up) {
+    for (let node = row.left; node !== row; node = node.left) {
+      node.column.size++;
+      node.down.up = node;
+      node.up.down = node;
+    }
+  }
+  column.right.left = column;
+  column.left.right = column;
+}
+
+export function solve(level: Level, options: { maxSolutions: number; maxNodes: number }): SolveResult {
+  if (!Number.isSafeInteger(options.maxSolutions) || options.maxSolutions < 1 ||
+      !Number.isSafeInteger(options.maxNodes) || options.maxNodes < 1) throw new Error('invalid solver limits');
+
+  const root = makeColumn();
+  const cells: (Column | undefined)[] = [];
+  const blocked = new Set(level.blocked.map(([x,y]) => `${x},${y}`));
+  let freeCells = 0;
+  for (let y=0; y<level.height; y++) for (let x=0; x<level.width; x++) {
+    if (blocked.has(`${x},${y}`)) continue;
+    const column = makeColumn();
+    column.left = root.left;
+    column.right = root;
+    root.left.right = column;
+    root.left = column;
+    cells[y*level.width+x] = column;
+    freeCells++;
+  }
+
   const pieces = [...level.pieces].sort((a,b) => a.id-b.id);
   if (new Set(pieces.map(piece => piece.id)).size !== pieces.length) throw new Error('duplicate piece id');
-  for (const piece of pieces) addColumn(`p${piece.id}`);
+  const groups = new Map<ShapeId, Group>();
+  let pieceArea = 0;
+  for (const piece of pieces) {
+    const group = groups.get(piece.shape) ?? {column:makeColumn(), ids:[], remaining:0};
+    group.ids.push(piece.id);
+    group.remaining++;
+    groups.set(piece.shape,group);
+    pieceArea += SHAPES[piece.shape].length;
+  }
+  if (freeCells !== pieceArea) {
+    return { solutionCount:0, solutionCountCapped:false, nodesToFirst:0, totalNodes:0, nodeLimitReached:false };
+  }
 
-  for (const piece of pieces) for (const orientation of orientations(piece.shape)) {
+  // Interchangeable pieces share one secondary column with a placement quota.
+  for (const [shape, group] of groups) for (const orientation of orientations(shape)) {
     for (let y=0; y<level.height; y++) for (let x=0; x<level.width; x++) {
-      const keys = orientation.cells.map(([dx,dy]) => `${x+dx},${y+dy}`);
-      if (keys.some(key => !columns.has(key))) continue;
-      const placement: Placement = {pieceId:piece.id, rotation:orientation.rotation, x, y};
+      const columns = [group.column];
+      for (const [dx,dy] of orientation.cells) {
+        if (x+dx >= level.width || y+dy >= level.height) break;
+        const cell = cells[(y+dy)*level.width+x+dx];
+        if (!cell) break;
+        columns.push(cell);
+      }
+      if (columns.length !== orientation.cells.length+1) continue;
+      const row: Row = { group, rotation:orientation.rotation, x, y };
       let first: Link | undefined;
-      for (const key of [`p${piece.id}`, ...keys]) {
-        const column = columns.get(key)!;
-        const node = {} as Link;
-        Object.assign(node, {column, placement, up:column.up, down:column});
-        column.up.down = node; column.up = node; column.size++;
-        if (!first) { first = node; node.left = node; node.right = node; }
-        else { node.left = first.left; node.right = first; first.left.right = node; first.left = node; }
+      for (const column of columns) {
+        const node: Link = {column, row, up:column.up, down:column, left:column, right:column};
+        column.up.down = node;
+        column.up = node;
+        column.size++;
+        if (first) {
+          node.left = first.left;
+          node.right = first;
+          first.left.right = node;
+          first.left = node;
+        } else {
+          first = node;
+          node.left = node;
+          node.right = node;
+        }
       }
     }
   }
 
-  const cover = (col: Column) => {
-    col.right.left = col.left; col.left.right = col.right;
-    for (let row = col.down; row !== col; row = row.down) {
-      for (let node = row.right; node !== row; node = node.right) {
-        node.down.up = node.up; node.up.down = node.down; node.column.size--;
-      }
-    }
-  };
-  const uncover = (col: Column) => {
-    for (let row = col.up; row !== col; row = row.up) {
-      for (let node = row.left; node !== row; node = node.left) {
-        node.column.size++; node.down.up = node; node.up.down = node;
-      }
-    }
-    col.right.left = col; col.left.right = col;
-  };
   let solutionCount = 0, nodesToFirst = 0, totalNodes = 0;
   let firstSolution: Placement[] | undefined;
   let nodeLimitReached = false, solutionCountCapped = false;
-  const chosen: Placement[] = [];
-  const shapesById = new Map(pieces.map(piece => [piece.id, piece.shape]));
-  const chosenByShape = new Map<string, Placement[]>();
-  const compatible = (p: Placement) => {
-    const shape = shapesById.get(p.pieceId)!;
-    const anchor = p.y * level.width + p.x;
-    for (const other of chosenByShape.get(shape) ?? []) {
-      const otherAnchor = other.y * level.width + other.x;
-      if (other.pieceId < p.pieceId ? otherAnchor >= anchor : otherAnchor <= anchor) return false;
-    }
-    return true;
-  };
+  const chosen: Row[] = [];
   const search = (): void => {
-    if (nodeLimitReached || solutionCountCapped) return;
     if (root.right === root) {
       solutionCount++;
-      if (!firstSolution) { firstSolution = chosen.map(p => ({...p})); nodesToFirst = totalNodes; }
+      if (!firstSolution) {
+        firstSolution = [];
+        for (const group of groups.values()) {
+          const ordered = chosen.filter(row => row.group === group).sort((a,b) => a.y-b.y || a.x-b.x);
+          ordered.forEach(({x,y,rotation}, index) => firstSolution!.push({pieceId:group.ids[index],x,y,rotation}));
+        }
+        nodesToFirst = totalNodes;
+      }
       if (solutionCount >= options.maxSolutions) solutionCountCapped = true;
       return;
     }
+
     let column = root.right as Column;
-    let smallest = column.size;
-    for (let next: Link = root.right; next !== root; next = next.right) {
-      const candidate = next as Column;
-      let size = candidate.size;
-      if (candidate.name.startsWith('p')) {
-        const shape = shapesById.get(Number(candidate.name.slice(1)))!;
-        if ((chosenByShape.get(shape)?.length ?? 0) > 0) {
-          size = 0;
-          for (let row = candidate.down; row !== candidate && size < smallest; row = row.down) {
-            if (compatible(row.placement!)) size++;
-          }
-        }
-      }
-      if (size < smallest) { column = candidate; smallest = size; }
-      if (smallest === 0) return;
+    for (let next = column.right; next !== root; next = next.right) {
+      if ((next as Column).size < column.size) column = next as Column;
     }
-    if (smallest === 0) return;
+    for (const group of groups.values()) {
+      if (group.remaining > group.column.size) return;
+      if (group.remaining === 1 && group.column.size < column.size) column = group.column;
+    }
+    if (column.size === 0) return;
     cover(column);
-    for (let row = column.down; row !== column; row = row.down) {
+    for (let link = column.down; link !== column; link = link.down) {
       if (totalNodes >= options.maxNodes) { nodeLimitReached = true; break; }
       totalNodes++;
-      const placement = row.placement!;
-      if (!compatible(placement)) continue;
-      chosen.push(placement);
-      const shape = shapesById.get(placement.pieceId)!;
-      const sameShape = chosenByShape.get(shape) ?? [];
-      sameShape.push(placement);
-      chosenByShape.set(shape, sameShape);
-      for (let node = row.right; node !== row; node = node.right) cover(node.column);
+      const row = link.row!;
+      const group = row.group;
+      group.remaining--;
+      chosen.push(row);
+      for (let node = link.right; node !== link; node = node.right) {
+        if (node.column !== group.column || group.remaining === 0) cover(node.column);
+      }
       search();
-      for (let node = row.left; node !== row; node = node.left) uncover(node.column);
+      for (let node = link.left; node !== link; node = node.left) {
+        if (node.column !== group.column || group.remaining === 0) uncover(node.column);
+      }
       chosen.pop();
-      sameShape.pop();
+      group.remaining++;
       if (nodeLimitReached || solutionCountCapped) break;
     }
     uncover(column);
