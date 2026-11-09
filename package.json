@@ -15,7 +15,8 @@
     "levels:evaluate": "node --import tsx tools/evaluate-levels.ts",
     "levels:upload": "node --import tsx tools/upload-levels.ts",
     "levels:copy-dev": "node --import tsx tools/copy-dev-levels.ts",
-    "art:templates": "node --import tsx tools/art-templates.ts"
+    "art:templates": "node --import tsx tools/art-templates.ts",
+    "levels:v1": "node --import tsx tools/generate-v1-levels.ts"
   },
   "devDependencies": {
     "@cocos/creator-types": "^3.8.8",
