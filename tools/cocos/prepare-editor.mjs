@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { writeFile, rename, rm, mkdtemp } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { appendFile, stat, writeFile, rename, rm } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
 import * as asar from '@electron/asar';
 
@@ -23,28 +25,40 @@ export async function prepareEditor(archive) {
   const source = asar.extractFile(archive, 'launch/dist/launch.js').toString('utf8');
   const patched = preloadImporters(source);
   if (patched === source) return;
-  const scratch = await mkdtemp(join(dirname(archive), 'importer-fix-'));
-  const output = join(scratch, 'app.asar');
-  const directory = join(scratch, 'app');
-  // Retain the original unpacked entries (native modules and editor helpers).
-  const unpacked = asar.listPackage(archive).map(file => file.replace(/^[/\\]/, '').replaceAll('\\', '/')).filter(file => {
-    const info = asar.statFile(archive, file);
-    return !info.files && info.unpacked;
-  });
+  const {header, headerSize} = asar.getRawHeader(archive);
+  const dataStart = 8 + headerSize;
+  const entry = header.files.launch.files.dist.files['launch.js'];
+  assert.ok(!entry.unpacked && entry.integrity?.algorithm === 'SHA256', 'Unknown Creator launch entry');
+  const payload = Buffer.from(patched);
+  const hash = createHash('sha256').update(payload).digest('hex');
+  assert.ok(payload.length < entry.integrity.blockSize, 'Unexpected launch script size');
+  entry.offset = String((await stat(archive)).size - dataStart);
+  entry.size = payload.length;
+  entry.integrity = {...entry.integrity, hash, blocks:[hash]};
+  // ASAR: uint32 size pickle, then a pickle containing the JSON header string.
+  // Offsets are relative to the data section. Copy that section unchanged and
+  // append the patched launch script; all other entries and .unpacked files stay
+  // byte-for-byte intact. Avoid expanding/repacking thousands of native helpers.
+  const json = Buffer.from(JSON.stringify(header));
+  const aligned = Math.ceil(json.length / 4) * 4;
+  const prefix = Buffer.alloc(16 + aligned);
+  prefix.writeUInt32LE(4, 0);
+  prefix.writeUInt32LE(8 + aligned, 4);
+  prefix.writeUInt32LE(4 + aligned, 8);
+  prefix.writeUInt32LE(json.length, 12);
+  json.copy(prefix, 16);
+  const output = `${archive}.patched`;
   try {
-    asar.extractAll(archive, directory);
-    await writeFile(join(directory, 'launch/dist/launch.js'), patched);
-    await asar.createPackageWithOptions(directory, output, {
-      unpack: unpacked.length === 1 ? `**/${unpacked[0]}` : unpacked.length ? `**/{${unpacked.join(',')}}` : undefined,
-    });
+    await writeFile(output, prefix);
+    await pipeline(createReadStream(archive, {start:dataStart}), createWriteStream(output, {flags:'a'}));
+    await appendFile(output, payload);
     assert.equal(asar.extractFile(output, 'launch/dist/launch.js').toString('utf8'), patched);
-    await rm(`${archive}.unpacked`, {recursive:true,force:true});
-    if (unpacked.length) await rename(`${output}.unpacked`, `${archive}.unpacked`);
     await rename(output, archive);
     asar.uncacheAll();
     console.log('Creator 3.8.8: engine-extends enabled before asset-db (importer startup race fix)');
   } finally {
-    await rm(scratch, {recursive:true,force:true});
+    asar.uncacheAll();
+    await rm(output, {force:true});
   }
 }
 
