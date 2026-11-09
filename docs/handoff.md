@@ -1,3 +1,4 @@
+当前规格以 docs/spec-v1.2.md 为准
 # 接手开发
 
 从仓库的 `work/m1-core` 分支继续，工作进度统一关联草稿 PR #2。交互细节见 GitHub Issue #1。提交前更新 [开发与验收记录](development-log.md)，包含命令、结果、未验收项和需要人工处理的步骤。
