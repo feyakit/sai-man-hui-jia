@@ -38,9 +38,6 @@ function Prepare-Project {
     creator = @{ version = '3.8.8' }
   } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM $package
 }
-Prepare-Project
-
-Write-Host 'Starting Web Mobile build'
 # Forward slashes avoid backslash escapes in Creator's build-option parser.
 $options = "platform=web-mobile;debug=true;buildPath=$($build.Replace('\','/'));outputName=web-mobile;logDest=$($log.Replace('\','/'))"
 $diagnostics = Join-Path $root 'cocos-diagnostics'
@@ -52,6 +49,10 @@ $maxAttempts = 3
 $succeeded = $false
 $exitCode = $null
 for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+  # Every attempt gets its own project path so persisted editor state can never leak
+  # from a failed attempt into the next one.
+  $project = Join-Path $work "project-attempt$attempt"
+  Prepare-Project
   Write-Host "Starting Web Mobile build (attempt $attempt/$maxAttempts)"
   $process = Start-Process (Join-Path $editor 'CocosCreator.exe') -PassThru -RedirectStandardOutput (Join-Path $diagnostics 'stdout.log') -RedirectStandardError (Join-Path $diagnostics 'stderr.log') -ArgumentList ('--project "{0}" --build "{1}"' -f $project, $options)
   $timedOut = $false
@@ -76,7 +77,6 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
   if ($exitCode -eq 36) { $succeeded = $true; break }
   Write-Warning "Cocos Creator exited with code $exitCode on attempt $attempt; retrying"
   if (Test-Path (Join-Path $build 'web-mobile')) { Remove-Item -Recurse -Force (Join-Path $build 'web-mobile') }
-  Prepare-Project
 }
 if (-not $succeeded) { throw "Cocos Creator failed after $maxAttempts attempts (last exit code $exitCode)" }
 if (!(Test-Path (Join-Path $build 'web-mobile/index.html'))) { throw 'Web Mobile index.html missing' }
