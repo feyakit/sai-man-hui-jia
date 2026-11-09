@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Director, Graphics, Layers, Node, ResolutionPolicy, director, view } from 'cc';
+import { _decorator, Color, Component, Director, Graphics, Layers, Node, ResolutionPolicy, director, profiler, view } from 'cc';
 import { EDITOR } from 'cc/env';
 import { GAME_SUBTITLE, GAME_TITLE } from './config/brand';
 import { shanghaiDate } from './core/date';
@@ -76,6 +76,7 @@ if (!EDITOR) {
   director.on(Director.EVENT_AFTER_SCENE_LAUNCH, (scene: Node) => {
     const canvas = scene.getChildByName('Canvas');
     if (!canvas) return;
+    profiler?.hideStats();
     view.setDesignResolutionSize(750,1334,ResolutionPolicy.FIXED_WIDTH);
     let root = canvas.getChildByName('GameRoot');
     if (!root) {
