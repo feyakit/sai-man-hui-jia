@@ -1,0 +1,13 @@
+node_modules/
+coverage/
+.env
+.env.*
+!.env.example
+client/assets/scripts/config/config.gen.ts
+client/library/
+client/temp/
+client/local/
+client/build/
+cloudfunctions/
+levels/solutions/
+tools/out/
