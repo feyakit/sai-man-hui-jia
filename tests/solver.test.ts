@@ -54,3 +54,8 @@ it('rejects invalid budgets and vehicle templates before searching', () => {
  expect(() => generateLevel({...template,blocked:[[0,0],[0,0]]},cfg,'bad')).toThrow('invalid vehicle template');
  expect(() => generateLevel({...template,blocked:[[4,0]]},cfg,'bad')).toThrow('invalid vehicle template');
 });
+
+it('reports which bounded generation attempts failed', () => {
+ expect(() => generateLevel(template,{...cfg,minPieces:20,maxPieces:20,maxAttempts:2,maxPartitionTries:10},'diagnostics'))
+  .toThrow('partition=2, nodeLimit=0, solutionLimit=0, difficulty=0');
+});

@@ -60,6 +60,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       }
     }
   }
+  let partitionFailures = 0, nodeLimitFailures = 0, solutionLimitFailures = 0, difficultyFailures = 0;
   for (let attempt=0; attempt<cfg.maxAttempts; attempt++) {
     const occupied = new Set(blocked), placed: Candidate[] = [];
     let visits = 0;
@@ -92,7 +93,7 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       }
       return false;
     };
-    if (!partition()) continue;
+    if (!partition()) { partitionFailures++; continue; }
     const shuffled = shuffle(placed, random);
     const level: Level = {
       date:cfg.date, stage:2, vehicle:template.id, width:template.width, height:template.height,
@@ -100,9 +101,14 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
       pieces:shuffled.map((candidate,index) => ({ id:index+1, shape:candidate.shape, item:ITEMS[candidate.shape].key, initialRotation:Math.floor(random()*4) as Rotation })),
     };
     const result = solve(level, {maxSolutions:cfg.maxSolutions+1, maxNodes:cfg.maxNodes});
-    if (result.nodeLimitReached || result.solutionCountCapped || result.solutionCount < 1 || result.solutionCount > cfg.maxSolutions || result.nodesToFirst < cfg.minNodesToFirst) continue;
+    if (result.nodeLimitReached) { nodeLimitFailures++; continue; }
+    if (result.solutionCountCapped || result.solutionCount > cfg.maxSolutions) { solutionLimitFailures++; continue; }
+    if (result.solutionCount < 1 || result.nodesToFirst < cfg.minNodesToFirst) { difficultyFailures++; continue; }
     const placements: Placement[] = shuffled.map((candidate,index) => ({pieceId:index+1, rotation:candidate.rotation, x:candidate.x, y:candidate.y}));
     return {level, solution:{date:cfg.date,stage:2,placements}, stats:{solutionCount:result.solutionCount,solutionCountCapped:false,nodesToFirst:result.nodesToFirst,totalNodes:result.totalNodes}};
   }
-  throw new Error(`Failed to generate a level in ${cfg.maxAttempts} attempts`);
+  throw new Error(
+    `Failed to generate a level in ${cfg.maxAttempts} attempts: partition=${partitionFailures}, ` +
+    `nodeLimit=${nodeLimitFailures}, solutionLimit=${solutionLimitFailures}, difficulty=${difficultyFailures}`,
+  );
 }
