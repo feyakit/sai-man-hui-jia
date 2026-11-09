@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { generateLevel } from '../client/assets/scripts/core/generator';
 import { validateSolution } from '../client/assets/scripts/core/validate';
-import { SHAPES } from '../client/assets/scripts/core/shapes';
+import { parseLevel } from '../client/assets/scripts/core/level';
 import { vehicleForDate } from '../client/assets/scripts/core/date';
 import type { Level, LevelSolution, VehicleTemplate } from '../client/assets/scripts/core/types';
 
@@ -55,26 +55,10 @@ export async function writeAtomic(path: string, content: string): Promise<void> 
 }
 
 export async function readLevel(date: string): Promise<Level> {
-  const source = JSON.parse(await readFile(`levels/${levelFilename(date)}`,'utf8')) as Level;
-  if (source.date !== date || source.stage !== 2 || typeof source.vehicle !== 'string' ||
-    !Number.isInteger(source.width) || source.width < 1 || source.width > 11 ||
-    !Number.isInteger(source.height) || source.height < 1 || source.height > 11 ||
-    !Number.isInteger(source.timeLimitSec) || source.timeLimitSec < 1 ||
-    !Array.isArray(source.blocked) || !Array.isArray(source.pieces) ||
-    source.blocked.some(cell => !Array.isArray(cell) || cell.length !== 2 ||
-      !Number.isInteger(cell[0]) || cell[0] < 0 || cell[0] >= source.width ||
-      !Number.isInteger(cell[1]) || cell[1] < 0 || cell[1] >= source.height) ||
-    source.pieces.some(piece => !piece || !Number.isSafeInteger(piece.id) || piece.id < 1 ||
-      typeof piece.shape !== 'string' || !Object.hasOwn(SHAPES,piece.shape) || typeof piece.item !== 'string' ||
-      !Number.isInteger(piece.initialRotation) || piece.initialRotation < 0 || piece.initialRotation > 3)) {
-    throw new Error(`Invalid level ${date}`);
-  }
-  return {
-    date:source.date, stage:source.stage, vehicle:source.vehicle,
-    width:source.width, height:source.height, timeLimitSec:source.timeLimitSec,
-    blocked:source.blocked.map(([x,y]) => [x,y]),
-    pieces:source.pieces.map(({id,shape,item,initialRotation}) => ({id,shape,item,initialRotation})),
-  };
+  const source: unknown = JSON.parse(await readFile(`levels/${levelFilename(date)}`,'utf8'));
+  const level = parseLevel(source);
+  if (level.date !== date || level.stage !== 2) throw new Error(`Invalid level ${date}`);
+  return level;
 }
 
 export async function readSolution(date: string, level: Level): Promise<LevelSolution> {

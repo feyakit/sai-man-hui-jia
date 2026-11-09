@@ -1,0 +1,33 @@
+name: Build Cocos Web Mobile
+
+on:
+  pull_request:
+    paths:
+      - 'client/**'
+      - 'tools/cocos/**'
+      - '.github/workflows/cocos-web-mobile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with Cocos Creator 3.8.8
+        shell: pwsh
+        run: ./tools/cocos/build-web-mobile.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cocos-build-log
+          path: cocos-build.log
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trunk-home-web-mobile
+          path: client/build/web-mobile
+          if-no-files-found: error
