@@ -37,22 +37,39 @@ Write-Host 'Starting Web Mobile build'
 $options = "platform=web-mobile;debug=true;buildPath=$($build.Replace('\','/'));outputName=web-mobile;logDest=$($log.Replace('\','/'))"
 $diagnostics = Join-Path $root 'cocos-diagnostics'
 New-Item -ItemType Directory -Force $diagnostics | Out-Null
-$process = Start-Process (Join-Path $editor 'CocosCreator.exe') -PassThru -RedirectStandardOutput (Join-Path $diagnostics 'stdout.log') -RedirectStandardError (Join-Path $diagnostics 'stderr.log') -ArgumentList ('--project "{0}" --build "{1}"' -f $project, $options)
-try {
-  if (!$process.WaitForExit(360000)) {
-    Stop-Process -Id $process.Id -Force
-    throw 'Cocos Creator did not exit after six minutes'
-  }
-} finally {
-  foreach ($directory in @((Join-Path $project 'temp'), (Join-Path $project 'profiles'), (Join-Path $env:APPDATA 'CocosCreator'))) {
-    if (Test-Path $directory) {
-      Get-ChildItem $directory -Recurse -File -Include '*.log' | ForEach-Object {
-        Copy-Item $_.FullName (Join-Path $diagnostics (([guid]::NewGuid().ToString()) + '-' + $_.Name))
+# The editor build can be lost to transient asset-database / start-scene races on hosted
+# runners even when download and extraction succeeded. Retry bounded attempts and keep the
+# diagnostics of every attempt so the CI failure report stays evidence-based.
+$maxAttempts = 3
+$succeeded = $false
+$exitCode = $null
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+  Write-Host "Starting Web Mobile build (attempt $attempt/$maxAttempts)"
+  $process = Start-Process (Join-Path $editor 'CocosCreator.exe') -PassThru -RedirectStandardOutput (Join-Path $diagnostics 'stdout.log') -RedirectStandardError (Join-Path $diagnostics 'stderr.log') -ArgumentList ('--project "{0}" --build "{1}"' -f $project, $options)
+  $timedOut = $false
+  try {
+    if (!$process.WaitForExit(360000)) {
+      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+      $timedOut = $true
+    }
+  } finally {
+    foreach ($directory in @((Join-Path $project 'temp'), (Join-Path $project 'profiles'), (Join-Path $env:APPDATA 'CocosCreator'))) {
+      if (Test-Path $directory) {
+        Get-ChildItem $directory -Recurse -File -Include '*.log' | ForEach-Object {
+          Copy-Item $_.FullName (Join-Path $diagnostics (([guid]::NewGuid().ToString()) + '-' + $_.Name))
+        }
       }
     }
+    if (Test-Path $log) { Get-Content $log -Tail 100 }
+    Get-Content (Join-Path $diagnostics 'stderr.log') -Tail 100
   }
-  if (Test-Path $log) { Get-Content $log -Tail 100 }
-  Get-Content (Join-Path $diagnostics 'stderr.log') -Tail 100
+  if ($timedOut) { throw 'Cocos Creator did not exit after six minutes' }
+  $exitCode = $process.ExitCode
+  if ($exitCode -eq 36) { $succeeded = $true; break }
+  Write-Warning "Cocos Creator exited with code $exitCode on attempt $attempt; retrying"
+  if (Test-Path (Join-Path $build 'web-mobile')) { Remove-Item -Recurse -Force (Join-Path $build 'web-mobile') }
+  if (Test-Path (Join-Path $project 'temp')) { Remove-Item -Recurse -Force (Join-Path $project 'temp') }
 }
-if ($process.ExitCode -ne 36) { throw "Cocos Creator exited with code $($process.ExitCode)" }
+if (-not $succeeded) { throw "Cocos Creator failed after $maxAttempts attempts (last exit code $exitCode)" }
 if (!(Test-Path (Join-Path $build 'web-mobile/index.html'))) { throw 'Web Mobile index.html missing' }
+Write-Host "Cocos Creator build succeeded after $attempt attempt(s) with exit code 36"
