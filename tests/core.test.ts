@@ -40,3 +40,28 @@ describe('core rules', () => {
   expect(snapToGrid({x:125,y:179},{x:5,y:9},{x:20,y:20},50)).toEqual({x:2,y:3});
  });
 });
+
+it('keeps all vehicle regions connected in groups of at least six cells', () => {
+ for (const vehicle of VEHICLES) {
+  const blocked = new Set(vehicle.blocked.map(([x,y]) => `${x},${y}`));
+  expect(blocked.size).toBe(vehicle.blocked.length);
+  for (const [x,y] of vehicle.blocked) {
+   expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThan(vehicle.width);
+   expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThan(vehicle.height);
+  }
+  const pending=new Set<string>();
+  for(let y=0;y<vehicle.height;y++) for(let x=0;x<vehicle.width;x++) if(!blocked.has(`${x},${y}`)) pending.add(`${x},${y}`);
+  while(pending.size) {
+   const first=pending.values().next().value as string;
+   const queue=[first]; pending.delete(first);
+   for(let i=0;i<queue.length;i++) {
+    const [x,y]=queue[i].split(',').map(Number);
+    for(const [nx,ny] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]) {
+     const key=`${nx},${ny}`;
+     if(pending.delete(key)) queue.push(key);
+    }
+   }
+   expect(queue.length).toBeGreaterThanOrEqual(6);
+  }
+ }
+});
