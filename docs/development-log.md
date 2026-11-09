@@ -110,3 +110,11 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - `smoke-web-mobile.mjs` 已覆盖桌面 1280×900、Pixel 7（recordVideo）、iPhone SE 375×667（recordVideo）、412×915，产物进 `web-mobile-browser-evidence`。
 - 预览部署：Netlify 专用脚本已退役，改为 Cloudflare Pages Direct Upload（Wrangler 4.159.0）。三项配置齐备才执行，缺失时跳过且在 Job Summary 说明；需要产品方配置 Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 与仓库变量 `CLOUDFLARE_PAGES_PROJECT_NAME`。
 - 剩余人工项：产品配置预览凭证以验证部署路径；真机清单与外部试玩按规格 5.4 由产品方完成。
+
+## 2026-11-10 · 任务 1：复核备用模型提交与首次导入根因修复
+
+- Review `ea5622e`、`e3e7eea`、`989e45a`、`02046ad`：保留 bounded retry、独立工程与 Cloudflare Pages 方案，删除旧 Netlify 部署脚本合理；纠正“只看 exit 36”、重试覆盖 stdout/stderr、超时立即退出不重试、手动运行预览分支为空的问题。
+- 对比失败运行 [42663003930](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42663003930) 和绿灯 [42634064950](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950)：失败轮构建日志 `Number of all scripts: 0`、`Num of bundles: 2`，绿灯为 23 脚本并包含 resources。失败首次尝试有 `Importer version is lower than asset`，第二次尝试脚本及 resources 目录在 17:18:51 导入，engine-extends 的 afterPreStart 到 17:19:01 才完成。新建工程和等待 asset-db ready 本身无法修复已被 fallback importer 导入的数据，缺 bundle/resources 并非下载损坏或游戏源码异常。
+- 与上游 [Cocos #19250](https://github.com/cocos/cocos-engine/issues/19250) 的 3.8.8 导入器注册竞态吻合。`prepare-editor.mjs` 针对固定 3.8.8 官方编辑器，将 engine-extends 加入启动 pre-packages，先于 asset-db 加载；用 @electron/asar 重打本次 CI 临时编辑器归档，保留原 unpacked 文件，未知启动布局立即报错。没有修改仓库引擎或游戏画面操作。
+- `build-web-mobile.ps1` 只有 exit 36 且非空 `index.html`、`src/chunks/bundle.js`、`assets/resources/config.json` 齐备才成功；缺失、超时与非 36 均最多尝试 3 次。每轮日志、资源元数据与拒绝原因独立保存，输出目录预先清空，超时终止整个编辑器进程树。
+- 增加真实 ASAR fixture 测试，检查启动补丁、重复执行、未知版本拒绝、原文件与 native helper 解包状态保留。Windows 正式 CI 结果将在收尾记录补齐。
