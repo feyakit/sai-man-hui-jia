@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-09",
+  "stage": 1,
+  "placements": [
+    {
+      "pieceId": 1,
+      "x": 0,
+      "y": 0,
+      "rotation": 0
+    },
+    {
+      "pieceId": 2,
+      "x": 0,
+      "y": 1,
+      "rotation": 0
+    },
+    {
+      "pieceId": 3,
+      "x": 2,
+      "y": 1,
+      "rotation": 0
+    },
+    {
+      "pieceId": 4,
+      "x": 2,
+      "y": 2,
+      "rotation": 0
+    }
+  ]
+}

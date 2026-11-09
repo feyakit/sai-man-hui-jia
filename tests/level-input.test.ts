@@ -19,7 +19,7 @@ it('rejects malformed level fields before the renderer reads them', () => {
   const level = stage1('2027-01-19');
   const invalid: unknown[] = [
     null,
-    {...level,stage:3},
+    {...level,stage:4},
     {...level,timeLimitSec:Infinity},
     {...level,blocked:[null]},
     {...level,blocked:[[0,0],[0,0]]},

@@ -95,3 +95,35 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - [第一轮官方构建及浏览器 CI](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42633780090) 已通过。最后一版优化年货卡片尺寸，并关闭性能面板。
 - [新版官方导出](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950/artifacts/13681543848) 来自 `82a69cd`。发布前用该导出包复跑桌面和模拟手机两关，保留两关和到家画面截图。
 - [原私密试玩页](https://sai-man-hui-jia-playtest.feya0517.chatgpt.site) 已替换为正式 Web Mobile 导出。网页入口增加中文标题与 WebGL 不可用提示，游戏逻辑沿用导出产物。部署源码版本 `91a10bd23937543f1a9459d9a82ae2adc2bd15a7`。
+
+## 2026-11-09 · 任务 1：CI、证据与 V1 关卡地基（进行中）
+
+- 从最新 `origin/work/m1-core`（4099f11）创建 `codex/v1-1-foundation`，不修改画面或操作。
+- 检查 `gh run view 42635027666 --log-failed`：Creator 退出码 34，下载及解压已成功；原 workflow 未收集到编辑器日志。增加标准输出、错误输出及内部日志收集，继续在 CI 定位。
+
+## 2026-11-10 · 任务 1 收尾：Cocos 构建稳定性、Cloudflare 预览与自动验证
+
+- 分支 `codex/v1-1-foundation`，draft PR #4 指向 `work/m1-core`，未合并。
+- Cocos 构建：`42640620679`（4876ae4）失败于 Creator exit 34；此次 stderr 取证指向 `Check build parameter startScene (undefined) failed`，而下载（1027270586 字节校验）与 7z 解压均成功。同一脚本在 `7023529` 的绿灯运行 `42640138388` 证明输入本身可构建，判定为 hosted runner 瞬时故障而非代码回归，但内部根因未被证实。`build-web-mobile.ps1` 现保留每次尝试日志并最多重试 3 次，失败后清理 `client/build/web-mobile` 与 `temp` 再重试；CI 复跑结果待补记。
+- `npm test`：37 通过、1 跳过（`tests/performance.test.ts` 仅在 `RUN_M1_PERFORMANCE=1` 时执行）；`npm run test:performance` 通过。
+- `npm run levels:v1` 重建后 `git status` 无差异（确定性生成）；stage2 当前 10 件、完整解 11 个、首解 3022 节点。
+- `smoke-web-mobile.mjs` 已覆盖桌面 1280×900、Pixel 7（recordVideo）、iPhone SE 375×667（recordVideo）、412×915，产物进 `web-mobile-browser-evidence`。
+- 预览部署：Netlify 专用脚本已退役，改为 Cloudflare Pages Direct Upload（Wrangler 4.159.0）。三项配置齐备才执行，缺失时跳过且在 Job Summary 说明；需要产品方配置 Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 与仓库变量 `CLOUDFLARE_PAGES_PROJECT_NAME`。
+- 剩余人工项：产品配置预览凭证以验证部署路径；真机清单与外部试玩按规格 5.4 由产品方完成。
+
+## 2026-11-10 · 任务 1：复核备用模型提交与首次导入根因修复
+
+- Review `ea5622e`、`e3e7eea`、`989e45a`、`02046ad`：保留 bounded retry、独立工程与 Cloudflare Pages 方案，删除旧 Netlify 部署脚本合理；纠正“只看 exit 36”、重试覆盖 stdout/stderr、超时立即退出不重试、手动运行预览分支为空的问题。
+- 对比失败运行 [42663003930](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42663003930) 和绿灯 [42634064950](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950)：失败轮构建日志 `Number of all scripts: 0`、`Num of bundles: 2`，绿灯为 23 脚本并包含 resources。失败首次尝试有 `Importer version is lower than asset`，第二次尝试脚本及 resources 目录在 17:18:51 导入，engine-extends 的 afterPreStart 到 17:19:01 才完成。新建工程和等待 asset-db ready 本身无法修复已被 fallback importer 导入的数据，缺 bundle/resources 并非下载损坏或游戏源码异常。
+- 与上游 [Cocos #19250](https://github.com/cocos/cocos-engine/issues/19250) 的 3.8.8 导入器注册竞态吻合。`prepare-editor.mjs` 针对固定 3.8.8 官方编辑器，将 engine-extends 加入启动 pre-packages，先于 asset-db 加载；用 @electron/asar 读取本次 CI 临时编辑器归档，追加启动文件并重写头部与 SHA256，保留原数据段及 unpacked 文件，未知启动布局立即报错。没有修改仓库引擎或游戏画面操作。
+- `build-web-mobile.ps1` 只有 exit 36 且非空 `index.html`、`src/chunks/bundle.js`、`assets/resources/config.json` 齐备才成功；缺失、超时与非 36 均最多尝试 3 次。每轮日志、资源元数据与拒绝原因独立保存，输出目录预先清空，超时终止整个编辑器进程树。
+- 增加真实 ASAR fixture 测试，检查启动补丁、重复执行、未知版本拒绝、原文件与 native helper 解包状态保留。Windows 正式 CI 结果将在收尾记录补齐。
+
+### 本轮验证与外部阻塞（2026-11-10）
+
+- 本地 `npm test`：39 通过、1 个性能测试按默认配置跳过；`npm run test:performance`：1 通过。保留原有 28 项，新增数据与编辑器归档测试通过，核心行覆盖率 98.76%。`npm run levels:v1` 重跑无文件差异。
+- 本地完整运行 verify 的七天关卡生成、upload dry-run、copy-dev、五菱 3 样本评估、19 SVG 模板检查均通过；未提交测试产生的七天数据。
+- 固定种子的 stage2：10 件、8 种形状（J4×1、L5×2、N5×1、O4×1、T4×1、T5×1、Z4×1、Z5×2），46 格、无六格件，DLX 完整枚举 11 解、未截断/未超节点上限。生成阶段首解 3022 节点；提交文件经托盘洗牌后独立求解首解 2420 节点，两者均超过配置下限 200。
+- 直接读取官方 Windows 3.8.8 归档，确认真实 `launch/dist/launch.js` 的 ui-kit pre-package 锚点与补丁吻合。真实归档有 4080 个 unpacked 文件，因此改为只追加启动文件与重写 ASAR 头/SHA256，原数据段和 unpacked 文件不变；fixture 测试逐字节验证原数据段保留。官方完整归档的额外本地下载中途超时，不将其算作完整编辑器运行验证。
+- 已 push 并使用 `gh run watch --exit-status` 跟踪 [build/browser 42670775462](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775462) 与 [verify 42670775917](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775917)。GitHub Actions 在执行任何步骤前拒绝 job，annotation 为 `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`。此状态是账号计费/额度阻塞，不是测试或构建结果。不能宣称本轮三项全绿；需账号所有者恢复额度后复跑。
+- Cloudflare 凭证未配置的跳过路径已实现；有凭证的真实部署尚未验证。保持 draft PR #4，base 为 `work/m1-core`；未操作 main、未合并。

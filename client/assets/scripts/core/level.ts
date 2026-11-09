@@ -12,13 +12,16 @@ function integerIn(value: unknown, min: number, max: number): value is number {
 export function parseLevel(value: unknown): Level {
   if (!record(value)) throw new Error('Invalid level');
   const {date,stage,vehicle,width,height,timeLimitSec} = value;
-  if (typeof date !== 'string' || (stage !== 1 && stage !== 2) ||
+  if (typeof date !== 'string' || (stage !== 1 && stage !== 2 && stage !== 3) ||
       typeof vehicle !== 'string' || !vehicle ||
       !integerIn(width,1,11) || !integerIn(height,1,11) ||
-      !integerIn(timeLimitSec,1,Math.floor(Number.MAX_SAFE_INTEGER/1000)) ||
+      !integerIn(timeLimitSec,0,Math.floor(Number.MAX_SAFE_INTEGER/1000)) ||
       !Array.isArray(value.blocked) || !Array.isArray(value.pieces) || !value.pieces.length) {
     throw new Error('Invalid level header');
   }
+
+  if (value.mode !== undefined && value.mode !== 'normal' && value.mode !== 'mom') throw new Error('Invalid level mode');
+  if (value.extras !== undefined && (!Array.isArray(value.extras) || value.extras.some(batch => !Array.isArray(batch) || !batch.length))) throw new Error('Invalid extras');
 
   const usedCells = new Set<number>();
   const blocked: Cell[] = value.blocked.map((cell: unknown) => {
@@ -35,7 +38,7 @@ export function parseLevel(value: unknown): Level {
 
   const ids = new Set<number>();
   let area = 0;
-  const pieces: PieceDef[] = value.pieces.map((piece: unknown) => {
+  const parsePieces = (entries: unknown[]): PieceDef[] => entries.map((piece: unknown) => {
     if (!record(piece) || !integerIn(piece.id,1,Number.MAX_SAFE_INTEGER) || ids.has(piece.id) ||
         typeof piece.shape !== 'string' || !Object.hasOwn(SHAPES,piece.shape) ||
         typeof piece.item !== 'string' || !integerIn(piece.initialRotation,0,3)) {
@@ -46,6 +49,10 @@ export function parseLevel(value: unknown): Level {
     area += SHAPES[shape].length;
     return {id:piece.id,shape,item:piece.item,initialRotation:piece.initialRotation as Rotation};
   });
+  const pieces = parsePieces(value.pieces);
+  const extras = value.extras === undefined ? undefined : (value.extras as unknown[][]).map(parsePieces);
   if (area !== width*height-blocked.length) throw new Error('Pieces do not fill the board');
-  return {date,stage,vehicle,width,height,blocked,timeLimitSec,pieces};
+  return {date,stage,vehicle,width,height,blocked,timeLimitSec,pieces,
+    ...(value.mode === undefined ? {} : {mode:value.mode as 'normal' | 'mom'}),
+    ...(extras === undefined ? {} : {extras})};
 }

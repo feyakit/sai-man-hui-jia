@@ -1,0 +1,22 @@
+{
+  "stage2": {
+    "vehicle": "sedan_v1",
+    "width": 8, "height": 6,
+    "blocked": [[0,5],[7,5]],
+    "pieceCount": [10,12],
+    "maxSameShape": 2,
+    "maxSixCells": 1,
+    "solutionCount": [3,40],
+    "minNodesToFirst": 200,
+    "timeLimitSec": 150,
+    "randomInitialRotation": true,
+    "seed": "v1-stage2-a"
+  },
+  "mom": {
+    "vehicle": "sedan_v1",
+    "base": 7,
+    "extras": ["P5", "S4", "I3"],
+    "seed": "v1-mom-a",
+    "timeLimitSec": 0
+  }
+}
