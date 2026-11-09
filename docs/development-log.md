@@ -115,6 +115,15 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 
 - Review `ea5622e`、`e3e7eea`、`989e45a`、`02046ad`：保留 bounded retry、独立工程与 Cloudflare Pages 方案，删除旧 Netlify 部署脚本合理；纠正“只看 exit 36”、重试覆盖 stdout/stderr、超时立即退出不重试、手动运行预览分支为空的问题。
 - 对比失败运行 [42663003930](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42663003930) 和绿灯 [42634064950](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950)：失败轮构建日志 `Number of all scripts: 0`、`Num of bundles: 2`，绿灯为 23 脚本并包含 resources。失败首次尝试有 `Importer version is lower than asset`，第二次尝试脚本及 resources 目录在 17:18:51 导入，engine-extends 的 afterPreStart 到 17:19:01 才完成。新建工程和等待 asset-db ready 本身无法修复已被 fallback importer 导入的数据，缺 bundle/resources 并非下载损坏或游戏源码异常。
-- 与上游 [Cocos #19250](https://github.com/cocos/cocos-engine/issues/19250) 的 3.8.8 导入器注册竞态吻合。`prepare-editor.mjs` 针对固定 3.8.8 官方编辑器，将 engine-extends 加入启动 pre-packages，先于 asset-db 加载；用 @electron/asar 重打本次 CI 临时编辑器归档，保留原 unpacked 文件，未知启动布局立即报错。没有修改仓库引擎或游戏画面操作。
+- 与上游 [Cocos #19250](https://github.com/cocos/cocos-engine/issues/19250) 的 3.8.8 导入器注册竞态吻合。`prepare-editor.mjs` 针对固定 3.8.8 官方编辑器，将 engine-extends 加入启动 pre-packages，先于 asset-db 加载；用 @electron/asar 读取本次 CI 临时编辑器归档，追加启动文件并重写头部与 SHA256，保留原数据段及 unpacked 文件，未知启动布局立即报错。没有修改仓库引擎或游戏画面操作。
 - `build-web-mobile.ps1` 只有 exit 36 且非空 `index.html`、`src/chunks/bundle.js`、`assets/resources/config.json` 齐备才成功；缺失、超时与非 36 均最多尝试 3 次。每轮日志、资源元数据与拒绝原因独立保存，输出目录预先清空，超时终止整个编辑器进程树。
 - 增加真实 ASAR fixture 测试，检查启动补丁、重复执行、未知版本拒绝、原文件与 native helper 解包状态保留。Windows 正式 CI 结果将在收尾记录补齐。
+
+### 本轮验证与外部阻塞（2026-11-10）
+
+- 本地 `npm test`：39 通过、1 个性能测试按默认配置跳过；`npm run test:performance`：1 通过。保留原有 28 项，新增数据与编辑器归档测试通过，核心行覆盖率 98.76%。`npm run levels:v1` 重跑无文件差异。
+- 本地完整运行 verify 的七天关卡生成、upload dry-run、copy-dev、五菱 3 样本评估、19 SVG 模板检查均通过；未提交测试产生的七天数据。
+- 固定种子的 stage2：10 件、8 种形状（J4×1、L5×2、N5×1、O4×1、T4×1、T5×1、Z4×1、Z5×2），46 格、无六格件，DLX 完整枚举 11 解、未截断/未超节点上限。生成阶段首解 3022 节点；提交文件经托盘洗牌后独立求解首解 2420 节点，两者均超过配置下限 200。
+- 直接读取官方 Windows 3.8.8 归档，确认真实 `launch/dist/launch.js` 的 ui-kit pre-package 锚点与补丁吻合。真实归档有 4080 个 unpacked 文件，因此改为只追加启动文件与重写 ASAR 头/SHA256，原数据段和 unpacked 文件不变；fixture 测试逐字节验证原数据段保留。官方完整归档的额外本地下载中途超时，不将其算作完整编辑器运行验证。
+- 已 push 并使用 `gh run watch --exit-status` 跟踪 [build/browser 42670775462](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775462) 与 [verify 42670775917](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775917)。GitHub Actions 在执行任何步骤前拒绝 job，annotation 为 `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`。此状态是账号计费/额度阻塞，不是测试或构建结果。不能宣称本轮三项全绿；需账号所有者恢复额度后复跑。
+- Cloudflare 凭证未配置的跳过路径已实现；有凭证的真实部署尚未验证。保持 draft PR #4，base 为 `work/m1-core`；未操作 main、未合并。
