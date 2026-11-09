@@ -1,19 +1,14 @@
 import { Color, EventTouch, Graphics, Label, Node, UITransform, Vec3, view } from 'cc';
-import { isClick, snapToGrid, trayGesture, type Point } from '../core/input';
+import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
 import { rotate, SHAPES } from '../core/shapes';
-import type { Level, PieceDef, Placement, Rotation } from '../core/types';
+import type { Level, PieceDef, Rotation } from '../core/types';
 import { VEHICLES } from '../core/vehicles';
 import { StageSession } from '../game/StageSession';
+import { DragController, type Gesture } from '../game/DragController';
 import { fill, label, uiNode } from '../ui/UIKit';
 
 interface Rect { x: number; y: number; w: number; h: number }
-interface Gesture {
-  id: number; start: Point; time: number; piece?: PieceDef;
-  fromTray: boolean; scrollStart: number; mode: 'pending' | 'scroll' | 'drag';
-  rotation: Rotation; current: Point; offset: Point;
-}
-
 const palette = [[215,69,57],[240,162,54],[91,133,128],[104,106,169],[182,105,132]];
 const inRect = (point: Point, rect: Rect) =>
   point.x >= rect.x && point.y >= rect.y && point.x < rect.x+rect.w && point.y < rect.y+rect.h;
@@ -29,21 +24,20 @@ export class StagePage {
   private readonly cell: number;
   private readonly width: number;
   private readonly height: number;
-  private readonly buttons: {rect: Rect; action: () => void}[] = [];
+  private readonly buttons: {rect: Rect; action: () => void; duringDrag: boolean}[] = [];
   private slots: {piece: PieceDef; rect: Rect}[] = [];
-  private gesture?: Gesture;
+  private readonly drag = new DragController();
   private selected?: PieceDef;
   private scroll = 0;
   private scrollLimit = 0;
   private cleared = false;
+  private scale = 0;
+  private displayedSeconds = -1;
 
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: () => void) {
-    const size = view.getVisibleSize();
     this.width = 750;
     this.height = 1334;
     this.node = uiNode('StagePage',parent,this.width,this.height);
-    const scale = Math.min(size.width/this.width,size.height/this.height);
-    this.node.setScale(scale,scale,1);
     this.graphics = this.node.addComponent(Graphics);
     this.session = new StageSession(level,now);
     const top = 164;
@@ -56,11 +50,11 @@ export class StagePage {
     this.clock = label(this.node,'Clock','',32,0,this.height/2-105);
     this.notice = label(this.node,'Notice','拖动行李，填满后备箱',26,0,this.height/2-(this.tray.y-30));
     const controlsY = this.tray.y+this.tray.h+14;
-    this.button('旋转 90°',this.width/2-235,controlsY,() => this.rotateSelected());
+    this.button('旋转 90°',this.width/2-235,controlsY,() => this.rotateSelected(),true);
     this.button('撤销',this.width/2-75,controlsY,() => { this.session.undo(); this.paint(); });
     this.button('重开',this.width/2+85,controlsY,() => {
       this.session.restart();
-      this.gesture=undefined;
+      this.drag.cancel();
       this.cleared=false;
       this.selected=undefined;
       this.scroll=0;
@@ -75,14 +69,20 @@ export class StagePage {
   }
 
   tick(): void {
-    const seconds = this.session.remainingSeconds;
-    const text = seconds ? `剩余 ${seconds} 秒` : '时间到，点「重开」再试';
-    if (this.clock.string !== text) this.clock.string = text;
-    this.clock.color = seconds <= 30 ? new Color(215,51,43) : new Color(74,44,26);
-    if (!seconds && this.gesture) {
-      this.gesture = undefined;
-      this.paint();
+    const size = view.getVisibleSize();
+    const scale = Math.min(size.width/this.width,size.height/this.height);
+    const resized = scale > 0 && scale !== this.scale;
+    if (resized) {
+      this.scale = scale;
+      this.node.setScale(scale,scale,1);
     }
+    const seconds = this.session.remainingSeconds;
+    if (seconds !== this.displayedSeconds) {
+      this.displayedSeconds = seconds;
+      this.clock.string = seconds ? `剩余 ${seconds} 秒` : '时间到，点「重开」再试';
+      this.clock.color = seconds <= 30 ? new Color(215,51,43) : new Color(74,44,26);
+    }
+    if ((resized || !seconds) && this.drag.cancel()) this.paint();
   }
 
   private point(event: EventTouch): Point {
@@ -91,9 +91,9 @@ export class StagePage {
     return {x:local.x+this.width/2,y:this.height/2-local.y};
   }
 
-  private button(text: string,x: number,y: number,action: () => void): void {
+  private button(text: string,x: number,y: number,action: () => void,duringDrag = false): void {
     const rect = {x,y,w:150,h:62};
-    this.buttons.push({rect,action});
+    this.buttons.push({rect,action,duringDrag});
     const title = label(this.node,text,text,27,x+rect.w/2-this.width/2,this.height/2-y-rect.h/2);
     title.color = new Color(255,246,229);
   }
@@ -127,7 +127,7 @@ export class StagePage {
         x:this.board.x+x*this.cell+1,y:this.board.y+y*this.cell+1,w:this.cell-2,h:this.cell-2,
       },blocked.has(`${x},${y}`) ? new Color(146,126,106) : new Color(255,241,212),4);
     }
-    const held = this.gesture?.mode === 'drag' ? this.gesture : undefined;
+    const held = this.drag.active?.mode === 'drag' ? this.drag.active : undefined;
     for (const placement of this.session.placements) {
       if (held?.piece?.id === placement.pieceId) continue;
       const piece = this.level.pieces.find(item => item.id === placement.pieceId)!;
@@ -148,8 +148,8 @@ export class StagePage {
     for (const {rect} of this.buttons) this.rectangle(rect,new Color(215,51,43),13);
     this.notice.string = this.selected ? ITEMS[this.selected.shape].name : '拖动行李，填满后备箱';
     if (held?.piece) {
-      const placement = this.target(held);
-      if (inRect(held.current,this.board)) {
+      const placement = this.drag.placement(held,this.board,this.cell);
+      if (placement && inRect(held.current,this.board)) {
         const color = this.session.canDrop(placement) ? new Color(76,175,80,145) : new Color(229,57,53,145);
         this.paintPiece(held.piece,held.rotation,this.board.x+placement.x*this.cell,this.board.y+placement.y*this.cell,this.cell,color);
       } else {
@@ -158,24 +158,20 @@ export class StagePage {
     }
   }
 
-  private target(gesture: Gesture): Placement {
-    return {...snapToGrid(gesture.current,gesture.offset,this.board,this.cell),
-      pieceId:gesture.piece!.id,rotation:gesture.rotation};
-  }
-
   private rotateSelected(): void {
     if (!this.selected || this.cleared || !this.session.remainingSeconds) return;
-    if (this.gesture?.mode === 'drag' && this.gesture.piece) {
-      this.gesture.rotation = ((this.gesture.rotation+1)%4) as Rotation;
-    } else this.session.rotatePiece(this.selected.id);
+    if (!this.drag.rotateHeld()) this.session.rotatePiece(this.selected.id);
     this.paint();
   }
 
   private start(event: EventTouch): void {
     const point = this.point(event);
     const button = this.buttons.find(entry => inRect(point,entry.rect));
-    if (button) { button.action(); return; }
-    if (this.gesture || this.cleared || !this.session.remainingSeconds) return;
+    if (button) {
+      if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action();
+      return;
+    }
+    if (this.drag.active || this.cleared || !this.session.remainingSeconds) return;
     let piece: PieceDef | undefined;
     let offset = {x:this.cell/2,y:this.cell/2+22};
     const fromTray = inRect(point,this.tray);
@@ -193,35 +189,38 @@ export class StagePage {
       }
     }
     if (!piece && !fromTray) return;
-    this.gesture = {id:event.getID() ?? 0,start:point,time:this.now(),piece,fromTray,scrollStart:this.scroll,
-      mode:'pending',rotation:piece ? this.session.rotationFor(piece.id) : 0,current:point,offset};
+    this.drag.begin({
+      id:event.getID() ?? 0,start:point,time:this.now(),piece,fromTray,scrollStart:this.scroll,
+      rotation:piece ? this.session.rotationFor(piece.id) : 0,offset,
+    });
+  }
+
+  private applyGesture(gesture: Readonly<Gesture>): void {
+    if (gesture.mode === 'drag') this.selected = gesture.piece;
+    if (gesture.mode === 'scroll') {
+      this.scroll = Math.max(0,Math.min(this.scrollLimit,gesture.scrollStart+gesture.start.x-gesture.current.x));
+    }
   }
 
   private move(event: EventTouch): void {
-    const gesture = this.gesture;
-    if (!gesture || gesture.id !== (event.getID() ?? 0)) return;
-    gesture.current = this.point(event);
-    const distance = Math.hypot(gesture.current.x-gesture.start.x,gesture.current.y-gesture.start.y);
-    if (gesture.mode === 'pending' && distance > 10) {
-      gesture.mode = gesture.fromTray && (!gesture.piece || trayGesture(gesture.start,gesture.current) === 'scroll') ? 'scroll' : 'drag';
-      if (gesture.mode === 'drag') this.selected = gesture.piece;
-    }
-    if (gesture.mode === 'scroll') this.scroll = Math.max(0,Math.min(this.scrollLimit,gesture.scrollStart+gesture.start.x-gesture.current.x));
+    const gesture = this.drag.move(event.getID() ?? 0,this.point(event));
+    if (!gesture) return;
+    this.applyGesture(gesture);
     this.paint();
   }
 
   private end(event: EventTouch): void {
-    const gesture = this.gesture;
-    if (!gesture || gesture.id !== (event.getID() ?? 0)) return;
-    this.gesture = undefined;
-    gesture.current = this.point(event);
+    const released = this.drag.release(event.getID() ?? 0,this.point(event),this.now());
+    if (!released) return;
+    const {gesture,tap} = released;
+    this.applyGesture(gesture);
     if (gesture.piece && this.session.remainingSeconds) {
-      if (gesture.mode === 'pending' && isClick(gesture.start,gesture.current,this.now()-gesture.time)) {
+      if (tap) {
         this.selected = gesture.piece;
         this.session.rotatePiece(gesture.piece.id);
-      }
-      if (gesture.mode === 'drag') {
-        if (inRect(gesture.current,this.board)) this.session.drop(this.target(gesture));
+      } else if (gesture.mode === 'drag') {
+        const placement = this.drag.placement(gesture,this.board,this.cell);
+        if (placement && inRect(gesture.current,this.board)) this.session.drop(placement);
         else if (!gesture.fromTray) this.session.returnToTray(gesture.piece.id,gesture.rotation);
       }
     }
@@ -233,8 +232,6 @@ export class StagePage {
   }
 
   private cancel(event: EventTouch): void {
-    if (this.gesture?.id !== (event.getID() ?? 0)) return;
-    this.gesture=undefined;
-    this.paint();
+    if (this.drag.cancel(event.getID() ?? 0)) this.paint();
   }
 }

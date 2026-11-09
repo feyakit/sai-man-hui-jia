@@ -12,6 +12,9 @@ export const SHAPES: Record<ShapeId, readonly Cell[]> = {
   Y5: [[0,0],[0,1],[1,1],[0,2],[0,3]], R6: [[0,0],[1,0],[0,1],[1,1],[0,2],[1,2]],
 };
 
+// Grid rows increase downwards, while the stored rotation advances counterclockwise.
+export const clockwiseRotation = (rotation: Rotation): Rotation => ((rotation+3)%4) as Rotation;
+
 export function rotate(shape: readonly Cell[], rotation: Rotation): Cell[] {
   let cells = shape.map(([x,y]): Cell => [x,y]);
   for (let i = 0; i < rotation; i++) cells = cells.map(([x,y]): Cell => [y,-x]);

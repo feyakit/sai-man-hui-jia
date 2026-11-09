@@ -9,7 +9,7 @@ it('moves pieces, rejects collisions and restores the prior state on undo', () =
   expect(session.placements).toHaveLength(1);
   session.rotatePiece(1);
   expect(session.placements).toHaveLength(0);
-  expect(session.rotationFor(1)).toBe(1);
+  expect(session.rotationFor(1)).toBe(3);
   session.undo();
   expect(session.placements).toEqual([{pieceId:1,rotation:0,x:0,y:0}]);
   session.returnToTray(1);

@@ -1,4 +1,5 @@
-import { _decorator, Component, view } from 'cc';
+import { _decorator, Component, Director, Layers, Node, ResolutionPolicy, director, view } from 'cc';
+import { EDITOR } from 'cc/env';
 import { GAME_TITLE } from './config/brand';
 import { shanghaiDate } from './core/date';
 import { stage1 } from './core/stage1';
@@ -50,4 +51,19 @@ export class Bootstrap extends Component {
     label(screen,'Message',text,32,0,0);
     if (onTap) screen.once('touch-end',onTap);
   }
+}
+
+if (!EDITOR) {
+  director.on(Director.EVENT_AFTER_SCENE_LAUNCH, (scene: Node) => {
+    const canvas = scene.getChildByName('Canvas');
+    if (!canvas) return;
+    view.setDesignResolutionSize(750,1334,ResolutionPolicy.FIXED_WIDTH);
+    let root = canvas.getChildByName('GameRoot');
+    if (!root) {
+      root = new Node('GameRoot');
+      root.layer = Layers.Enum.UI_2D;
+      canvas.addChild(root);
+    }
+    if (!root.getComponent(Bootstrap)) root.addComponent(Bootstrap);
+  });
 }

@@ -1,4 +1,4 @@
-import { rotate, SHAPES } from '../core/shapes';
+import { clockwiseRotation, rotate, SHAPES } from '../core/shapes';
 import type { Level, Placement, Rotation } from '../core/types';
 import { canPlace, validateSolution } from '../core/validate';
 
@@ -64,7 +64,7 @@ export class StageSession {
   rotatePiece(id: number): void {
     if (!this.remainingSeconds || !this.state.rotations.has(id)) return;
     this.remember();
-    const rotation = ((this.rotationFor(id)+1)%4) as Rotation;
+    const rotation = clockwiseRotation(this.rotationFor(id));
     this.state.rotations.set(id,rotation);
     const original = this.state.placements.get(id);
     if (!original) return;
