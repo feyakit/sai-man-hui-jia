@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 14
+    timeout-minutes: 32
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -51,7 +51,7 @@ jobs:
         with:
           name: trunk-home-web-mobile
           path: client/build/web-mobile
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps --only-shell chromium
       - name: Play both stages with mouse and touch
         run: node --import tsx tools/cocos/smoke-web-mobile.mjs
       - uses: actions/upload-artifact@v4
