@@ -35,7 +35,7 @@ export async function prepareEditor(archive) {
     asar.extractAll(archive, directory);
     await writeFile(join(directory, 'launch/dist/launch.js'), patched);
     await asar.createPackageWithOptions(directory, output, {
-      unpack: unpacked.length === 1 ? unpacked[0] : unpacked.length ? `{${unpacked.join(',')}}` : undefined,
+      unpack: unpacked.length === 1 ? `**/${unpacked[0]}` : unpacked.length ? `**/{${unpacked.join(',')}}` : undefined,
     });
     assert.equal(asar.extractFile(output, 'launch/dist/launch.js').toString('utf8'), patched);
     await rm(`${archive}.unpacked`, {recursive:true,force:true});
