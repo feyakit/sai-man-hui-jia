@@ -6,13 +6,23 @@
 
 M1 核心规则和 M2 关卡工具已通过云端验收。Node.js 24 环境执行 `npm ci`、`npm test` 和 `npm run test:performance` 即可复核。M2 命令在 [README](../README.md)。生成关卡前由接手人在本机设置 `LEVEL_SECRET`。正式云端上传安排在微信云端阶段。
 
-## M3 浏览器试玩与官方构建
+## M3 春运主题试玩与官方构建
 
-[私密试玩](https://example.feyakit.dev) 使用 Cocos 3.8.8 Web 引擎。浏览器需支持 WebGL。桌面鼠标与手机触屏模拟已通关两关。打开后拖动行李放入格子，点按可旋转，拖回托盘可取下。加上 `?level=demo` 可直达挑战关。试玩链接限项目所有者访问。
+[私密试玩](https://example.feyakit.dev) 已更新为 Cocos Creator 3.8.8 的正式 Web Mobile 导出。两关用归家夜路、车厢、年货标签和到家画面串起春运主题。浏览器需要 WebGL，链接限项目所有者访问。
 
-PR 的 **Build Cocos Web Mobile** 任务在 Windows 构建机运行 Cocos Creator 3.8.8。它使用官方 Empty 2D 模板和 2D 场景，Bootstrap 在场景启动后挂载到 GameRoot。构建成功时，从对应 Actions 运行下载 `trunk-home-web-mobile`。正式导出验证及实体手机复测仍待完成。
+[官方构建与浏览器验收](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950) 提供 `trunk-home-web-mobile`。同一导出包在桌面鼠标与 Pixel 7 模拟触屏各通关两关，旋转、非法落点、拖回托盘、URL 直达及后台计时通过。实体手机仍待复测。
 
-仓库带有已验解的试玩关卡 `client/assets/resources/dev-levels/demo.json`。可在仓库根目录生成并复制其他开发关卡。通过 HTTP 服务打开构建目录的 `index.html`，或执行 `node --import tsx tools/cocos/smoke-web-mobile.mjs <构建目录> <截图目录>` 复跑 Chromium 验收。测试项包括两关通关、点击旋转、吸附、非法落点、拖回、URL 直达及后台计时。GitHub Actions 自动保存验收截图。
+仓库带有已验解的试玩关卡 `client/assets/resources/dev-levels/demo.json`。使用其他关卡时，在仓库根目录生成并复制开发关卡。通过 HTTP 打开构建目录的 `index.html`，或用 `node --import tsx tools/cocos/smoke-web-mobile.mjs <构建目录> <截图目录>` 复跑验收。也可用 `?level=demo` 直达挑战关。
+
+## 尚未开发的里程碑
+
+| 阶段 | 范围 |
+| --- | --- |
+| M4 | 启动页、选老家省份、首页、转场和正式结算流程，帮忙模式、分享图、道具模拟 |
+| M5 | 微信小游戏适配、构建模板、主包与分包配置、微信开发者工具及真机 |
+| M6 | 微信登录、全国同一每日关卡、每人每天首次通关为老家接回一人、省榜与连胜、云端防作弊和真实关卡上传 |
+| M7 | 正式品牌、车型与年货美术，放置和关车厢动效、催促反馈、音效、真机性能 |
+| M8 | 断网重试、提交去重、埋点、上线验收 |
 
 ## 交付规则
 
