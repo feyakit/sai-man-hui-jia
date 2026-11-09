@@ -10,11 +10,17 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && vitest run --coverage",
     "test:watch": "vitest",
-    "test:performance": "RUN_M1_PERFORMANCE=1 vitest run tests/performance.test.ts"
+    "test:performance": "RUN_M1_PERFORMANCE=1 vitest run tests/performance.test.ts",
+    "levels:generate": "node --import tsx tools/generate-levels.ts",
+    "levels:evaluate": "node --import tsx tools/evaluate-levels.ts",
+    "levels:upload": "node --import tsx tools/upload-levels.ts",
+    "levels:copy-dev": "node --import tsx tools/copy-dev-levels.ts",
+    "art:templates": "node --import tsx tools/art-templates.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "4.1.4",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "4.1.4"
   }
