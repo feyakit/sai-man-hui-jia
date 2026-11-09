@@ -100,4 +100,13 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 
 - 从最新 `origin/work/m1-core`（4099f11）创建 `codex/v1-1-foundation`，不修改画面或操作。
 - 检查 `gh run view 42635027666 --log-failed`：Creator 退出码 34，下载及解压已成功；原 workflow 未收集到编辑器日志。增加标准输出、错误输出及内部日志收集，继续在 CI 定位。
-- 本轮结果及人工验收事项在完成验证后补记。
+
+## 2026-11-10 · 任务 1 收尾：Cocos 构建稳定性、Cloudflare 预览与自动验证
+
+- 分支 `codex/v1-1-foundation`，draft PR #4 指向 `work/m1-core`，未合并。
+- Cocos 构建：`42640620679`（4876ae4）失败于 Creator exit 34；此次 stderr 取证指向 `Check build parameter startScene (undefined) failed`，而下载（1027270586 字节校验）与 7z 解压均成功。同一脚本在 `7023529` 的绿灯运行 `42640138388` 证明输入本身可构建，判定为 hosted runner 瞬时故障而非代码回归，但内部根因未被证实。`build-web-mobile.ps1` 现保留每次尝试日志并最多重试 3 次，失败后清理 `client/build/web-mobile` 与 `temp` 再重试；CI 复跑结果待补记。
+- `npm test`：37 通过、1 跳过（`tests/performance.test.ts` 仅在 `RUN_M1_PERFORMANCE=1` 时执行）；`npm run test:performance` 通过。
+- `npm run levels:v1` 重建后 `git status` 无差异（确定性生成）；stage2 当前 10 件、完整解 11 个、首解 3022 节点。
+- `smoke-web-mobile.mjs` 已覆盖桌面 1280×900、Pixel 7（recordVideo）、iPhone SE 375×667（recordVideo）、412×915，产物进 `web-mobile-browser-evidence`。
+- 预览部署：Netlify 专用脚本已退役，改为 Cloudflare Pages Direct Upload（Wrangler 4.159.0）。三项配置齐备才执行，缺失时跳过且在 Job Summary 说明；需要产品方配置 Secrets `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 与仓库变量 `CLOUDFLARE_PAGES_PROJECT_NAME`。
+- 剩余人工项：产品配置预览凭证以验证部署路径；真机清单与外部试玩按规格 5.4 由产品方完成。
