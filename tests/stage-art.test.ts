@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 const assets=vi.hoisted(() => ({load:vi.fn()}));
 vi.mock('../client/assets/scripts/services/OptionalResources',() => ({loadArt:assets.load}));
+vi.mock('../client/assets/scripts/services/SoundEffects',() => ({SoundEffects:class { play=vi.fn(); }}));
 vi.mock('cc',() => {
   class Color { static WHITE=new Color(); constructor(..._args: number[]) {} }
   class UITransform { setContentSize=vi.fn(); }

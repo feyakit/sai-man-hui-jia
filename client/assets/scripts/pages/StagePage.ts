@@ -6,6 +6,7 @@ import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
 import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
+import { SoundEffects } from '../services/SoundEffects';
 import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 
@@ -19,6 +20,7 @@ interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Lab
 export class StagePage {
   readonly node: Node;
   private readonly session: StageSession;
+  private readonly sounds: SoundEffects;
   private readonly background: Graphics;
   private readonly preview: Graphics;
   private readonly controls: Graphics;
@@ -61,6 +63,7 @@ export class StagePage {
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: () => void) {
     this.node = uiNode('StagePage',parent,750,1334);
     this.session = new StageSession(level,now);
+    this.sounds = new SoundEffects(parent);
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.packed = label(this.node,'Packed','',26,0,0);
@@ -78,7 +81,7 @@ export class StagePage {
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.rotateTitle = this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
-    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.selected=undefined; this.sync(); });
+    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync(); });
     this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
     this.overlay = uiNode('InteractionOverlay',this.node,750,1334);
     this.overlay.addComponent(Graphics);
@@ -133,6 +136,7 @@ export class StagePage {
     }
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
+      if (this.displayedSeconds >= 0 && seconds > 0 && seconds <= 10) this.sounds.play('tick');
       this.displayedSeconds = seconds;
       this.clock.string = Number.isFinite(seconds) ? `距出发 ${seconds} 秒` : '慢慢装，不限时';
       this.clock.color = seconds <= 10 ? red : ink;
@@ -289,6 +293,7 @@ export class StagePage {
     const gesture=this.drag.move(event.getID() ?? 0,this.point(event));
     if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
     if (previous !== 'drag') {
+      this.sounds.play('pickup');
       this.selected=gesture.piece;
       const v=this.pieces.get(gesture.piece.id)!; Tween.stopAllByTarget(v.node);
       v.node.angle=0; v.node.setSiblingIndex(this.controls.node.getSiblingIndex()-1);
@@ -325,13 +330,16 @@ export class StagePage {
     if (!this.selected || this.session.expired || this.cleared) return;
     const piece=this.selected, v=this.pieces.get(piece.id)!;
     if (this.drag.rotateHeld()) {
+      this.sounds.play('rotate');
       Tween.stopAllByTarget(v.node); v.node.angle=0;
       this.drawPiece(piece,this.drag.active!.rotation,this.cell,true);
       this.previewX=NaN; this.updateHeld(this.drag.active!);
       tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
     } else if (this.session.rotatePiece(piece.id)) {
+      this.sounds.play('rotate');
       this.renderPiece(piece); tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
     } else {
+      this.sounds.play('invalid');
       this.drawPiece(piece,v.rotation,v.size,false,true);
       tween(v.node).by(.05,{position:new Vec3(-8,0,0)}).by(.05,{position:new Vec3(16,0,0)})
         .by(.05,{position:new Vec3(-16,0,0)}).by(.05,{position:new Vec3(8,0,0)}).call(() => this.renderPiece(piece)).start();
@@ -349,12 +357,14 @@ export class StagePage {
     if (g.mode !== 'drag' || !g.piece) return;
     // release() also handles quick gestures without an intermediate move event.
     const v=this.pieces.get(g.piece.id)!;
+    if (!v.held) this.sounds.play('pickup');
     this.selected=g.piece; this.drawPiece(g.piece,g.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
     this.updateHeld(g);
     let accepted=false;
     if (inRect(g.current,this.tray)) {
       if (!g.fromTray) { this.session.returnToTray(g.piece.id,g.rotation); accepted=true; }
     } else if (this.previewPlacement) accepted=this.session.drop(this.previewPlacement);
+    this.sounds.play(accepted ? 'drop' : 'invalid');
     const from=v.node.position.clone();
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();
@@ -365,7 +375,7 @@ export class StagePage {
       tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
     this.clearPreview(); this.updateControls();
-    if (this.session.solved && !this.cleared) { this.cleared=true; this.onClear(); }
+    if (this.session.solved && !this.cleared) { this.cleared=true; this.sounds.play('cheer'); this.onClear(); }
   }
   private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
