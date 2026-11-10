@@ -127,3 +127,18 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 直接读取官方 Windows 3.8.8 归档，确认真实 `launch/dist/launch.js` 的 ui-kit pre-package 锚点与补丁吻合。真实归档有 4080 个 unpacked 文件，因此改为只追加启动文件与重写 ASAR 头/SHA256，原数据段和 unpacked 文件不变；fixture 测试逐字节验证原数据段保留。官方完整归档的额外本地下载中途超时，不将其算作完整编辑器运行验证。
 - 已 push 并使用 `gh run watch --exit-status` 跟踪 [build/browser 42670775462](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775462) 与 [verify 42670775917](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42670775917)。GitHub Actions 在执行任何步骤前拒绝 job，annotation 为 `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`。此状态是账号计费/额度阻塞，不是测试或构建结果。不能宣称本轮三项全绿；需账号所有者恢复额度后复跑。
 - Cloudflare 凭证未配置的跳过路径已实现；有凭证的真实部署尚未验证。保持 draft PR #4，base 为 `work/m1-core`；未操作 main、未合并。
+
+## 2026-11-10 · 任务 2：v1.2 交互重写（本机验证，浏览器证据待补）
+
+- 基于包含任务 1 合并提交 `1139fb3` 的 `work/m1-core`，分支 `codex/v1-2-interaction`。任务中断恢复后保留用户推送的 WIP `bfaec5a`，逐项 commit/push；不修改 main、不合并。
+- 轻点仅切换选中；移除托盘滚动状态，移动严格超过 8px 才拿起。托盘按原关卡顺序预留稳定槽位，优先一行、低于 28px 改两行；V1 的 12 件布局有 >=20px、矩形不交叠、所有朝向可容纳的单测。旧 demo 的 20 件仍兼容，但两行缩略格长可能低于 20px；旧 demo 不是 V1 的 10–12 件关卡。
+- 每件行李独立 Graphics 节点（本任务按要求使用色块，Sprite/图片留任务 3）；静态背景与网格只在开局/视口变化时绘制。移动只更新手持节点与独立预览，形状、包围盒预计算；预览吸附位置未变时不重画。没有实测 45/60fps。
+- 拿起 1.05 倍、投影、整体中心上移 max(1.2 格,120 设计 px)；就近取整、半数占格在网格内才显示绿/红预览；非法释放 180ms 飞回、后备箱物品拖至托盘归还。后台/系统取消、尺寸变化、超时取消拖动。
+- 旋转仅按钮，180×120、无选中置灰；第二指按按钮可旋转手持物品。`StageSession.rotatePiece` 非法时保持位置/朝向，返回 false，不产生撤销记录；已放置非法旋转为 200ms 红色抖动，成功旋转 120ms 动画。
+- 撤销不限制历史深度，清空选中；重开确认含取消，重置朝向/时间。超时冻结盘面并提示重开；读取 Cocos 设计坐标安全区与 H5 CSS env 安全区，横屏遮罩且真实时钟继续。
+- `c757a1e` 修改两个旧测试的原因：横滑应拿起而不再滚动；非法旋转应保留盘面而不再退回托盘。没有删除/跳过已有测试。新增覆盖：严格 8px 阈值、第二指隔离、快速松手、非法旋转原子性/禁放格/碰撞、120 步撤销、时间冻结/重开、12 槽位布局、旋转全朝向偏移与半数预览。
+- 命令/结果：`npm test` **46 通过、1 按原配置跳过**（性能测试），typecheck 通过，核心行覆盖率 98.76%（不代表 UI 覆盖率）；`npm run test:performance` **1 通过**；`node --check tools/cocos/smoke-web-mobile.mjs` 通过；`git diff --check` 通过。
+- smoke 更新：桌面鼠标竖屏、Pixel 7、iPhone SE、412×915；通关使用旋转按钮；轻点不旋转、双触点旋转并合法落下验证朝向、非法/箱外松手回原位、拖回托盘/撤销、重开确认/取消、横滑位置稳定、12 槽位包含与不重叠、中心上移 >=120、保留后台 10 秒计时检查。增加实际 V1 stage2 fixture 通关，12 件用 V1 stage2 的布局专用变体。妈妈模式运行时与音效/震动设置不属于本任务，未声称其浏览器用例完成。
+- 构建目录检查：`client`、`/workspace/ci-good`、`/workspace/ci-bad`、`/workspace/deploy-b9f21a7` 没有可用 Web Mobile index.html/构建包；**smoke 未执行，待 Windows 打包后补证据**。不得用任务 1 旧截图替代本轮证据。
+- Actions 免费额度已用尽，job 无法启动；本轮没有 watch/等待 Actions，没有宣称 CI 全绿。本地未运行 Cocos 编辑器，不声称本地构建通过。
+- 待人工/后续证据：Windows 3.8.8 打包后执行 `node --import tsx tools/cocos/smoke-web-mobile.mjs <build-dir> <evidence-dir>`；检查新增 `*-interaction.png`、`*-12-interaction.png`、`*-12-piece-tray.png` 和三关通关截图/录屏（此处“三关”指原两关加 V1 stage2，并非妈妈模式）。iPhone Safari/Android Chrome 真机检查：手指不遮挡、无误触旋转、第二指仅旋转按钮有效、快速拖放/回弹、托盘不滑动、刘海与底部手势条、横屏/切后台取消拖动、流畅度。
