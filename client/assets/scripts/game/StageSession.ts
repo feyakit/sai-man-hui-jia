@@ -22,7 +22,10 @@ export class StageSession {
     this.deadline = this.now() + this.level.timeLimitSec*1000;
   }
 
+  get expired(): boolean { return this.level.timeLimitSec > 0 && this.remainingSeconds === 0; }
+
   get remainingSeconds(): number {
+    if (!this.level.timeLimitSec) return Infinity;
     return Math.max(0,Math.ceil((this.deadline-this.now())/1000));
   }
 
@@ -48,7 +51,7 @@ export class StageSession {
   }
 
   drop(placement: Placement): boolean {
-    if (!this.remainingSeconds || !this.canDrop(placement)) return false;
+    if (this.expired || !this.canDrop(placement)) return false;
     this.remember();
     this.state.placements.set(placement.pieceId,{...placement});
     this.state.rotations.set(placement.pieceId,placement.rotation);
@@ -56,26 +59,26 @@ export class StageSession {
   }
 
   returnToTray(id: number, rotation: Rotation = this.rotationFor(id)): void {
-    if (!this.remainingSeconds || !this.state.rotations.has(id)) return;
+    if (this.expired || !this.state.rotations.has(id)) return;
     this.remember();
     this.state.placements.delete(id);
     this.state.rotations.set(id,rotation);
   }
 
-  rotatePiece(id: number): void {
-    if (!this.remainingSeconds || !this.state.rotations.has(id)) return;
-    this.remember();
+  rotatePiece(id: number): boolean {
+    if (this.expired || !this.state.rotations.has(id)) return false;
     const rotation = clockwiseRotation(this.rotationFor(id));
-    this.state.rotations.set(id,rotation);
     const original = this.state.placements.get(id);
-    if (!original) return;
-    const rotated = {...original,rotation};
-    if (this.canDrop(rotated)) this.state.placements.set(id,rotated);
-    else this.state.placements.delete(id);
+    const rotated = original ? {...original,rotation} : undefined;
+    if (rotated && !this.canDrop(rotated)) return false;
+    this.remember();
+    this.state.rotations.set(id,rotation);
+    if (rotated) this.state.placements.set(id,rotated);
+    return true;
   }
 
   undo(): void {
-    if (!this.remainingSeconds) return;
+    if (this.expired) return;
     const previous = this.history.pop();
     if (previous) this.state = previous;
   }
