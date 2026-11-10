@@ -1,329 +1,352 @@
-import { Color, EventTouch, Graphics, Label, Node, UITransform, Vec3, view } from 'cc';
+import { Color, EventTouch, Game, Graphics, Label, Node, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
 import { rotate, SHAPES } from '../core/shapes';
-import type { Level, PieceDef, Rotation, ShapeId } from '../core/types';
-import { VEHICLES } from '../core/vehicles';
+import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
+import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
 import { fill, label, uiNode } from '../ui/UIKit';
-import { drawHomeRoad } from '../ui/JourneyArt';
 
-interface Rect { x: number; y: number; w: number; h: number }
-const ink = new Color(74,44,26);
-const red = new Color(158,45,41);
-const cream = new Color(255,246,229);
-const gold = new Color(255,201,119);
-const muted = new Color(132,91,72);
-const palette = [[174,64,53],[157,99,36],[65,115,97],[95,87,140],[152,70,106]];
-const packageColors: Record<ShapeId,number> = {
-  I2:0,I3:0,L3:3,I4:2,O4:3,L4:1,J4:3,T4:1,S4:2,Z4:0,
-  P5:4,L5:3,T5:3,U5:1,V5:0,Z5:4,N5:2,Y5:0,R6:1,
-};
-const stamps = {I2:'酒',I3:'腊',L3:'煲',I4:'蔗',O4:'奶',L4:'箱',J4:'包',T4:'礼',S4:'鱼',Z4:'鸭',
-  P5:'被',L5:'冻',T5:'视',U5:'笼',V5:'蟹',Z5:'画',N5:'藕',Y5:'联',R6:'箱'};
-const inRect = (point: Point, rect: Rect) =>
-  point.x >= rect.x && point.y >= rect.y && point.x < rect.x+rect.w && point.y < rect.y+rect.h;
+const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
+const gold = new Color(246,195,67), gray = new Color(160,151,136);
+const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
+const colors = [new Color(174,64,53),new Color(157,99,36),new Color(65,115,97),new Color(95,87,140)];
+const shadow = new Color(40,20,10,70);
+interface PieceView { node: Node; graphics: Graphics; title: Label; rect: Rect; rotation: Rotation; size: number }
 
 export class StagePage {
   readonly node: Node;
-  private readonly graphics: Graphics;
   private readonly session: StageSession;
+  private readonly background: Graphics;
+  private readonly preview: Graphics;
+  private readonly controls: Graphics;
   private readonly clock: Label;
-  private readonly notice: Label;
   private readonly packed: Label;
-  private readonly board: Rect;
-  private readonly tray: Rect;
-  private readonly cell: number;
-  private readonly width: number;
-  private readonly height: number;
-  private readonly buttons: {rect: Rect; action: () => void; duringDrag: boolean}[] = [];
-  private readonly itemLabels = new Map<number,Label>();
-  private slots: {piece: PieceDef; rect: Rect}[] = [];
+  private readonly notice: Label;
+  private readonly overlay: Node;
+  private readonly overlayText: Label;
+  private readonly pieces = new Map<number,PieceView>();
   private readonly drag = new DragController();
+  private readonly buttons: {rect: Rect; action: () => void; duringDrag: boolean}[] = [];
+  private slots: {piece: PieceDef; rect: Rect}[] = [];
+  private board: Rect = {x:0,y:0,w:0,h:0};
+  private tray: Rect = {x:24,y:880,w:702,h:270};
+  private cell = 0;
+  private trayCell = 0;
+  private width = 750;
+  private height = 1334;
   private selected?: PieceDef;
-  private scroll = 0;
-  private scrollLimit = 0;
   private cleared = false;
-  private scale = 0;
   private displayedSeconds = -1;
+  private layoutWidth = -1;
+  private layoutHeight = -1;
+  private browserWidth = -1;
+  private browserHeight = -1;
+  private safeProbe?: HTMLDivElement;
+  private previewX = NaN;
+  private previewY = NaN;
+  private previewRotation: Rotation = 0;
+  private readonly candidate: Placement = {pieceId:0,x:0,y:0,rotation:0};
+  private readonly touchWorld = new Vec3();
+  private readonly touchLocal = new Vec3();
+  private readonly touchPoint: Point = {x:0,y:0};
+  private previewPlacement?: Placement;
+  private modal: 'restart' | 'timeout' | undefined;
+  private landscape = false;
+  private rotateTitle: Label;
+  private readonly onHide = () => this.cancelDrag();
 
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: () => void) {
-    this.width = 750;
-    this.height = 1334;
-    this.node = uiNode('StagePage',parent,this.width,this.height);
-    const backdrop = uiNode('JourneyBackdrop',this.node,this.width,this.height).addComponent(Graphics);
-    fill(backdrop,cream,-this.width/2,-this.height/2,this.width,this.height);
-    drawHomeRoad(backdrop,this.width,this.height,0);
-    this.graphics = uiNode('LuggageGraphics',this.node,this.width,this.height).addComponent(Graphics);
+    this.node = uiNode('StagePage',parent,750,1334);
     this.session = new StageSession(level,now);
-    this.cell = Math.floor(Math.min(110,640/level.width,568/level.height));
-    const boardHeight = this.cell*level.height;
-    this.board = {x:(this.width-this.cell*level.width)/2,y:349+(568-boardHeight)/2,w:this.cell*level.width,h:boardHeight};
-    this.tray = {x:24,y:1001,w:this.width-48,h:145};
-    const vehicle = VEHICLES.find(entry => entry.id === level.vehicle)?.name ?? '小轿车';
-    this.caption('Kicker','春运归家 · 年前最后一趟',23,0,53,gold);
-    this.caption('Title',GAME_TITLE,65,0,118,cream);
-    this.caption('Route','从打拼的城市，到亮着灯的老家',26,0,179,new Color(255,222,181));
-    this.caption('Vehicle',`第 ${level.stage} 关 · ${vehicle}`,34,0,285,ink);
-    this.clock = this.caption('Clock','',25,174,325,red);
-    this.packed = this.caption('Packed','',25,-174,325,muted);
-    this.notice = this.caption('Notice','',24,0,972,ink);
-    this.caption('ControlsHint','拖年货进车厢 · 点按转向 · 横滑托盘',21,0,1275,muted);
-    if (level.stage === 1) {
-      this.caption('TrunkOpen','后备箱已打开',23,0,405,muted);
-      this.caption('FirstLeg','装好这车年货，就能出发。',26,0,893,muted);
-    }
+    this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
+    this.clock = label(this.node,'Clock','',28,0,0);
+    this.packed = label(this.node,'Packed','',26,0,0);
+    this.notice = label(this.node,'Notice','',24,0,0);
+    label(this.node,'Title',GAME_TITLE,42,0,0);
+    label(this.node,'Vehicle',`第 ${level.stage} 关 · 拖年货进后备箱`,27,0,0);
+    this.preview = uiNode('DropPreview',this.node,750,1334).addComponent(Graphics);
     for (const piece of level.pieces) {
-      const item = this.caption(`Item${piece.id}`,'',22,0,0,cream);
-      this.itemLabels.set(piece.id,item);
+      const node = uiNode(`Piece${piece.id}`,this.node,1,1);
+      const graphics = node.addComponent(Graphics);
+      const title = label(node,`Item${piece.id}`,ITEMS[piece.shape].name,18,0,0);
+      this.pieces.set(piece.id,{node,graphics,title,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
-    const controlsY = this.tray.y+this.tray.h+14;
-    this.button('旋转 90°',this.width/2-235,controlsY,() => this.rotateSelected(),true);
-    this.button('撤销',this.width/2-75,controlsY,() => { this.session.undo(); this.paint(); });
-    this.button('重开',this.width/2+85,controlsY,() => {
-      this.session.restart();
-      this.drag.cancel();
-      this.cleared=false;
-      this.selected=undefined;
-      this.scroll=0;
-      this.paint();
-    });
+    this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
+    this.rotateTitle = this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
+    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.selected=undefined; this.sync(); });
+    this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
+    this.overlay = uiNode('InteractionOverlay',this.node,750,1334);
+    this.overlay.addComponent(Graphics);
+    this.overlayText = label(this.overlay,'Prompt','',38,0,50);
     this.node.on(Node.EventType.TOUCH_START,this.start,this);
     this.node.on(Node.EventType.TOUCH_MOVE,this.move,this);
     this.node.on(Node.EventType.TOUCH_END,this.end,this);
     this.node.on(Node.EventType.TOUCH_CANCEL,this.cancel,this);
-    this.paint();
+    game.on(Game.EVENT_HIDE,this.onHide);
+    if (typeof document !== 'undefined') {
+      this.safeProbe=document.createElement('div');
+      this.safeProbe.style.cssText='position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+      document.body.appendChild(this.safeProbe);
+    }
+    this.node.once(Node.EventType.NODE_DESTROYED,() => {
+      game.off(Game.EVENT_HIDE,this.onHide); this.safeProbe?.remove();
+    });
     this.tick();
   }
 
   tick(): void {
     const size = view.getVisibleSize();
-    const scale = Math.min(size.width/this.width,size.height/this.height);
-    const resized = scale > 0 && scale !== this.scale;
-    if (resized) {
-      this.scale = scale;
-      this.node.setScale(scale,scale,1);
+    const browserWidth = typeof window !== 'undefined' ? window.innerWidth : size.width;
+    const browserHeight = typeof window !== 'undefined' ? window.innerHeight : size.height;
+    if (size.width !== this.layoutWidth || size.height !== this.layoutHeight ||
+        browserWidth !== this.browserWidth || browserHeight !== this.browserHeight) {
+      this.cancelDrag();
+      this.layoutWidth=size.width; this.layoutHeight=size.height;
+      this.browserWidth=browserWidth; this.browserHeight=browserHeight;
+      this.landscape=browserWidth > browserHeight;
+      const safe = sys.getSafeAreaRect(false);
+      this.height = Math.max(1334,size.height/size.width*750);
+      { const k=Math.min(size.width/750,size.height/this.height); this.node.setScale(k,k,1); }
+      this.node.getComponent(UITransform)!.setContentSize(750,this.height);
+      let top = Math.max(0,(size.height-safe.y-safe.height)/size.height*this.height);
+      let bottom = Math.max(0,safe.y/size.height*this.height);
+      if (this.safeProbe) {
+        const css=window.getComputedStyle(this.safeProbe);
+        const ratio=750/browserWidth;
+        top=Math.max(top,(parseFloat(css.paddingTop) || 0)*ratio);
+        bottom=Math.max(bottom,(parseFloat(css.paddingBottom) || 0)*ratio);
+      }
+      this.layout(top,bottom);
     }
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
       this.displayedSeconds = seconds;
-      this.clock.string = seconds ? `距出发 ${seconds} 秒` : '时间到 · 重装一趟';
-      this.clock.color = seconds <= 30 ? new Color(215,51,43) : red;
+      this.clock.string = Number.isFinite(seconds) ? `距出发 ${seconds} 秒` : '慢慢装，不限时';
+      this.clock.color = seconds <= 10 ? red : ink;
     }
-    if ((resized || !seconds) && this.drag.cancel()) this.paint();
+    if (this.session.expired && !this.cleared && this.modal !== 'timeout') {
+      this.cancelDrag(); this.modal='timeout'; this.updateOverlay();
+    }
+  }
+
+  private layout(top: number, bottom: number): void {
+    const extra = this.height-1334;
+    const boardTop = 205+top;
+    const boardBottom = 850+extra-bottom;
+    this.cell = Math.floor(Math.min(110,640/this.level.width,(boardBottom-boardTop-35)/this.level.height));
+    this.board = {x:(750-this.cell*this.level.width)/2,y:boardTop+(boardBottom-boardTop-this.cell*this.level.height)/2,
+      w:this.cell*this.level.width,h:this.cell*this.level.height};
+    this.tray = {x:24,y:880+extra-bottom,w:702,h:270};
+    const tray = trayLayout(this.level.pieces,this.tray);
+    this.slots = tray.slots; this.trayCell = tray.cell;
+    this.placeLabel('Title',65+top); this.placeLabel('Vehicle',122+top);
+    this.placeLabel('Clock',172+top,190); this.placeLabel('Packed',172+top,-180);
+    this.placeLabel('Notice',860+extra-bottom);
+    for (const [i,button] of this.buttons.entries()) {
+      button.rect.y = 1170+extra-bottom;
+      this.placeLabel(`Button${i}`,button.rect.y+60,button.rect.x+button.rect.w/2-375);
+    }
+    this.drawBackground(); this.sync(); this.updateOverlay();
+  }
+
+  private placeLabel(name: string, y: number, x = 0): void { this.node.getChildByName(name)!.setPosition(x,this.height/2-y); }
+  private rect(g: Graphics,r: Rect,color: Color): void { fill(g,color,r.x-375,this.height/2-r.y-r.h,r.w,r.h,6); }
+  private drawBackground(): void {
+    const g = this.background; g.clear();
+    this.rect(g,{x:0,y:0,w:750,h:this.height},cream);
+    this.rect(g,{x:this.board.x-14,y:this.board.y-14,w:this.board.w+28,h:this.board.h+28},red);
+    this.rect(g,this.board,new Color(232,217,191));
+    for (let y=0;y<this.level.height;y++) for (let x=0;x<this.level.width;x++) {
+      const blocked = this.level.blocked.some(([bx,by]) => bx === x && by === y);
+      const r = {x:this.board.x+x*this.cell+1,y:this.board.y+y*this.cell+1,w:this.cell-2,h:this.cell-2};
+      this.rect(g,r,blocked ? ink : cream);
+      if (blocked) {
+        g.strokeColor=gold; g.lineWidth=3;
+        for (let d=6;d<this.cell-6;d+=12) {
+          g.moveTo(r.x-375+d,this.height/2-r.y-4);
+          g.lineTo(r.x-375+4,this.height/2-r.y-d); g.stroke();
+        }
+      }
+    }
+    this.rect(g,this.tray,new Color(232,217,191));
+  }
+
+  private button(text: string,x: number,w: number,action: () => void,duringDrag = false): Label {
+    const index = this.buttons.length;
+    this.buttons.push({rect:{x,y:1170,w,h:120},action,duringDrag});
+    return label(this.node,`Button${index}`,text,30,0,0);
+  }
+  private updateControls(): void {
+    this.controls.clear();
+    for (const [i,b] of this.buttons.entries()) this.rect(this.controls,b.rect,i === 0 ? (this.selected ? gold : gray) : red);
+    this.rotateTitle.color = this.selected ? ink : cream;
+    this.notice.string = this.selected ? `已选中 · ${ITEMS[this.selected.shape].name}` : '轻点选中 · 拖动装车 · 按按钮旋转';
+    this.packed.string = `已装车 ${this.session.placements.length} / ${this.level.pieces.length} 件`;
+  }
+  private updateOverlay(): void {
+    this.overlay.active = this.landscape || !!this.modal;
+    if (!this.overlay.active) return;
+    this.overlay.setSiblingIndex(this.node.children.length-1);
+    const g = this.overlay.getComponent(Graphics)!; g.clear();
+    this.rect(g,{x:-2000,y:-2000,w:4750,h:this.height+4000},new Color(40,20,10,235));
+    this.overlayText.color = cream;
+    this.overlayText.string = this.landscape ? '请竖屏游玩' : this.modal === 'restart' ? '重新装车？' : '时间到 · 再装一次';
+    for (const child of this.overlay.children.slice(1)) child.destroy();
+    if (!this.landscape) {
+      const r = this.confirmRect(); this.rect(g,r,red);
+      label(this.overlay,'Confirm','重新装车',32,0,this.height/2-r.y-r.h/2).color=cream;
+      if (this.modal === 'restart') label(this.overlay,'Cancel','取消',28,0,this.height/2-r.y-160).color=cream;
+    }
+  }
+  private confirmRect(): Rect { return {x:225,y:this.height/2+20,w:300,h:120}; }
+
+  private sync(): void {
+    for (const piece of this.level.pieces) this.renderPiece(piece);
+    this.clearPreview(); this.updateControls();
+  }
+  private renderPiece(piece: PieceDef): void {
+    const view = this.pieces.get(piece.id)!;
+    Tween.stopAllByTarget(view.node); view.node.angle=0; view.node.setScale(1,1,1);
+    const placement = this.session.placements.find(p => p.pieceId === piece.id);
+    const rotation = this.session.rotationFor(piece.id);
+    const size = placement ? this.cell : this.trayCell;
+    const box = dimensions(piece,rotation);
+    const slot = this.slots.find(s => s.piece.id === piece.id)!.rect;
+    const rect = placement ? {x:this.board.x+placement.x*size,y:this.board.y+placement.y*size,w:box.w*size,h:box.h*size} :
+      {x:slot.x+(slot.w-box.w*size)/2,y:slot.y+(slot.h-box.h*size)/2,w:box.w*size,h:box.h*size};
+    view.rect=rect; view.rotation=rotation; view.size=size;
+    this.drawPiece(piece,rotation,size,false);
+    this.position(view,rect.x+rect.w/2,rect.y+rect.h/2);
+  }
+  private position(view: PieceView,x: number,y: number): void { view.node.setPosition(x-375,this.height/2-y); }
+  private drawPiece(piece: PieceDef,rotation: Rotation,size: number,held: boolean,failed = false): void {
+    const view = this.pieces.get(piece.id)!;
+    const g=view.graphics; g.clear();
+    const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
+    view.node.getComponent(UITransform)!.setContentSize(w,h);
+    for (const [x,y] of rotate(SHAPES[piece.shape],rotation)) {
+      if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
+      fill(g,failed ? red : this.selected?.id === piece.id ? gold : ink,x*size-w/2+1,h/2-(y+1)*size+1,size-2,size-2,5);
+      fill(g,colors[piece.id%colors.length],x*size-w/2+4,h/2-(y+1)*size+4,size-8,size-8,4);
+    }
+    view.title.fontSize=Math.max(12,Math.min(22,size*.6)); view.title.color=cream;
+    view.title.node.setPosition(0,0);
   }
 
   private point(event: EventTouch): Point {
-    const touch = event.getUILocation();
-    const local = this.node.getComponent(UITransform)!.convertToNodeSpaceAR(new Vec3(touch.x,touch.y,0));
-    return {x:local.x+this.width/2,y:this.height/2-local.y};
+    const p=event.getUILocation();
+    this.touchWorld.set(p.x,p.y,0);
+    const local=this.node.getComponent(UITransform)!.convertToNodeSpaceAR(this.touchWorld,this.touchLocal);
+    this.touchPoint.x=local.x+375; this.touchPoint.y=this.height/2-local.y;
+    return this.touchPoint;
   }
-
-  private button(text: string,x: number,y: number,action: () => void,duringDrag = false): void {
-    const rect = {x,y,w:150,h:62};
-    this.buttons.push({rect,action,duringDrag});
-    const title = label(this.node,text,text,27,x+rect.w/2-this.width/2,this.height/2-y-rect.h/2);
-    title.color = new Color(255,246,229);
-  }
-
-  private caption(name: string, text: string, size: number, x: number, y: number, color: Color): Label {
-    const result = label(this.node,name,text,size,x,this.height/2-y);
-    result.color = color;
-    return result;
-  }
-
-  private positionItem(piece: PieceDef, text: string, x: number, y: number, color: Color): void {
-    const item = this.itemLabels.get(piece.id)!;
-    item.string = text;
-    item.color = color;
-    item.node.setPosition(x-this.width/2,this.height/2-y);
-    item.node.active = true;
-  }
-
-  private rectangle(rect: Rect, color: Color, radius = 0): void {
-    fill(this.graphics,color,rect.x-this.width/2,this.height/2-rect.y-rect.h,rect.w,rect.h,radius);
-  }
-
-  private paintPiece(piece: PieceDef, rotation: Rotation, x: number, y: number, size: number, tint?: Color, clip?: Rect): void {
-    const [r,g,b] = palette[packageColors[piece.shape]];
-    const color = tint ?? new Color(r,g,b);
-    const cells = rotate(SHAPES[piece.shape],rotation);
-    const box = (tile: Rect, boxColor: Color, radius: number) => {
-      if (clip) {
-        const left = Math.max(tile.x,clip.x), right = Math.min(tile.x+tile.w,clip.x+clip.w);
-        if (left >= right) return;
-        tile.x = left;
-        tile.w = right-left;
-      }
-      this.rectangle(tile,boxColor,Math.min(radius,tile.w/2,tile.h/2));
-    };
-    const inset = Math.max(2,size*.07);
-    const labelInk = new Color(255,236,191,85);
-    for (const [dx,dy] of cells) {
-      const left = x+dx*size;
-      const top = y+dy*size;
-      box({x:left+inset,y:top+inset,w:size-2*inset,h:size-2*inset},color,Math.min(8,size*.17));
-      if (tint) continue;
-      if (cells.some(([cx,cy]) => cx === dx+1 && cy === dy)) {
-        box({x:left+size-2*inset,y:top+inset,w:4*inset,h:size-2*inset},color,0);
-      }
-      if (cells.some(([cx,cy]) => cx === dx && cy === dy+1)) {
-        box({x:left+inset,y:top+size-2*inset,w:size-2*inset,h:4*inset},color,0);
-      }
-      box({x:left+size*.2,y:top+size*.20,w:size*.6,h:Math.max(2,size*.055)},labelInk,2);
-    }
-  }
-
-  private paint(): void {
-    this.graphics.clear();
-    for (const item of this.itemLabels.values()) item.node.active = false;
-    const {x,y,w,h} = this.board;
-    this.rectangle({x:x+w*.22,y:y-31,w:w*.56,h:20},new Color(82,58,54),7);
-    this.rectangle({x:x+w*.3,y:y-27,w:w*.4,h:7},new Color(180,132,115),3);
-    this.rectangle({x:x-30,y:y+8,w:21,h:55},new Color(61,48,50),7);
-    this.rectangle({x:x+w+9,y:y+8,w:21,h:55},new Color(61,48,50),7);
-    this.rectangle({x:x-30,y:y+h-57,w:21,h:55},new Color(61,48,50),7);
-    this.rectangle({x:x+w+9,y:y+h-57,w:21,h:55},new Color(61,48,50),7);
-    this.rectangle({x:x-25,y:y-19,w:w+50,h:h+49},new Color(106,47,43),22);
-    this.rectangle({x:x-16,y:y-12,w:w+32,h:h+36},new Color(174,67,55),17);
-    this.rectangle({x:x-6,y:y-6,w:w+12,h:h+12},new Color(82,58,54),11);
-    this.rectangle(this.board,new Color(231,205,170),8);
-    this.rectangle({x:x-13,y:y+h+9,w:54,h:9},gold,4);
-    this.rectangle({x:x+w-41,y:y+h+9,w:54,h:9},gold,4);
-    this.rectangle({x:x+w/2-37,y:y+h+10,w:74,h:13},new Color(63,66,92),4);
-    const blocked = new Set(this.level.blocked.map(([x,y]) => `${x},${y}`));
-    for (let y=0;y<this.level.height;y++) for (let x=0;x<this.level.width;x++) {
-      this.rectangle({
-        x:this.board.x+x*this.cell+1,y:this.board.y+y*this.cell+1,w:this.cell-2,h:this.cell-2,
-      },blocked.has(`${x},${y}`) ? new Color(146,126,106) : new Color(255,241,212),4);
-    }
-    const held = this.drag.active?.mode === 'drag' ? this.drag.active : undefined;
-    const placements = this.session.placements;
-    for (const placement of placements) {
-      if (held?.piece?.id === placement.pieceId) continue;
-      const piece = this.level.pieces.find(item => item.id === placement.pieceId)!;
-      const left = x+placement.x*this.cell;
-      const top = y+placement.y*this.cell;
-      this.paintPiece(piece,placement.rotation,left,top,this.cell);
-      const [dx,dy] = rotate(SHAPES[piece.shape],placement.rotation)[0];
-      this.positionItem(piece,stamps[piece.shape],left+(dx+.5)*this.cell,top+(dy+.5)*this.cell,cream);
-    }
-    this.rectangle(this.tray,new Color(231,208,174),16);
-    this.packed.string = `已装车 ${placements.length} / ${this.level.pieces.length} 件`;
-    const placed = new Set(placements.map(placement => placement.pieceId));
-    const pieces = this.level.pieces.filter(piece => !placed.has(piece.id));
-    this.scrollLimit = Math.max(0,pieces.length*139-this.tray.w+20);
-    this.scroll = Math.min(this.scroll,this.scrollLimit);
-    this.slots = [];
-    for (const [index,piece] of pieces.entries()) {
-      const rect = {x:this.tray.x+10+index*139-this.scroll,y:this.tray.y+14,w:130,h:108};
-      this.slots.push({piece,rect});
-      if (held?.piece?.id === piece.id) continue;
-      const left = Math.max(rect.x,this.tray.x+4);
-      const right = Math.min(rect.x+rect.w,this.tray.x+this.tray.w-4);
-      if (right > left) {
-        this.rectangle({x:left,y:rect.y,w:right-left,h:119},new Color(255,244,222),9);
-      }
-      const rotation = this.session.rotationFor(piece.id);
-      const cells = rotate(SHAPES[piece.shape],rotation);
-      const columns = Math.max(...cells.map(([column]) => column))+1;
-      const rows = Math.max(...cells.map(([,row]) => row))+1;
-      const size = Math.floor(Math.min(34,(rect.w-18)/columns,80/rows));
-      this.paintPiece(piece,rotation,rect.x+(rect.w-columns*size)/2,rect.y+(90-rows*size)/2,size,undefined,this.tray);
-      if (right-left >= 105) {
-        this.positionItem(piece,ITEMS[piece.shape].name,(left+right)/2,rect.y+104,ink);
-      }
-    }
-    for (const {rect} of this.buttons) this.rectangle(rect,red,13);
-    const mission = this.level.stage === 1 ? '先把给家里带的年货装上车' : '年前最后一程，把剩下的年货带回家';
-    this.notice.string = this.selected ? `正在装车 · ${ITEMS[this.selected.shape].name}` : mission;
-    if (held?.piece) {
-      const placement = this.drag.placement(held,this.board,this.cell);
-      if (placement && inRect(held.current,this.board)) {
-        const color = this.session.canDrop(placement) ? new Color(76,175,80,145) : new Color(229,57,53,145);
-        this.paintPiece(held.piece,held.rotation,this.board.x+placement.x*this.cell,this.board.y+placement.y*this.cell,this.cell,color);
-      } else {
-        this.paintPiece(held.piece,held.rotation,held.current.x-held.offset.x,held.current.y-held.offset.y,this.cell);
-      }
-    }
-  }
-
-  private rotateSelected(): void {
-    if (!this.selected || this.cleared || !this.session.remainingSeconds) return;
-    if (!this.drag.rotateHeld()) this.session.rotatePiece(this.selected.id);
-    this.paint();
-  }
-
   private start(event: EventTouch): void {
-    const point = this.point(event);
-    const button = this.buttons.find(entry => inRect(point,entry.rect));
-    if (button) {
-      if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action();
+    const p=this.point(event);
+    if (this.landscape) return;
+    if (this.modal) {
+      if (inRect(p,this.confirmRect())) {
+        this.modal=undefined; this.session.restart(); this.selected=undefined; this.cleared=false; this.sync(); this.updateOverlay();
+      } else if (this.modal === 'restart' && p.y > this.confirmRect().y+130) { this.modal=undefined; this.updateOverlay(); }
       return;
     }
-    if (this.drag.active || this.cleared || !this.session.remainingSeconds) return;
-    let piece: PieceDef | undefined;
-    let offset = {x:this.cell/2,y:this.cell/2+22};
-    const fromTray = inRect(point,this.tray);
-    if (fromTray) piece = this.slots.find(slot => inRect(point,slot.rect))?.piece;
-    if (inRect(point,this.board)) {
-      const x = Math.floor((point.x-this.board.x)/this.cell);
-      const y = Math.floor((point.y-this.board.y)/this.cell);
-      const placement = this.session.placements.find(item => {
-        const definition = this.level.pieces.find(candidate => candidate.id === item.pieceId)!;
-        return rotate(SHAPES[definition.shape],item.rotation).some(([dx,dy]) => item.x+dx === x && item.y+dy === y);
-      });
-      if (placement) {
-        piece = this.level.pieces.find(item => item.id === placement.pieceId);
-        offset = {x:point.x-this.board.x-placement.x*this.cell,y:point.y-this.board.y-placement.y*this.cell};
-      }
+    if (this.cleared || this.session.expired) return;
+    const button=this.buttons.find(b => inRect(p,b.rect));
+    if (button) { if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action(); return; }
+    if (this.drag.active) return;
+    // The entire grid bounding region includes the gaps between occupied cells.
+    const piece=this.level.pieces.slice().reverse().find(piece => inRect(p,this.pieces.get(piece.id)!.rect));
+    if (piece && this.selected && piece.id !== this.selected.id) {
+      const old=this.selected; this.selected=undefined; this.renderPiece(old); this.updateControls();
     }
-    if (!piece && !fromTray) return;
-    this.drag.begin({
-      id:event.getID() ?? 0,start:point,time:this.now(),piece,fromTray,scrollStart:this.scroll,
-      rotation:piece ? this.session.rotationFor(piece.id) : 0,offset,
-    });
+    this.drag.begin({id:event.getID() ?? 0,start:p,time:this.now(),piece,fromTray:inRect(p,this.tray),
+      rotation:piece ? this.session.rotationFor(piece.id) : 0,offset:{x:0,y:0}});
   }
-
-  private applyGesture(gesture: Readonly<Gesture>): void {
-    if (gesture.mode === 'drag') this.selected = gesture.piece;
-    if (gesture.mode === 'scroll') {
-      this.scroll = Math.max(0,Math.min(this.scrollLimit,gesture.scrollStart+gesture.start.x-gesture.current.x));
-    }
-  }
-
   private move(event: EventTouch): void {
-    const gesture = this.drag.move(event.getID() ?? 0,this.point(event));
-    if (!gesture) return;
-    this.applyGesture(gesture);
-    this.paint();
+    const previous=this.drag.active?.mode;
+    const gesture=this.drag.move(event.getID() ?? 0,this.point(event));
+    if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
+    if (previous !== 'drag') {
+      this.selected=gesture.piece;
+      const v=this.pieces.get(gesture.piece.id)!; Tween.stopAllByTarget(v.node);
+      v.node.angle=0; v.node.setSiblingIndex(this.controls.node.getSiblingIndex()-1);
+      this.drawPiece(gesture.piece,gesture.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
+      this.updateControls();
+    }
+    this.updateHeld(gesture);
   }
+  private updateHeld(g: Readonly<Gesture>): void {
+    if (!g.piece) return;
+    const box=dimensions(g.piece,g.rotation);
+    const lift=Math.max(1.2*this.cell,120);
+    g.offset.x=box.w*this.cell/2; g.offset.y=box.h*this.cell/2+lift;
+    this.position(this.pieces.get(g.piece.id)!,g.current.x,g.current.y-lift);
+    const x=Math.round((g.current.x-g.offset.x-this.board.x)/this.cell);
+    const y=Math.round((g.current.y-g.offset.y-this.board.y)/this.cell);
+    if (x === this.previewX && y === this.previewY && g.rotation === this.previewRotation) return;
+    this.previewX=x; this.previewY=y; this.previewRotation=g.rotation;
+    this.preview.clear(); this.previewPlacement=undefined;
+    const placement=this.candidate;
+    placement.x=x; placement.y=y; placement.rotation=g.rotation; placement.pieceId=g.piece.id;
+    if (!previewVisible(g.piece,placement,this.level.width,this.level.height)) return;
+    this.previewPlacement=placement;
+    const color=this.session.canDrop(placement) ? green : invalid;
+    const cells=pieceCells(g.piece,g.rotation);
+    for (let i=0;i<cells.length;i++) {
+      fill(this.preview,color,this.board.x+(x+cells[i][0])*this.cell-375,
+        this.height/2-this.board.y-(y+cells[i][1]+1)*this.cell,this.cell,this.cell,6);
+    }
+  }
+  private clearPreview(): void { this.preview.clear(); this.previewX=NaN; this.previewPlacement=undefined; }
 
+  private rotateSelected(): void {
+    if (!this.selected || this.session.expired || this.cleared) return;
+    const piece=this.selected, v=this.pieces.get(piece.id)!;
+    if (this.drag.rotateHeld()) {
+      Tween.stopAllByTarget(v.node); v.node.angle=0;
+      this.drawPiece(piece,this.drag.active!.rotation,this.cell,true);
+      this.previewX=NaN; this.updateHeld(this.drag.active!);
+      tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
+    } else if (this.session.rotatePiece(piece.id)) {
+      this.renderPiece(piece); tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
+    } else {
+      this.drawPiece(piece,v.rotation,v.size,false,true);
+      tween(v.node).by(.05,{position:new Vec3(-8,0,0)}).by(.05,{position:new Vec3(16,0,0)})
+        .by(.05,{position:new Vec3(-16,0,0)}).by(.05,{position:new Vec3(8,0,0)}).call(() => this.renderPiece(piece)).start();
+    }
+  }
   private end(event: EventTouch): void {
-    const released = this.drag.release(event.getID() ?? 0,this.point(event),this.now());
+    const released=this.drag.release(event.getID() ?? 0,this.point(event),this.now());
     if (!released) return;
-    const {gesture,tap} = released;
-    this.applyGesture(gesture);
-    if (gesture.piece && this.session.remainingSeconds) {
-      if (tap) {
-        this.selected = gesture.piece;
-        this.session.rotatePiece(gesture.piece.id);
-      } else if (gesture.mode === 'drag') {
-        const placement = this.drag.placement(gesture,this.board,this.cell);
-        if (placement && inRect(gesture.current,this.board)) this.session.drop(placement);
-        else if (!gesture.fromTray) this.session.returnToTray(gesture.piece.id,gesture.rotation);
-      }
+    const {gesture:g,tap}=released;
+    if (this.session.expired) { this.cancelDrag(); this.sync(); return; }
+    if (tap) {
+      this.selected = this.selected?.id === g.piece?.id ? undefined : g.piece;
+      this.sync(); return;
     }
-    this.paint();
-    if (this.session.solved && !this.cleared) {
-      this.cleared=true;
-      this.onClear();
+    if (g.mode !== 'drag' || !g.piece) return;
+    // release() also handles quick gestures without an intermediate move event.
+    const v=this.pieces.get(g.piece.id)!;
+    this.selected=g.piece; this.drawPiece(g.piece,g.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
+    this.updateHeld(g);
+    let accepted=false;
+    if (inRect(g.current,this.tray)) {
+      if (!g.fromTray) { this.session.returnToTray(g.piece.id,g.rotation); accepted=true; }
+    } else if (this.previewPlacement) accepted=this.session.drop(this.previewPlacement);
+    const from=v.node.position.clone();
+    this.renderPiece(g.piece);
+    const destination=v.node.position.clone();
+    if (!accepted) {
+      v.node.setPosition(from);
+      const returnScale=this.cell/v.size*1.05;
+      v.node.setScale(returnScale,returnScale,1);
+      tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
+    this.clearPreview(); this.updateControls();
+    if (this.session.solved && !this.cleared) { this.cleared=true; this.onClear(); }
   }
-
-  private cancel(event: EventTouch): void {
-    if (this.drag.cancel(event.getID() ?? 0)) this.paint();
-  }
+  private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
+  private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
 }
