@@ -175,7 +175,7 @@ async function interactions(page,touch,view,name) {
   const blank={x:view.tray.x+2,y:view.tray.y+2};
   await drag(page,touch,blank,{x:blank.x+200,y:blank.y});
   assert.deepEqual((await game(page)).slots.map(s => s.rect),rectangles,'Horizontal tray gesture cannot scroll slots');
-  await drag(page,touch,pick,dropPoint(view,{x:100,y:100,rotation:originRotation},slot));
+  await drag(page,touch,pick,dropPoint(view,{x:-1,y:0,rotation:originRotation},slot));
   await delay(220);
   state=await game(page); assert.deepEqual(state.placements,view.placements,'Invalid release preserves board');
   assert.deepEqual(state.pieces.find(p => p.id === slot.id).rect,view.pieces.find(p => p.id === slot.id).rect,'Invalid returns to original slot');
@@ -183,7 +183,8 @@ async function interactions(page,touch,view,name) {
   await drag(page,touch,pick,{x:20,y:250}); await delay(220);
   assert.deepEqual((await game(page)).placements,view.placements,'Outside release preserves board');
   const heldFinger={x:375,y:view.board.y+view.board.h/2+120};
-  const [from,to,button]=await coords(page,[pick,heldFinger,center(view.buttons[0])]);
+  const heldSlot=view.level === 1 ? view.slots[2] : slot;
+  const [from,to,button]=await coords(page,[slotPoint(heldSlot),heldFinger,center(view.buttons[0])]);
   if (touch) {
     await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...from,id:0}]});
     await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...to,id:0}]});
@@ -191,7 +192,7 @@ async function interactions(page,touch,view,name) {
     await page.mouse.move(from.x,from.y); await page.mouse.down(); await page.mouse.move(to.x,to.y);
   }
   state=await game(page);
-  const held=state.pieces.find(p => p.id === slot.id);
+  const held=state.pieces.find(p => p.id === heldSlot.id);
   assert.ok(heldFinger.y-held.y >= 119.9,'Center is at least 120 design pixels above finger');
   assert.ok(Math.abs(held.scale-1.05) < .001,'Pickup scale');
   const rotation=state.held.rotation;
@@ -200,8 +201,22 @@ async function interactions(page,touch,view,name) {
     assert.equal((await game(page)).held.rotation,(rotation+3)%4,'Second finger rotates held piece');
     await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[{...to,id:0}]});
     assert.equal((await game(page)).held.mode,'drag','Second finger release does not release primary');
-    // Cancel the drag without changing the board or tray orientation.
-    await touch.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
+    const goal=await page.evaluate(async () => {
+      const cc=await globalThis.System.import('cc');
+      const stage=cc.director.getScene().getChildByName('Canvas').getChildByName('GameRoot').getComponent('Bootstrap').stage;
+      const held=stage.drag.active;
+      for (let y=0;y<stage.level.height;y++) for (let x=0;x<stage.level.width;x++) {
+        const p={pieceId:held.piece.id,rotation:held.rotation,x,y};
+        if (stage.session.canDrop(p)) return p;
+      }
+    });
+    assert.ok(goal,'Rotated test piece has a valid target');
+    const [target]=await coords(page,[dropPoint(view,goal,heldSlot)]);
+    await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...target,id:0}]});
+    await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    assert.equal((await game(page)).placements.find(p => p.pieceId === heldSlot.id)?.rotation,goal.rotation,'Dual-touch rotation survives drop');
+    await tap(page,touch,center(view.buttons[1]));
+    assert.deepEqual((await game(page)).placements,view.placements,'Undo rotated drop');
   } else {
     await page.mouse.move(5,5); await page.mouse.up();
   }
