@@ -23,13 +23,13 @@ export class DragController {
   get active(): Readonly<Gesture> | undefined { return this.gesture; }
 
   begin(start: StartGesture): void {
-    if (!this.gesture) this.gesture = {...start,current:start.start,mode:'pending'};
+    if (!this.gesture) this.gesture = {...start,start:{...start.start},current:{...start.start},mode:'pending'};
   }
 
   move(id: number, current: Point): Readonly<Gesture> | undefined {
     const gesture = this.gesture;
     if (!gesture || gesture.id !== id) return;
-    gesture.current = current;
+    gesture.current.x = current.x; gesture.current.y = current.y;
     if (gesture.mode === 'pending' && Math.hypot(current.x-gesture.start.x,current.y-gesture.start.y) > 8) {
       if (gesture.piece) gesture.mode = 'drag';
     }

@@ -6,7 +6,7 @@ import { rotate, SHAPES } from '../core/shapes';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
-import { dimensions, heldOffset, inRect, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
+import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
 import { fill, label, uiNode } from '../ui/UIKit';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
@@ -41,7 +41,13 @@ export class StagePage {
   private cleared = false;
   private displayedSeconds = -1;
   private layoutKey = '';
-  private previewKey = '';
+  private previewX = NaN;
+  private previewY = NaN;
+  private previewRotation: Rotation = 0;
+  private readonly candidate: Placement = {pieceId:0,x:0,y:0,rotation:0};
+  private readonly touchWorld = new Vec3();
+  private readonly touchLocal = new Vec3();
+  private readonly touchPoint: Point = {x:0,y:0};
   private previewPlacement?: Placement;
   private modal: 'restart' | 'timeout' | undefined;
   private landscape = false;
@@ -83,7 +89,7 @@ export class StagePage {
   tick(): void {
     const size = view.getVisibleSize();
     const safe = sys.getSafeAreaRect();
-    const windowSize = view.getVisibleSizeInPixel();
+
     const key = `${size.width},${size.height},${safe.x},${safe.y},${safe.width},${safe.height}`;
     if (key !== this.layoutKey) {
       this.cancelDrag();
@@ -92,8 +98,8 @@ export class StagePage {
       this.height = Math.max(1334,size.height/size.width*750);
       { const k=Math.min(size.width/750,size.height/this.height); this.node.setScale(k,k,1); }
       this.node.getComponent(UITransform)!.setContentSize(750,this.height);
-      const top = Math.max(0,(windowSize.height-safe.y-safe.height)/windowSize.height*this.height);
-      const bottom = Math.max(0,safe.y/windowSize.height*this.height);
+      const top = Math.max(0,(size.height-safe.y-safe.height)/size.height*this.height);
+      const bottom = Math.max(0,safe.y/size.height*this.height);
       this.layout(top,bottom);
     }
     const seconds = this.session.remainingSeconds;
@@ -213,8 +219,10 @@ export class StagePage {
 
   private point(event: EventTouch): Point {
     const p=event.getUILocation();
-    const local=this.node.getComponent(UITransform)!.convertToNodeSpaceAR(new Vec3(p.x,p.y,0));
-    return {x:local.x+375,y:this.height/2-local.y};
+    this.touchWorld.set(p.x,p.y,0);
+    const local=this.node.getComponent(UITransform)!.convertToNodeSpaceAR(this.touchWorld,this.touchLocal);
+    this.touchPoint.x=local.x+375; this.touchPoint.y=this.height/2-local.y;
+    return this.touchPoint;
   }
   private start(event: EventTouch): void {
     const p=this.point(event);
@@ -231,6 +239,9 @@ export class StagePage {
     if (this.drag.active) return;
     // The entire grid bounding region includes the gaps between occupied cells.
     const piece=this.level.pieces.slice().reverse().find(piece => inRect(p,this.pieces.get(piece.id)!.rect));
+    if (piece && this.selected && piece.id !== this.selected.id) {
+      const old=this.selected; this.selected=undefined; this.renderPiece(old); this.updateControls();
+    }
     this.drag.begin({id:event.getID() ?? 0,start:p,time:this.now(),piece,fromTray:inRect(p,this.tray),
       rotation:piece ? this.session.rotationFor(piece.id) : 0,offset:{x:0,y:0}});
   }
@@ -239,8 +250,7 @@ export class StagePage {
     const gesture=this.drag.move(event.getID() ?? 0,this.point(event));
     if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
     if (previous !== 'drag') {
-      const old=this.selected; this.selected=gesture.piece;
-      if (old && old.id !== this.selected.id) this.renderPiece(old);
+      this.selected=gesture.piece;
       const v=this.pieces.get(gesture.piece.id)!; Tween.stopAllByTarget(v.node);
       v.node.angle=0; v.node.setSiblingIndex(this.controls.node.getSiblingIndex()-1);
       this.drawPiece(gesture.piece,gesture.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
@@ -250,28 +260,35 @@ export class StagePage {
   }
   private updateHeld(g: Readonly<Gesture>): void {
     if (!g.piece) return;
-    const offset=heldOffset(g.piece,g.rotation,this.cell);
-    g.offset.x=offset.x; g.offset.y=offset.y;
-    this.position(this.pieces.get(g.piece.id)!,g.current.x,g.current.y-Math.max(1.2*this.cell,120));
-    const placement=this.drag.placement(g,this.board,this.cell)!;
-    const key=`${placement.x},${placement.y},${placement.rotation}`;
-    if (key === this.previewKey) return;
-    this.previewKey=key; this.preview.clear(); this.previewPlacement=undefined;
+    const box=dimensions(g.piece,g.rotation);
+    const lift=Math.max(1.2*this.cell,120);
+    g.offset.x=box.w*this.cell/2; g.offset.y=box.h*this.cell/2+lift;
+    this.position(this.pieces.get(g.piece.id)!,g.current.x,g.current.y-lift);
+    const x=Math.round((g.current.x-g.offset.x-this.board.x)/this.cell);
+    const y=Math.round((g.current.y-g.offset.y-this.board.y)/this.cell);
+    if (x === this.previewX && y === this.previewY && g.rotation === this.previewRotation) return;
+    this.previewX=x; this.previewY=y; this.previewRotation=g.rotation;
+    this.preview.clear(); this.previewPlacement=undefined;
+    const placement=this.candidate;
+    placement.x=x; placement.y=y; placement.rotation=g.rotation; placement.pieceId=g.piece.id;
     if (!previewVisible(g.piece,placement,this.level.width,this.level.height)) return;
     this.previewPlacement=placement;
     const color=this.session.canDrop(placement) ? green : invalid;
-    for (const [x,y] of rotate(SHAPES[g.piece.shape],g.rotation)) {
-      this.rect(this.preview,{x:this.board.x+(placement.x+x)*this.cell,y:this.board.y+(placement.y+y)*this.cell,w:this.cell,h:this.cell},color);
+    const cells=pieceCells(g.piece,g.rotation);
+    for (let i=0;i<cells.length;i++) {
+      fill(this.preview,color,this.board.x+(x+cells[i][0])*this.cell-375,
+        this.height/2-this.board.y-(y+cells[i][1]+1)*this.cell,this.cell,this.cell,6);
     }
   }
-  private clearPreview(): void { this.preview.clear(); this.previewKey=''; this.previewPlacement=undefined; }
+  private clearPreview(): void { this.preview.clear(); this.previewX=NaN; this.previewPlacement=undefined; }
+
   private rotateSelected(): void {
     if (!this.selected || this.session.expired || this.cleared) return;
     const piece=this.selected, v=this.pieces.get(piece.id)!;
     if (this.drag.rotateHeld()) {
       Tween.stopAllByTarget(v.node); v.node.angle=0;
       this.drawPiece(piece,this.drag.active!.rotation,this.cell,true);
-      this.previewKey=''; this.updateHeld(this.drag.active!);
+      this.previewX=NaN; this.updateHeld(this.drag.active!);
       tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
     } else if (this.session.rotatePiece(piece.id)) {
       this.renderPiece(piece); tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
@@ -303,7 +320,9 @@ export class StagePage {
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();
     if (!accepted) {
-      v.node.setPosition(from); v.node.setScale(1.05,1.05,1);
+      v.node.setPosition(from);
+      const returnScale=this.cell/v.size*1.05;
+      v.node.setScale(returnScale,returnScale,1);
       tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
     this.clearPreview(); this.updateControls();

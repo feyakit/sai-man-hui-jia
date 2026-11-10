@@ -1,20 +1,33 @@
 import { rotate, SHAPES } from '../core/shapes';
 import type { Point } from '../core/input';
-import type { PieceDef, Placement, Rotation } from '../core/types';
+import type { Cell, PieceDef, Placement, Rotation, ShapeId } from '../core/types';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export const inRect = (p: Point, r: Rect): boolean => p.x >= r.x && p.y >= r.y && p.x < r.x+r.w && p.y < r.y+r.h;
-export function dimensions(piece: PieceDef, rotation: Rotation): {w: number; h: number} {
-  const cells = rotate(SHAPES[piece.shape],rotation);
-  return {w:Math.max(...cells.map(([x]) => x))+1,h:Math.max(...cells.map(([,y]) => y))+1};
+// Precompute once; touch-move must not allocate shape arrays or bounding boxes.
+const geometry = {} as Record<ShapeId,{cells: readonly Cell[]; w: number; h: number}[]>;
+for (const shape of Object.keys(SHAPES) as ShapeId[]) {
+  geometry[shape] = ([0,1,2,3] as Rotation[]).map(rotation => {
+    const cells=rotate(SHAPES[shape],rotation);
+    return {cells,w:Math.max(...cells.map(([x]) => x))+1,h:Math.max(...cells.map(([,y]) => y))+1};
+  });
 }
+export function dimensions(piece: PieceDef, rotation: Rotation): {w: number; h: number} {
+  return geometry[piece.shape][rotation];
+}
+export function pieceCells(piece: PieceDef, rotation: Rotation): readonly Cell[] { return geometry[piece.shape][rotation].cells; }
 export function heldOffset(piece: PieceDef, rotation: Rotation, cell: number): Point {
   const box = dimensions(piece,rotation);
   return {x:box.w*cell/2,y:box.h*cell/2+Math.max(1.2*cell,120)};
 }
 export function previewVisible(piece: PieceDef, p: Placement, width: number, height: number): boolean {
-  const cells = rotate(SHAPES[piece.shape],p.rotation);
-  return cells.filter(([x,y]) => x+p.x >= 0 && y+p.y >= 0 && x+p.x < width && y+p.y < height).length*2 >= cells.length;
+  const cells = pieceCells(piece,p.rotation);
+  let inside=0;
+  for (let i=0;i<cells.length;i++) {
+    const x=cells[i][0]+p.x,y=cells[i][1]+p.y;
+    if (x >= 0 && y >= 0 && x < width && y < height) inside++;
+  }
+  return inside*2 >= cells.length;
 }
 
 // Reserve every piece's largest orientation so drops/rotations never move another slot.
