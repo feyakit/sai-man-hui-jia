@@ -16,7 +16,9 @@
     "levels:upload": "node --import tsx tools/upload-levels.ts",
     "levels:copy-dev": "node --import tsx tools/copy-dev-levels.ts",
     "art:templates": "node --import tsx tools/art-templates.ts",
-    "levels:v1": "node --import tsx tools/generate-v1-levels.ts"
+    "levels:v1": "node --import tsx tools/generate-v1-levels.ts",
+    "art:placeholders": "node --import tsx tools/art-placeholders.ts",
+    "art:check": "node --import tsx tools/art-check.ts"
   },
   "devDependencies": {
     "@cocos/creator-types": "^3.8.8",
@@ -24,6 +26,7 @@
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "4.1.4",
     "playwright": "1.65.0",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "4.1.4"

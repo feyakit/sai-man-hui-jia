@@ -1,11 +1,11 @@
 import { SHAPES } from '../client/assets/scripts/core/shapes';
+import { CELL_PX, shapeSize } from './art-manifest';
 import { run, writeAtomic } from './level-data';
 
 run(async () => {
-  const size = 128;
+  const size = CELL_PX;
   for (const [shape,cells] of Object.entries(SHAPES)) {
-    const width = (Math.max(...cells.map(([x]) => x))+1)*size;
-    const height = (Math.max(...cells.map(([,y]) => y))+1)*size;
+    const {width,height} = shapeSize(cells);
     const parts = cells.map(([x,y]) =>
       `  <rect x="${x*size}" y="${y*size}" width="${size}" height="${size}" />`);
     const svg = [
