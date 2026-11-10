@@ -142,3 +142,11 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 构建目录检查：`client`、`/workspace/ci-good`、`/workspace/ci-bad`、`/workspace/deploy-b9f21a7` 没有可用 Web Mobile index.html/构建包；**smoke 未执行，待 Windows 打包后补证据**。不得用任务 1 旧截图替代本轮证据。
 - Actions 免费额度已用尽，job 无法启动；本轮没有 watch/等待 Actions，没有宣称 CI 全绿。本地未运行 Cocos 编辑器，不声称本地构建通过。
 - 待人工/后续证据：Windows 3.8.8 打包后执行 `node --import tsx tools/cocos/smoke-web-mobile.mjs <build-dir> <evidence-dir>`；检查新增 `*-interaction.png`、`*-12-interaction.png`、`*-12-piece-tray.png` 和三关通关截图/录屏（此处“三关”指原两关加 V1 stage2，并非妈妈模式）。iPhone Safari/Android Chrome 真机检查：手指不遮挡、无误触旋转、第二指仅旋转按钮有效、快速拖放/回弹、托盘不滑动、刘海与底部手势条、横屏/切后台取消拖动、流畅度。
+
+## 2026-11-10 · 任务 3：占位图与资源校验
+
+- 从含任务 2 合并提交 `664e997` 的 `origin/work/m1-core` 创建 `codex/v1-3-art`。
+- 第 1、2 项：共用 shapes/items 的尺寸和占格定义，生成 19 行李、3 车图、6 UI、4 彩纸，共 32 张透明底 sRGB PNG；占用格内缩 6px，中文物品名限于首个占用格。生成中文需系统安装 Noto Sans CJK SC；生成会覆盖同名正式图，请仅在需要重置占位时运行。
+- `art:check` 校验存在性、PNG 解码/格式、精确尺寸、行李非占用格每像素 alpha=0、彩纸数量 3–6；不检查音频缺失。CI 配置加入检查，直接验证提交图片而非先生成覆盖。
+- 本机 `npm run art:placeholders`、`npm run art:check` 通过；`npm test` 50 通过，1 个既有性能测试按默认配置跳过，类型检查通过。失败用例覆盖缺失、损坏、伪 PNG、尺寸错误、非占用格 alpha=255/1。
+- 未等待 Actions，额度阻塞不计为 CI 通过。运行时图片和音频接入在后续提交。
