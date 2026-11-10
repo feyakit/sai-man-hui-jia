@@ -142,3 +142,27 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 构建目录检查：`client`、`/workspace/ci-good`、`/workspace/ci-bad`、`/workspace/deploy-b9f21a7` 没有可用 Web Mobile index.html/构建包；**smoke 未执行，待 Windows 打包后补证据**。不得用任务 1 旧截图替代本轮证据。
 - Actions 免费额度已用尽，job 无法启动；本轮没有 watch/等待 Actions，没有宣称 CI 全绿。本地未运行 Cocos 编辑器，不声称本地构建通过。
 - 待人工/后续证据：Windows 3.8.8 打包后执行 `node --import tsx tools/cocos/smoke-web-mobile.mjs <build-dir> <evidence-dir>`；检查新增 `*-interaction.png`、`*-12-interaction.png`、`*-12-piece-tray.png` 和三关通关截图/录屏（此处“三关”指原两关加 V1 stage2，并非妈妈模式）。iPhone Safari/Android Chrome 真机检查：手指不遮挡、无误触旋转、第二指仅旋转按钮有效、快速拖放/回弹、托盘不滑动、刘海与底部手势条、横屏/切后台取消拖动、流畅度。
+
+## 2026-11-10 · 任务 3：占位图与资源校验
+
+- 从含任务 2 合并提交 `664e997` 的 `origin/work/m1-core` 创建 `codex/v1-3-art`。
+- 第 1、2 项：共用 shapes/items 的尺寸和占格定义，生成 19 行李、3 车图、6 UI、4 彩纸，共 32 张透明底 sRGB PNG；占用格内缩 6px，中文物品名限于首个占用格。生成中文需系统安装 Noto Sans CJK SC；生成会覆盖同名正式图，请仅在需要重置占位时运行。
+- `art:check` 校验存在性、PNG 解码/格式、精确尺寸、行李非占用格每像素 alpha=0、彩纸数量 3–6；不检查音频缺失。CI 配置加入检查，直接验证提交图片而非先生成覆盖。
+- 本机 `npm run art:placeholders`、`npm run art:check` 通过；`npm test` 50 通过，1 个既有性能测试按默认配置跳过，类型检查通过。失败用例覆盖缺失、损坏、伪 PNG、尺寸错误、非占用格 alpha=255/1。
+- 未等待 Actions，额度阻塞不计为 CI 通过。运行时图片和音频接入在后续提交。
+
+### 任务 3 · 第 3 项：运行时 Sprite
+
+- 每件行李一个 Sprite 子节点；同级 Graphics 子节点仅作原色块兜底及拿起投影，避免在同一节点挂两个 UI 渲染组件。PNG 按 `art/items/<items.ts key>/spriteFrame` 加载、缓存；整图按朝向旋转，尺寸随棋盘/托盘格长缩放，禁用 trim 保留透明包围盒。
+- 加载期间/缺失/失败使用原色块和物品名；缺失先检查 bundle 索引，不发出无效加载。回调检查页面存活，按当前朝向/尺寸/手持状态更新图片，避免重置正在拖动的位置。
+- 沿用任务 2 的手势、布局、旋转、预览、计时与回弹；拖动移动只更新原节点和预览，兜底改用已有缓存占格。
+- 本机 `npm test`：54 通过，1 个既有性能测试默认跳过，typecheck 通过。新增资源路径/缓存/缺失/错误/异常测试，以及模拟 Cocos 组件的 Sprite/兜底/四朝向/销毁回调测试。这些是组件模拟，不代表真机渲染、45/60fps 或 4G 首屏测试。
+
+## 2026-11-11 · 任务 3：第 4 项音频与本机交付
+
+- `resources/audio/README.md` 记录十个固定 MP3 文件名、44.1kHz/≤100KB 交付要求；本任务不生成正式音效或静音文件。`OptionalResources.loadAudio` 按 `audio/<name>` 加载全部十种并缓存，缺失先查询 bundle 索引，加载回调失败与同步异常均返回空。
+- `SoundEffects` 预加载可选音频；未就绪、缺失、销毁后调用、播放抛错均静默，不阻塞输入、不补播旧动作。AudioSource 复用在持久父节点，避免切关立即销毁通关声音。
+- 事件接入 pickup/drop/invalid/rotate/undo/tick/cheer。轻点选中不响 pickup；快速释放也可触发 pickup；tick 只在最后 10 秒按秒变化触发。trunk_slam/horn/mom 有加载与播放接口，留待关盖/发车/妈妈流程使用，本任务不实现这些流程。
+- 本机 `npm test`：**58 通过、1 个既有性能测试默认跳过**；包含 typecheck，核心行覆盖率 98.76%（不是运行时 UI/音频覆盖率）。新增全部音频路径、缺失/解码失败/同步抛错、缓存、未就绪不补播、播放异常和销毁保护测试。
+- `npm run art:placeholders`：32 张 PNG 生成通过；`npm run art:check`：全部通过。第 1/2 项提交 `0d7150a`，第 3 项提交 `927f4f9`，均已推送；第 4 项独立提交推送。
+- PR #6 保持 draft，base `work/m1-core`；不修改 main、不合并、不运行 gh run watch、不宣称 CI 全绿。本轮没有重新打包 Web Mobile；没有真实 MP3 播放、Cocos 浏览器渲染、45/60fps 或 4G 首屏 ≤3 秒实测。车图/UI/彩纸已提供生成与校验，当前页面仍沿用原有静态 Graphics/UI；妈妈/手指/彩纸等后续流程图片未挂接，行李图片替换已接入。

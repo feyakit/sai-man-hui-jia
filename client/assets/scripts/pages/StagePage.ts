@@ -1,12 +1,13 @@
-import { Color, EventTouch, Game, Graphics, Label, Node, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
+import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
-import { rotate, SHAPES } from '../core/shapes';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
 import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
+import { SoundEffects } from '../services/SoundEffects';
+import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
@@ -14,11 +15,12 @@ const gold = new Color(246,195,67), gray = new Color(160,151,136);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const colors = [new Color(174,64,53),new Color(157,99,36),new Color(65,115,97),new Color(95,87,140)];
 const shadow = new Color(40,20,10,70);
-interface PieceView { node: Node; graphics: Graphics; title: Label; rect: Rect; rotation: Rotation; size: number }
+interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 
 export class StagePage {
   readonly node: Node;
   private readonly session: StageSession;
+  private readonly sounds: SoundEffects;
   private readonly background: Graphics;
   private readonly preview: Graphics;
   private readonly controls: Graphics;
@@ -61,6 +63,7 @@ export class StagePage {
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: () => void) {
     this.node = uiNode('StagePage',parent,750,1334);
     this.session = new StageSession(level,now);
+    this.sounds = new SoundEffects(parent);
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.packed = label(this.node,'Packed','',26,0,0);
@@ -70,13 +73,15 @@ export class StagePage {
     this.preview = uiNode('DropPreview',this.node,750,1334).addComponent(Graphics);
     for (const piece of level.pieces) {
       const node = uiNode(`Piece${piece.id}`,this.node,1,1);
-      const graphics = node.addComponent(Graphics);
+      const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
+      const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
+      sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
       const title = label(node,`Item${piece.id}`,ITEMS[piece.shape].name,18,0,0);
-      this.pieces.set(piece.id,{node,graphics,title,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
+      this.pieces.set(piece.id,{node,sprite,graphics,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.rotateTitle = this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
-    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.selected=undefined; this.sync(); });
+    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync(); });
     this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
     this.overlay = uiNode('InteractionOverlay',this.node,750,1334);
     this.overlay.addComponent(Graphics);
@@ -95,6 +100,14 @@ export class StagePage {
       game.off(Game.EVENT_HIDE,this.onHide); this.safeProbe?.remove();
     });
     this.tick();
+    for (const piece of level.pieces) {
+      void loadArt(`items/${ITEMS[piece.shape].key}`).then(frame => {
+        if (!frame || !this.node.isValid) return;
+        const v=this.pieces.get(piece.id)!;
+        v.sprite.spriteFrame=frame;
+        this.drawPiece(piece,v.rotation,v.size,v.held,v.failed);
+      });
+    }
   }
 
   tick(): void {
@@ -123,6 +136,7 @@ export class StagePage {
     }
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
+      if (this.displayedSeconds >= 0 && seconds > 0 && seconds <= 10) this.sounds.play('tick');
       this.displayedSeconds = seconds;
       this.clock.string = Number.isFinite(seconds) ? `距出发 ${seconds} 秒` : '慢慢装，不限时';
       this.clock.color = seconds <= 10 ? red : ink;
@@ -224,11 +238,21 @@ export class StagePage {
   private position(view: PieceView,x: number,y: number): void { view.node.setPosition(x-375,this.height/2-y); }
   private drawPiece(piece: PieceDef,rotation: Rotation,size: number,held: boolean,failed = false): void {
     const view = this.pieces.get(piece.id)!;
+    view.rotation=rotation; view.size=size; view.held=held; view.failed=failed;
     const g=view.graphics; g.clear();
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
-    for (const [x,y] of rotate(SHAPES[piece.shape],rotation)) {
+    const hasImage=!!view.sprite.spriteFrame;
+    view.sprite.enabled=hasImage; view.title.node.active=!hasImage;
+    if (hasImage) {
+      const base=dimensions(piece,0);
+      view.sprite.node.getComponent(UITransform)!.setContentSize(base.w*size,base.h*size);
+      view.sprite.node.angle=rotation*90;
+      view.sprite.color=failed ? red : this.selected?.id === piece.id ? gold : Color.WHITE;
+    }
+    for (const [x,y] of pieceCells(piece,rotation)) {
       if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
+      if (hasImage) continue;
       fill(g,failed ? red : this.selected?.id === piece.id ? gold : ink,x*size-w/2+1,h/2-(y+1)*size+1,size-2,size-2,5);
       fill(g,colors[piece.id%colors.length],x*size-w/2+4,h/2-(y+1)*size+4,size-8,size-8,4);
     }
@@ -269,6 +293,7 @@ export class StagePage {
     const gesture=this.drag.move(event.getID() ?? 0,this.point(event));
     if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
     if (previous !== 'drag') {
+      this.sounds.play('pickup');
       this.selected=gesture.piece;
       const v=this.pieces.get(gesture.piece.id)!; Tween.stopAllByTarget(v.node);
       v.node.angle=0; v.node.setSiblingIndex(this.controls.node.getSiblingIndex()-1);
@@ -305,13 +330,16 @@ export class StagePage {
     if (!this.selected || this.session.expired || this.cleared) return;
     const piece=this.selected, v=this.pieces.get(piece.id)!;
     if (this.drag.rotateHeld()) {
+      this.sounds.play('rotate');
       Tween.stopAllByTarget(v.node); v.node.angle=0;
       this.drawPiece(piece,this.drag.active!.rotation,this.cell,true);
       this.previewX=NaN; this.updateHeld(this.drag.active!);
       tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
     } else if (this.session.rotatePiece(piece.id)) {
+      this.sounds.play('rotate');
       this.renderPiece(piece); tween(v.node).set({angle:90}).to(.12,{angle:0}).start();
     } else {
+      this.sounds.play('invalid');
       this.drawPiece(piece,v.rotation,v.size,false,true);
       tween(v.node).by(.05,{position:new Vec3(-8,0,0)}).by(.05,{position:new Vec3(16,0,0)})
         .by(.05,{position:new Vec3(-16,0,0)}).by(.05,{position:new Vec3(8,0,0)}).call(() => this.renderPiece(piece)).start();
@@ -329,12 +357,14 @@ export class StagePage {
     if (g.mode !== 'drag' || !g.piece) return;
     // release() also handles quick gestures without an intermediate move event.
     const v=this.pieces.get(g.piece.id)!;
+    if (!v.held) this.sounds.play('pickup');
     this.selected=g.piece; this.drawPiece(g.piece,g.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
     this.updateHeld(g);
     let accepted=false;
     if (inRect(g.current,this.tray)) {
       if (!g.fromTray) { this.session.returnToTray(g.piece.id,g.rotation); accepted=true; }
     } else if (this.previewPlacement) accepted=this.session.drop(this.previewPlacement);
+    this.sounds.play(accepted ? 'drop' : 'invalid');
     const from=v.node.position.clone();
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();
@@ -345,7 +375,7 @@ export class StagePage {
       tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
     this.clearPreview(); this.updateControls();
-    if (this.session.solved && !this.cleared) { this.cleared=true; this.onClear(); }
+    if (this.session.solved && !this.cleared) { this.cleared=true; this.sounds.play('cheer'); this.onClear(); }
   }
   private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
