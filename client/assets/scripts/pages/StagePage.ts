@@ -1,12 +1,12 @@
-import { Color, EventTouch, Game, Graphics, Label, Node, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
+import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
-import { rotate, SHAPES } from '../core/shapes';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
 import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect } from '../game/InteractionGeometry';
+import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
@@ -14,7 +14,7 @@ const gold = new Color(246,195,67), gray = new Color(160,151,136);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const colors = [new Color(174,64,53),new Color(157,99,36),new Color(65,115,97),new Color(95,87,140)];
 const shadow = new Color(40,20,10,70);
-interface PieceView { node: Node; graphics: Graphics; title: Label; rect: Rect; rotation: Rotation; size: number }
+interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 
 export class StagePage {
   readonly node: Node;
@@ -70,9 +70,11 @@ export class StagePage {
     this.preview = uiNode('DropPreview',this.node,750,1334).addComponent(Graphics);
     for (const piece of level.pieces) {
       const node = uiNode(`Piece${piece.id}`,this.node,1,1);
-      const graphics = node.addComponent(Graphics);
+      const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
+      const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
+      sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
       const title = label(node,`Item${piece.id}`,ITEMS[piece.shape].name,18,0,0);
-      this.pieces.set(piece.id,{node,graphics,title,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
+      this.pieces.set(piece.id,{node,sprite,graphics,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.rotateTitle = this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
@@ -95,6 +97,14 @@ export class StagePage {
       game.off(Game.EVENT_HIDE,this.onHide); this.safeProbe?.remove();
     });
     this.tick();
+    for (const piece of level.pieces) {
+      void loadArt(`items/${ITEMS[piece.shape].key}`).then(frame => {
+        if (!frame || !this.node.isValid) return;
+        const v=this.pieces.get(piece.id)!;
+        v.sprite.spriteFrame=frame;
+        this.drawPiece(piece,v.rotation,v.size,v.held,v.failed);
+      });
+    }
   }
 
   tick(): void {
@@ -224,11 +234,21 @@ export class StagePage {
   private position(view: PieceView,x: number,y: number): void { view.node.setPosition(x-375,this.height/2-y); }
   private drawPiece(piece: PieceDef,rotation: Rotation,size: number,held: boolean,failed = false): void {
     const view = this.pieces.get(piece.id)!;
+    view.rotation=rotation; view.size=size; view.held=held; view.failed=failed;
     const g=view.graphics; g.clear();
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
-    for (const [x,y] of rotate(SHAPES[piece.shape],rotation)) {
+    const hasImage=!!view.sprite.spriteFrame;
+    view.sprite.enabled=hasImage; view.title.node.active=!hasImage;
+    if (hasImage) {
+      const base=dimensions(piece,0);
+      view.sprite.node.getComponent(UITransform)!.setContentSize(base.w*size,base.h*size);
+      view.sprite.node.angle=rotation*90;
+      view.sprite.color=failed ? red : this.selected?.id === piece.id ? gold : Color.WHITE;
+    }
+    for (const [x,y] of pieceCells(piece,rotation)) {
       if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
+      if (hasImage) continue;
       fill(g,failed ? red : this.selected?.id === piece.id ? gold : ink,x*size-w/2+1,h/2-(y+1)*size+1,size-2,size-2,5);
       fill(g,colors[piece.id%colors.length],x*size-w/2+4,h/2-(y+1)*size+4,size-8,size-8,4);
     }
