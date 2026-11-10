@@ -27,10 +27,16 @@ export class Bootstrap extends Component {
 
   private show(level: Level): void {
     this.node.destroyAllChildren();
-    this.stage = new StagePage(this.node,level,() => this.platform.now(),() => {
-      if (level.stage === 1) void this.challenge();
-      else this.message('行李塞满了，回家！',() => this.show(stage1(shanghaiDate())));
+    this.stage = new StagePage(this.node,level,() => this.platform.now(),action => {
+      if (action === 'next') void this.challenge();
+      else if (action === 'mom') this.startMomMode(level);
+      else this.show(level);
     });
+  }
+
+  /** Task 4 placeholder: replace this entry point when mom mode is implemented. */
+  private startMomMode(level: Level): void {
+    this.message('妈妈模式筹备中 · 轻点再装一次第 2 关',() => this.show(level));
   }
 
   private async challenge(): Promise<void> {
