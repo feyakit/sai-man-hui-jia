@@ -9,6 +9,8 @@ import { dimensions, inRect, pieceCells, previewVisible, trayLayout, type Rect }
 import { SoundEffects } from '../services/SoundEffects';
 import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
+import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
+import { FinishView } from '../ui/FinishView';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67), gray = new Color(160,151,136);
@@ -41,6 +43,9 @@ export class StagePage {
   private height = 1334;
   private selected?: PieceDef;
   private cleared = false;
+  private finish?: FinishPlayback;
+  private finishView?: FinishView;
+  private finishStarted=0;
   private displayedSeconds = -1;
   private layoutWidth = -1;
   private layoutHeight = -1;
@@ -60,7 +65,7 @@ export class StagePage {
   private rotateTitle: Label;
   private readonly onHide = () => this.cancelDrag();
 
-  constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: () => void) {
+  constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: (action: FinishAction) => void) {
     this.node = uiNode('StagePage',parent,750,1334);
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
@@ -134,6 +139,10 @@ export class StagePage {
       }
       this.layout(top,bottom);
     }
+    if (this.finish) {
+      this.finishView!.render(this.finish.advance(this.now()-this.finishStarted));
+      return;
+    }
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
       if (this.displayedSeconds >= 0 && seconds > 0 && seconds <= 10) this.sounds.play('tick');
@@ -164,6 +173,7 @@ export class StagePage {
       this.placeLabel(`Button${i}`,button.rect.y+60,button.rect.x+button.rect.w/2-375);
     }
     this.drawBackground(); this.sync(); this.updateOverlay();
+    this.finishView?.layout(this.height,this.board);
   }
 
   private placeLabel(name: string, y: number, x = 0): void { this.node.getChildByName(name)!.setPosition(x,this.height/2-y); }
@@ -269,6 +279,11 @@ export class StagePage {
   }
   private start(event: EventTouch): void {
     const p=this.point(event);
+    if (this.finish) {
+      if (!this.finish.state.buttons) this.finishView!.render(this.finish.skip());
+      else if (!this.landscape) this.finishView!.press(p.x,p.y);
+      return;
+    }
     if (this.landscape) return;
     if (this.modal) {
       if (inRect(p,this.confirmRect())) {
@@ -368,14 +383,29 @@ export class StagePage {
     const from=v.node.position.clone();
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();
-    if (!accepted) {
+    if (accepted) {
+      tween(v.node).to(.08,{scale:new Vec3(1.04,1.04,1)}).to(.16,{scale:new Vec3(1,1,1)}).start();
+    } else {
       v.node.setPosition(from);
       const returnScale=this.cell/v.size*1.05;
       v.node.setScale(returnScale,returnScale,1);
       tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
     this.clearPreview(); this.updateControls();
-    if (this.session.solved && !this.cleared) { this.cleared=true; this.sounds.play('cheer'); this.onClear(); }
+    if (this.session.solved && !this.cleared) this.beginFinish();
+  }
+  private beginFinish(): void {
+    this.cleared=true; this.selected=undefined;
+    this.finishStarted=this.now();
+    this.finish=new FinishPlayback(cue => {
+      this.sounds.play(cue.sound);
+      if (cue.vibration && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try { navigator.vibrate(cue.vibration); } catch { /* Unsupported device: silent. */ }
+      }
+    });
+    this.finishView=new FinishView(this.node,this.level.stage,this.onClear);
+    this.finishView.layout(this.height,this.board);
+    this.finishView.render(this.finish.state);
   }
   private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
