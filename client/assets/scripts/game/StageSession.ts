@@ -1,6 +1,8 @@
-import { clockwiseRotation, rotate, SHAPES } from '../core/shapes';
+import { clockwiseRotation } from '../core/shapes';
 import type { Level, Placement, Rotation } from '../core/types';
-import { canPlace, validateSolution } from '../core/validate';
+import { validateSolution } from '../core/validate';
+
+import { pieceCells } from './InteractionGeometry';
 
 interface Snapshot { rotations: Map<number, Rotation>; placements: Map<number, Placement> }
 
@@ -22,7 +24,10 @@ export class StageSession {
     this.deadline = this.now() + this.level.timeLimitSec*1000;
   }
 
+  get expired(): boolean { return this.level.timeLimitSec > 0 && this.remainingSeconds === 0; }
+
   get remainingSeconds(): number {
+    if (!this.level.timeLimitSec) return Infinity;
     return Math.max(0,Math.ceil((this.deadline-this.now())/1000));
   }
 
@@ -36,19 +41,31 @@ export class StageSession {
   rotationFor(id: number): Rotation { return this.state.rotations.get(id) ?? 0; }
 
   canDrop(placement: Placement): boolean {
-    const occupied = new Set<string>();
-    for (const other of this.state.placements.values()) {
-      if (other.pieceId === placement.pieceId) continue;
-      const piece = this.level.pieces.find(item => item.id === other.pieceId)!;
-      for (const [x,y] of rotate(SHAPES[piece.shape],other.rotation)) {
-        occupied.add(`${x+other.x},${y+other.y}`);
+    if (!Number.isInteger(placement.rotation) || placement.rotation < 0 || placement.rotation > 3 ||
+        !Number.isInteger(placement.x) || !Number.isInteger(placement.y)) return false;
+    let piece;
+    for (const definition of this.level.pieces) if (definition.id === placement.pieceId) { piece=definition; break; }
+    if (!piece) return false;
+    const cells=pieceCells(piece,placement.rotation);
+    for (let i=0;i<cells.length;i++) {
+      const x=cells[i][0]+placement.x,y=cells[i][1]+placement.y;
+      if (x < 0 || y < 0 || x >= this.level.width || y >= this.level.height) return false;
+      for (const blocked of this.level.blocked) if (blocked[0] === x && blocked[1] === y) return false;
+      for (const other of this.state.placements.values()) {
+        if (other.pieceId === piece.id) continue;
+        for (const definition of this.level.pieces) {
+          if (definition.id !== other.pieceId) continue;
+          const occupied=pieceCells(definition,other.rotation);
+          for (let j=0;j<occupied.length;j++) if (occupied[j][0]+other.x === x && occupied[j][1]+other.y === y) return false;
+          break;
+        }
       }
     }
-    return canPlace(this.level,occupied,placement);
+    return true;
   }
 
   drop(placement: Placement): boolean {
-    if (!this.remainingSeconds || !this.canDrop(placement)) return false;
+    if (this.expired || !this.canDrop(placement)) return false;
     this.remember();
     this.state.placements.set(placement.pieceId,{...placement});
     this.state.rotations.set(placement.pieceId,placement.rotation);
@@ -56,26 +73,26 @@ export class StageSession {
   }
 
   returnToTray(id: number, rotation: Rotation = this.rotationFor(id)): void {
-    if (!this.remainingSeconds || !this.state.rotations.has(id)) return;
+    if (this.expired || !this.state.rotations.has(id)) return;
     this.remember();
     this.state.placements.delete(id);
     this.state.rotations.set(id,rotation);
   }
 
-  rotatePiece(id: number): void {
-    if (!this.remainingSeconds || !this.state.rotations.has(id)) return;
-    this.remember();
+  rotatePiece(id: number): boolean {
+    if (this.expired || !this.state.rotations.has(id)) return false;
     const rotation = clockwiseRotation(this.rotationFor(id));
-    this.state.rotations.set(id,rotation);
     const original = this.state.placements.get(id);
-    if (!original) return;
-    const rotated = {...original,rotation};
-    if (this.canDrop(rotated)) this.state.placements.set(id,rotated);
-    else this.state.placements.delete(id);
+    const rotated = original ? {...original,rotation} : undefined;
+    if (rotated && !this.canDrop(rotated)) return false;
+    this.remember();
+    this.state.rotations.set(id,rotation);
+    if (rotated) this.state.placements.set(id,rotated);
+    return true;
   }
 
   undo(): void {
-    if (!this.remainingSeconds) return;
+    if (this.expired) return;
     const previous = this.history.pop();
     if (previous) this.state = previous;
   }

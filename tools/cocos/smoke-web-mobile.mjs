@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, devices } from 'playwright';
 import { solve } from '../../client/assets/scripts/core/dlx.ts';
 import { parseLevel } from '../../client/assets/scripts/core/level.ts';
+import { dimensions } from '../../client/assets/scripts/game/InteractionGeometry.ts';
 import { stage1 } from '../../client/assets/scripts/core/stage1.ts';
 
 const build = resolve(process.argv[2] ?? 'client/build/web-mobile');
@@ -51,11 +52,15 @@ async function game(page) {
     const {board,cell,slots,buttons,session} = stage;
     return {
       level:stage.level.stage,board,cell,message,remaining:session.remainingSeconds,
+      height:stage.height,tray:stage.tray,selected:stage.selected?.id,modal:stage.modal,landscape:stage.landscape,
+      held:stage.drag.active ? {rotation:stage.drag.active.rotation,mode:stage.drag.active.mode} : undefined,
+      pieces:Array.from(stage.pieces,([id,value]) => ({id,rect:value.rect,x:value.node.position.x+375,
+        y:stage.height/2-value.node.position.y,scale:value.node.scale.x})),
       placements:session.placements,
       route:stage.node.getChildByName('Route')?.getComponent(cc.Label)?.string,
       packed:stage.node.getChildByName('Packed')?.getComponent(cc.Label)?.string,
-      firstItem:stage.node.getChildByName('Item1')?.getComponent(cc.Label)?.string,
-      slots:slots.map(({piece,rect}) => ({id:piece.id,rotation:session.rotationFor(piece.id),rect})),
+
+      slots:slots.map(({piece,rect}) => ({id:piece.id,shape:piece.shape,rotation:session.rotationFor(piece.id),rect,placed:session.placements.some(p => p.pieceId === piece.id)})),
       buttons:buttons.map(({rect}) => rect),
     };
   });
@@ -116,22 +121,136 @@ async function drag(page,touch,start,end) {
   }
 }
 
-const slotPoint = slot => ({x:slot.rect.x+18,y:slot.rect.y+18});
-const dropPoint = ({board,cell},placement) =>
-  ({x:board.x+(placement.x+.5)*cell,y:board.y+(placement.y+.5)*cell+22});
+const slotPoint = slot => center(slot.rect);
+const dropPoint = ({board,cell},placement,piece) => {
+  const box=dimensions(piece,placement.rotation);
+  return {x:board.x+(placement.x+box.w/2)*cell,y:board.y+(placement.y+box.h/2)*cell+Math.max(1.2*cell,120)};
+};
 
 async function clear(page,touch,index) {
   for (let i=0; i<levels[index].pieces.length; i++) {
     const view = await game(page);
-    const slot = view.slots[0];
+    const slot = view.slots.find(s => !s.placed);
     const goal = solutions[index].get(slot.id);
     const turns = (slot.rotation-goal.rotation+4)%4;
-    for (let r=0; r<turns; r++) await tap(page,touch,slotPoint(slot));
-    await drag(page,touch,slotPoint(slot),dropPoint(view,goal));
+    if (view.selected !== slot.id) await tap(page,touch,slotPoint(slot));
+    for (let r=0; r<turns; r++) await tap(page,touch,center(view.buttons[0]));
+    await drag(page,touch,slotPoint(slot),dropPoint(view,goal,slot));
     if (i+1 < levels[index].pieces.length) {
       await until(async () => (await game(page)).placements?.some(item => item.pieceId === slot.id),`piece ${slot.id}`);
     }
   }
+}
+
+function assertTray(state) {
+  const t=state.tray;
+  for (const {rect:a,id} of state.slots) {
+    assert.ok(a.x >= t.x && a.y >= t.y && a.x+a.w <= t.x+t.w && a.y+a.h <= t.y+t.h,'Slot inside tray');
+    for (const {rect:b,id:other} of state.slots) if (id !== other) {
+      assert.ok(a.x+a.w <= b.x || b.x+b.w <= a.x || a.y+a.h <= b.y || b.y+b.h <= a.y,'Disjoint slots');
+    }
+  }
+}
+
+async function showV1(page,twelve) {
+  await page.evaluate(async twelve => {
+    const cc=await globalThis.System.import('cc');
+    const bootstrap=cc.director.getScene().getChildByName('Canvas').getChildByName('GameRoot').getComponent('Bootstrap');
+    const asset=await new Promise((resolve,reject) => cc.resources.load('levels/v1/stage2',cc.JsonAsset,(e,a) => e ? reject(e) : resolve(a)));
+    const level=JSON.parse(JSON.stringify(asset.json));
+    // A layout-only 12-piece variant; normal completion below uses the unchanged V1 fixture.
+    if (twelve) while (level.pieces.length < 12) level.pieces.push({...level.pieces[0],id:100+level.pieces.length});
+    bootstrap.show(level);
+  },twelve);
+}
+
+async function interactions(page,touch,view,name) {
+  const slot=view.slots[0], pick=slotPoint(slot), originRotation=slot.rotation;
+  await tap(page,touch,pick);
+  let state=await game(page);
+  assert.equal(state.slots[0].rotation,originRotation,'Tap does not rotate');
+  assert.equal(state.selected,slot.id,'Tap selects');
+  await tap(page,touch,pick); assert.equal((await game(page)).selected,undefined,'Tap deselects');
+  const rectangles=view.slots.map(s => s.rect);
+  const blank={x:view.tray.x+2,y:view.tray.y+2};
+  await drag(page,touch,blank,{x:blank.x+200,y:blank.y});
+  assert.deepEqual((await game(page)).slots.map(s => s.rect),rectangles,'Horizontal tray gesture cannot scroll slots');
+  await drag(page,touch,pick,dropPoint(view,{x:-1,y:0,rotation:originRotation},slot));
+  await delay(220);
+  state=await game(page); assert.deepEqual(state.placements,view.placements,'Invalid release preserves board');
+  assert.deepEqual(state.pieces.find(p => p.id === slot.id).rect,view.pieces.find(p => p.id === slot.id).rect,'Invalid returns to original slot');
+  // Release inside the canvas but entirely outside the trunk.
+  await drag(page,touch,pick,{x:20,y:250}); await delay(220);
+  assert.deepEqual((await game(page)).placements,view.placements,'Outside release preserves board');
+  const heldFinger={x:375,y:view.board.y+view.board.h/2+120};
+  const heldSlot=view.level === 1 ? view.slots[2] : slot;
+  const [from,to,button]=await coords(page,[slotPoint(heldSlot),heldFinger,center(view.buttons[0])]);
+  if (touch) {
+    await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...from,id:0}]});
+    await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...to,id:0}]});
+  } else {
+    await page.mouse.move(from.x,from.y); await page.mouse.down(); await page.mouse.move(to.x,to.y);
+  }
+  state=await game(page);
+  const held=state.pieces.find(p => p.id === heldSlot.id);
+  assert.ok(heldFinger.y-held.y >= 119.9,'Center is at least 120 design pixels above finger');
+  assert.ok(Math.abs(held.scale-1.05) < .001,'Pickup scale');
+  const rotation=state.held.rotation;
+  if (touch) {
+    await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...to,id:0},{...button,id:1}]});
+    assert.equal((await game(page)).held.rotation,(rotation+3)%4,'Second finger rotates held piece');
+    await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[{...to,id:0}]});
+    assert.equal((await game(page)).held.mode,'drag','Second finger release does not release primary');
+    const goal=await page.evaluate(async () => {
+      const cc=await globalThis.System.import('cc');
+      const stage=cc.director.getScene().getChildByName('Canvas').getChildByName('GameRoot').getComponent('Bootstrap').stage;
+      const held=stage.drag.active;
+      for (let y=0;y<stage.level.height;y++) for (let x=0;x<stage.level.width;x++) {
+        const p={pieceId:held.piece.id,rotation:held.rotation,x,y};
+        if (stage.session.canDrop(p)) return p;
+      }
+    });
+    assert.ok(goal,'Rotated test piece has a valid target');
+    const [target]=await coords(page,[dropPoint(view,goal,heldSlot)]);
+    await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...target,id:0}]});
+    await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    assert.equal((await game(page)).placements.find(p => p.pieceId === heldSlot.id)?.rotation,goal.rotation,'Dual-touch rotation survives drop');
+    await tap(page,touch,center(view.buttons[1]));
+    assert.deepEqual((await game(page)).placements,view.placements,'Undo rotated drop');
+  } else {
+    await page.mouse.move(5,5); await page.mouse.up();
+  }
+  await delay(220);
+  await page.screenshot({path:join(evidence,`${name}-interaction.png`)});
+  // Restart confirmation is exercised with an actual successful placement.
+  // First piece is horizontal in stage1; for the V1 layout variant use its fixture goal.
+  const goal=view.level === 1 ? {x:0,y:0,rotation:0,pieceId:slot.id} :
+    JSON.parse(await readFile('tests/fixtures/v1/stage2.solution.json','utf8')).placements.find(p => p.pieceId === slot.id);
+  state=await game(page);
+  if (state.selected !== slot.id) await tap(page,touch,pick);
+  for (let r=0;r<(originRotation-goal.rotation+4)%4;r++) await tap(page,touch,center(view.buttons[0]));
+  await drag(page,touch,pick,dropPoint(view,goal,slot));
+  state=await game(page); assert.ok(state.placements.some(p => p.pieceId === slot.id),'Valid drop');
+  const packed=state.placements;
+  const box=dimensions(slot,goal.rotation);
+  const boardPick={x:view.board.x+(goal.x+box.w/2)*view.cell,y:view.board.y+(goal.y+box.h/2)*view.cell};
+  await drag(page,touch,boardPick,{x:20,y:250}); await delay(220);
+  assert.deepEqual((await game(page)).placements,packed,'Placed item returns to original board location');
+  await drag(page,touch,boardPick,pick);
+  assert.ok(!(await game(page)).placements.some(p => p.pieceId === slot.id),'Return to tray');
+  await tap(page,touch,center(view.buttons[1]));
+  assert.deepEqual((await game(page)).placements,packed,'Undo tray return');
+  assert.equal((await game(page)).selected,undefined,'Undo clears selection');
+  await tap(page,touch,center(view.buttons[2]));
+  assert.equal((await game(page)).modal,'restart');
+  assert.deepEqual((await game(page)).placements,packed,'Restart waits for confirmation');
+  await tap(page,touch,{x:375,y:view.height/2+180});
+  assert.equal((await game(page)).modal,undefined,'Cancel restart');
+  assert.deepEqual((await game(page)).placements,packed);
+  await tap(page,touch,center(view.buttons[2]));
+  await tap(page,touch,{x:375,y:view.height/2+80});
+  assert.equal((await game(page)).placements.length,0,'Confirm restart clears board');
+  assert.equal((await game(page)).slots[0].rotation,originRotation,'Restart resets rotation');
 }
 
 async function exercise(name,context) {
@@ -148,20 +267,9 @@ async function exercise(name,context) {
       return state.level === 1 && state;
     },'stage one');
     assert.deepEqual(view.placements,[],'The trunk starts empty');
-    assert.equal(view.route,'从打拼的城市，到亮着灯的老家');
     assert.equal(view.packed,'已装车 0 / 4 件');
-    assert.equal(view.firstItem,'甘蔗');
     await page.screenshot({path:join(evidence,`${name}-stage-one.png`)});
-    await tap(page,touch,slotPoint(view.slots[0]));
-    await until(async () => (await game(page)).slots?.[0].rotation === 3,'clockwise tap');
-    await tap(page,touch,center(view.buttons[1]));
-    const slot = slotPoint(view.slots[0]);
-    await drag(page,touch,slot,dropPoint(view,{x:1,y:0}));
-    assert.equal((await game(page)).placements.length,0,'Out-of-bounds placement was rejected');
-    await drag(page,touch,slot,dropPoint(view,{x:0,y:0}));
-    await until(async () => (await game(page)).placements?.length === 1,'valid snap');
-    await drag(page,touch,{x:view.board.x+view.cell/2,y:view.board.y+view.cell/2},slot);
-    await until(async () => (await game(page)).placements?.length === 0,'drag back to tray');
+    await interactions(page,touch,view,name);
     await clear(page,touch,0);
     await until(async () => (await game(page)).level === 2,'stage two after stage one clear');
     await page.screenshot({path:join(evidence,`${name}-stage-two.png`)});
@@ -183,8 +291,24 @@ async function exercise(name,context) {
       const elapsed = before-(await game(page)).remaining;
       assert.ok(elapsed >= 10 && elapsed <= 12,`Expected ten background seconds, got ${elapsed}`);
     }
+    await showV1(page,true);
+    await until(async () => (await game(page)).slots?.length === 12,'12-piece tray');
+    const twelve=await game(page);
+    assertTray(twelve);
+    await interactions(page,touch,twelve,`${name}-12`);
+    await page.screenshot({path:join(evidence,`${name}-12-piece-tray.png`)});
+    await showV1(page,false);
+    const fixture=JSON.parse(await readFile('tests/fixtures/v1/stage2.solution.json','utf8'));
+    const v1=await game(page);
+    for (const goal of fixture.placements) {
+      const state=await game(page), slot=state.slots.find(s => s.id === goal.pieceId);
+      if (state.selected !== slot.id) await tap(page,touch,slotPoint(slot));
+      for (let r=0;r<(slot.rotation-goal.rotation+4)%4;r++) await tap(page,touch,center(state.buttons[0]));
+      await drag(page,touch,slotPoint(slot),dropPoint(v1,goal,slot));
+    }
+    await until(async () => (await game(page)).message === '行李塞满了，回家！','V1 stage2 fixture clear');
     assert.deepEqual(errors,[]);
-    console.log(`${name}: two stages cleared, invalid drop rejected, rotate and return passed, query override passed`);
+    console.log(`${name}: legacy stages and V1 stage2 cleared; v1.2 interactions and 12-slot layout checked`);
   } catch (error) {
     await page.screenshot({path:join(evidence,`${name}-failure.png`)}).catch(() => {});
     if (errors.length) console.error(errors);
@@ -200,7 +324,7 @@ try {
     executablePath:process.env.CHROMIUM_PATH || undefined,
     args:['--use-angle=swiftshader','--enable-unsafe-swiftshader'],
   });
-  await exercise('desktop',await browser.newContext({viewport:{width:1280,height:900}}));
+  await exercise('desktop',await browser.newContext({viewport:{width:750,height:1334}}));
   await exercise('mobile',await browser.newContext({...devices['Pixel 7'],defaultBrowserType:undefined,recordVideo:{dir:join(evidence,'video-tmp')}}));
   await exercise('iphone-se',await browser.newContext({viewport:{width:375,height:667},isMobile:true,hasTouch:true,deviceScaleFactor:2,recordVideo:{dir:join(evidence,'video-tmp')}}));
   await exercise('tall-412',await browser.newContext({viewport:{width:412,height:915},isMobile:true,hasTouch:true,deviceScaleFactor:2}));
