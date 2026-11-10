@@ -40,7 +40,11 @@ export class StagePage {
   private selected?: PieceDef;
   private cleared = false;
   private displayedSeconds = -1;
-  private layoutKey = '';
+  private layoutWidth = -1;
+  private layoutHeight = -1;
+  private browserWidth = -1;
+  private browserHeight = -1;
+  private safeProbe?: HTMLDivElement;
   private previewX = NaN;
   private previewY = NaN;
   private previewRotation: Rotation = 0;
@@ -82,24 +86,39 @@ export class StagePage {
     this.node.on(Node.EventType.TOUCH_END,this.end,this);
     this.node.on(Node.EventType.TOUCH_CANCEL,this.cancel,this);
     game.on(Game.EVENT_HIDE,this.onHide);
-    this.node.once(Node.EventType.NODE_DESTROYED,() => game.off(Game.EVENT_HIDE,this.onHide));
+    if (typeof document !== 'undefined') {
+      this.safeProbe=document.createElement('div');
+      this.safeProbe.style.cssText='position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+      document.body.appendChild(this.safeProbe);
+    }
+    this.node.once(Node.EventType.NODE_DESTROYED,() => {
+      game.off(Game.EVENT_HIDE,this.onHide); this.safeProbe?.remove();
+    });
     this.tick();
   }
 
   tick(): void {
     const size = view.getVisibleSize();
-    const safe = sys.getSafeAreaRect();
-
-    const key = `${size.width},${size.height},${safe.x},${safe.y},${safe.width},${safe.height}`;
-    if (key !== this.layoutKey) {
+    const browserWidth = typeof window !== 'undefined' ? window.innerWidth : size.width;
+    const browserHeight = typeof window !== 'undefined' ? window.innerHeight : size.height;
+    if (size.width !== this.layoutWidth || size.height !== this.layoutHeight ||
+        browserWidth !== this.browserWidth || browserHeight !== this.browserHeight) {
       this.cancelDrag();
-      this.layoutKey = key;
-      this.landscape = typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : size.width > size.height;
+      this.layoutWidth=size.width; this.layoutHeight=size.height;
+      this.browserWidth=browserWidth; this.browserHeight=browserHeight;
+      this.landscape=browserWidth > browserHeight;
+      const safe = sys.getSafeAreaRect(false);
       this.height = Math.max(1334,size.height/size.width*750);
       { const k=Math.min(size.width/750,size.height/this.height); this.node.setScale(k,k,1); }
       this.node.getComponent(UITransform)!.setContentSize(750,this.height);
-      const top = Math.max(0,(size.height-safe.y-safe.height)/size.height*this.height);
-      const bottom = Math.max(0,safe.y/size.height*this.height);
+      let top = Math.max(0,(size.height-safe.y-safe.height)/size.height*this.height);
+      let bottom = Math.max(0,safe.y/size.height*this.height);
+      if (this.safeProbe) {
+        const css=window.getComputedStyle(this.safeProbe);
+        const ratio=750/browserWidth;
+        top=Math.max(top,(parseFloat(css.paddingTop) || 0)*ratio);
+        bottom=Math.max(bottom,(parseFloat(css.paddingBottom) || 0)*ratio);
+      }
       this.layout(top,bottom);
     }
     const seconds = this.session.remainingSeconds;
