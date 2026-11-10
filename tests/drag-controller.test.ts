@@ -43,3 +43,14 @@ it('reports taps without changing rotation', () => {
   controller.begin(start);
   expect(controller.release(4,{x:81,y:428},1300)?.tap).toBe(false);
 });
+
+it('starts pickup only beyond 8px and ignores a second pointer', () => {
+  const controller = new DragController(); controller.begin(start);
+  expect(controller.rotateHeld()).toBe(false);
+  expect(controller.move(4,{x:88,y:430})?.mode).toBe('pending');
+  expect(controller.move(5,{x:200,y:200})).toBeUndefined();
+  expect(controller.move(4,{x:88.01,y:430})?.mode).toBe('drag');
+  const before = controller.active;
+  controller.begin({...start,id:5});
+  expect(controller.active).toBe(before);
+});
