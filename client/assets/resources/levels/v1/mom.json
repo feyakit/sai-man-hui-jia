@@ -19,7 +19,7 @@
     {
       "id": 1,
       "shape": "Z5",
-      "item": "painting",
+      "item": "fudeco",
       "initialRotation": 2
     },
     {
@@ -43,7 +43,7 @@
     {
       "id": 5,
       "shape": "R6",
-      "item": "suitcase_l",
+      "item": "oven",
       "initialRotation": 3
     },
     {
@@ -65,7 +65,7 @@
       {
         "id": 8,
         "shape": "P5",
-        "item": "snacks",
+        "item": "driedgoods",
         "initialRotation": 0
       }
     ],
@@ -81,7 +81,7 @@
       {
         "id": 10,
         "shape": "I3",
-        "item": "sausage",
+        "item": "firecracker",
         "initialRotation": 1
       }
     ]
