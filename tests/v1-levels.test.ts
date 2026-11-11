@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { solve } from '../client/assets/scripts/core/dlx';
 import { generateLevel } from '../client/assets/scripts/core/generator';
 import { parseLevel } from '../client/assets/scripts/core/level';
-import { SHAPES } from '../client/assets/scripts/core/shapes';
+import { rotate, SHAPES } from '../client/assets/scripts/core/shapes';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import { validateSolution } from '../client/assets/scripts/core/validate';
 import { VEHICLES } from '../client/assets/scripts/core/vehicles';
@@ -56,6 +56,34 @@ describe('committed V1 levels', () => {
     expect(new Set(all.map(p => p.id)).size).toBe(all.length);
     expect(all.reduce((sum,p) => sum+SHAPES[p.shape].length,0)).toBe(level.width*level.height-level.blocked.length);
     expect(generateV1Mom(config.mom).level).toEqual(level);
+  });
+
+  it('mom verifies every append prefix against the complete DLX solution', () => {
+    const level = load('mom');
+    const fixture = json('tests/fixtures/v1/mom.solution.json');
+    const batches = [level.pieces,...level.extras!];
+    let pieces = [] as typeof level.pieces;
+    for (let index=0;index<batches.length;index++) {
+      pieces = [...pieces,...batches[index]];
+      const occupied = new Set<string>();
+      for (const piece of pieces) {
+        const placement = fixture.placements.find((entry: {pieceId: number}) => entry.pieceId === piece.id);
+        expect(placement).toBeDefined();
+        for (const [dx,dy] of rotate(SHAPES[piece.shape],placement.rotation)) {
+          const x=placement.x+dx,y=placement.y+dy,key=`${x},${y}`;
+          expect(x).toBeGreaterThanOrEqual(0); expect(y).toBeGreaterThanOrEqual(0);
+          expect(x).toBeLessThan(level.width); expect(y).toBeLessThan(level.height);
+          expect(level.blocked.some(([bx,by]) => bx === x && by === y)).toBe(false);
+          expect(occupied.has(key)).toBe(false); occupied.add(key);
+        }
+      }
+      if (index < batches.length-1) {
+        expect(pieces.reduce((sum,piece) => sum+SHAPES[piece.shape].length,0))
+          .toBeLessThan(level.width*level.height-level.blocked.length);
+      }
+    }
+    expect(pieces.reduce((sum,piece) => sum+SHAPES[piece.shape].length,0))
+      .toBe(level.width*level.height-level.blocked.length);
   });
 
   it('adds sedan_v1 without changing daily vehicle order or geometry', () => {

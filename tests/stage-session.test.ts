@@ -1,6 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
+import { parseLevel } from '../client/assets/scripts/core/level';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import { StageSession } from '../client/assets/scripts/game/StageSession';
+
+const json = (path: string) => JSON.parse(readFileSync(new URL('../'+path,import.meta.url),'utf8'));
+const mom = parseLevel(json('client/assets/resources/levels/v1/mom.json'));
+const momSolution = json('tests/fixtures/v1/mom.solution.json').placements;
 
 it('moves pieces, rejects collisions and restores the prior state on undo', () => {
   const session = new StageSession(stage1('2027-01-19'),() => 0);
@@ -82,4 +88,60 @@ it('freezes all mutations on timeout and resets every rotation on restart', () =
   expect(session.drop({pieceId:3,rotation:0,x:0,y:1})).toBe(false);
   expect(session.placements).toEqual(before);
   session.restart(); expect(session.rotationFor(3)).toBe(0); expect(session.placements).toHaveLength(0);
+});
+
+it('appends mom batches only after the active tray clears and never undoes an append', () => {
+  const session = new StageSession(mom,() => 0);
+  const baseIds = new Set(mom.pieces.map(piece => piece.id));
+  const extra = mom.extras![0][0];
+  expect(session.pieces).toHaveLength(mom.pieces.length);
+  expect(session.pendingBatches).toBe(mom.extras!.length);
+  expect(session.totalPieces).toBe(mom.pieces.length+mom.extras!.flat().length);
+  expect(session.remainingSeconds).toBe(Infinity);
+  expect(session.readyForNextBatch).toBe(false);
+  expect(session.drop({pieceId:extra.id,rotation:extra.initialRotation,x:0,y:0})).toBe(false);
+
+  for (const placement of momSolution.filter((entry: any) => baseIds.has(entry.pieceId))) {
+    expect(session.drop(placement)).toBe(true);
+  }
+  expect(session.readyForNextBatch).toBe(true);
+  expect(session.solved).toBe(false);
+  expect(session.appendNextBatch()).toBe(true);
+  expect(session.appendNextBatch()).toBe(false);
+  expect(session.pieces).toHaveLength(mom.pieces.length+1);
+  expect(session.rotationFor(extra.id)).toBe(extra.initialRotation);
+
+  session.undo();
+  expect(session.pieces).toHaveLength(mom.pieces.length+1);
+  expect(session.readyForNextBatch).toBe(false);
+  expect(session.placements).toHaveLength(mom.pieces.length-1);
+  expect(session.drop(momSolution.find((entry: any) => baseIds.has(entry.pieceId) &&
+    !session.placements.some(placed => placed.pieceId === entry.pieceId)))).toBe(true);
+
+  for (let index=0;index<mom.extras!.length;index++) {
+    for (const placement of momSolution.filter((entry: any) =>
+      mom.extras![index].some(piece => piece.id === entry.pieceId))) {
+      if (!session.placements.some(placed => placed.pieceId === placement.pieceId)) {
+        expect(session.drop(placement)).toBe(true);
+      }
+    }
+    if (index < mom.extras!.length-1) {
+      expect(session.readyForNextBatch).toBe(true);
+      expect(session.appendNextBatch()).toBe(true);
+      expect(session.pieces.at(-1)!.id).toBe(mom.extras![index+1][0].id);
+    }
+  }
+  expect(session.solved).toBe(true);
+  session.restart();
+  expect(session.pieces).toHaveLength(mom.pieces.length);
+  expect(session.pendingBatches).toBe(mom.extras!.length);
+  expect(session.placements).toHaveLength(0);
+});
+
+it('never appends extras outside mom mode', () => {
+  const session = new StageSession({...stage1('2027-01-19'),extras:[[{id:99,shape:'I2',item:'milk',initialRotation:0}]]},() => 0);
+  expect(session.pendingBatches).toBe(0);
+  expect(session.readyForNextBatch).toBe(false);
+  expect(session.appendNextBatch()).toBe(false);
+  expect(session.pieces).toHaveLength(4);
 });
