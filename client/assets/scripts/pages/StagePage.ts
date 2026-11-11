@@ -36,6 +36,7 @@ export class StagePage {
   private readonly title: Label;
   private readonly vehicle: Label;
   private readonly plate: Label;
+  private readonly lidSeal: Label;
   private readonly overlay: Node;
   private readonly overlayText: Label;
   private readonly allPieces: readonly PieceDef[];
@@ -107,8 +108,10 @@ export class StagePage {
     this.title.color = gold;
     this.vehicle = label(this.node,'Vehicle',`第 ${level.stage} 关 · ${look.name}后备箱`,27,0,0);
     this.vehicle.color = cream;
-    this.plate = label(this.node,'Plate','回家',22,0,0);
+    this.plate = label(this.node,'Plate','回家',24,0,0);
     this.plate.color = gold;
+    this.lidSeal = label(this.node,'TrunkLidSeal','福',30,0,0);
+    this.lidSeal.color = gold;
     this.preview = uiNode('DropPreview',this.node,750,1334).addComponent(Graphics);
     for (const piece of this.allPieces) {
       const node = uiNode(`Piece${piece.id}`,this.node,1,1);
@@ -217,6 +220,7 @@ export class StagePage {
     this.placeLabel('Packed',187+top,-180);
     this.placeLabel('Notice',frame.noticeY);
     this.placeLabel('Plate',this.car.y+this.car.h-98);
+    this.placeLabel('TrunkLidSeal',this.car.y+51);
     this.momBubbleNode.setPosition(-75,this.height/2-735);
     this.momAvatar.setPosition(300,this.height/2-795);
     for (const [i,button] of this.buttons.entries()) {

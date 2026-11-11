@@ -201,6 +201,8 @@ export function drawCarRear(graphics: Graphics, width: number, height: number, t
   poly([[car.x+80,car.y+13],[car.x+car.w-80,car.y+13],[trunk.x+trunk.w-18,trunk.y-20],[trunk.x+18,trunk.y-20]],look.body);
   poly([[car.x+100,car.y+19],[car.x+car.w-100,car.y+19],[trunk.x+trunk.w-36,trunk.y-25],[trunk.x+36,trunk.y-25]],look.light);
   poly([[trunk.x+40,trunk.y-35],[trunk.x+trunk.w-40,trunk.y-35],[trunk.x+trunk.w-52,trunk.y-16],[trunk.x+52,trunk.y-16]],look.trim);
+  poly([[trunk.x+trunk.w/2,car.y+25],[trunk.x+trunk.w/2+25,car.y+51],[trunk.x+trunk.w/2,car.y+77],[trunk.x+trunk.w/2-25,car.y+51]],look.trim);
+  poly([[trunk.x+trunk.w/2,car.y+31],[trunk.x+trunk.w/2+18,car.y+51],[trunk.x+trunk.w/2,car.y+71],[trunk.x+trunk.w/2-18,car.y+51]],look.deep);
   rect(trunk.x+trunk.w/2-54,trunk.y-56,108,18,look.deep,9);
   rect(trunk.x+trunk.w/2-41,trunk.y-51,82,7,look.trim,3);
 
