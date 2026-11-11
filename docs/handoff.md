@@ -1,32 +1,66 @@
 当前规格以 docs/spec-v1.2.md 为准
 # 接手开发
 
-从仓库的 `work/m1-core` 分支继续，工作进度统一关联草稿 PR #2。交互细节见 GitHub Issue #1。提交前更新 [开发与验收记录](development-log.md)，包含命令、结果、未验收项和需要人工处理的步骤。
+## 当前位置
+
+- 当前阶段：竖切版 V1 收尾（对照 `docs/spec-v1.2.md` 第 4.2–4.12 节）。
+- 工作分支：`codex/v1-11-checklist`，基线 `origin/work/m1-core`（`01eccb9`）。
+- 草稿 PR：[#18](https://github.com/feyakit/sai-man-hui-jia/pull/18)，目标分支 `work/m1-core`。
+- 本任务代码提交：`76312ac`（设置持久化）、`aff5d3f`（最后 10 秒反馈）、`f7e0251`（设置面板与回合内反馈）、`796d42a`（格长上限 110）、`d56fe70`（落位压扁与撤销/重开飞回）、`53ee7d1`（操作按钮 120px 高）。
+- 逐条对照见 [docs/v1-checklist.md](v1-checklist.md)。本轮没有修改 `core/dlx.ts`、车型数据或关卡形状数据，没有操作 `main`，没有合并 PR，没有运行 `art:placeholders`，也没有运行 `gh run watch`。
 
 ## 当前交付
 
-M1 核心规则和 M2 关卡工具已通过云端验收。Node.js 24 环境执行 `npm ci`、`npm test` 和 `npm run test:performance` 即可复核。M2 命令在 [README](../README.md)。生成关卡前由接手人在本机设置 `LEVEL_SECRET`。正式云端上传安排在微信云端阶段。
+V1 的三条可玩路径已经打通：第 1 关（4 件、60 秒、首次触摸消失的手指引导）、第 2 关（`stage2.json`，10 件、150 秒）和妈妈模式（`?mode=mom`，按批次追加 3 件、不限时）。第 2 关和妈妈模式都由固定关卡文件与 DLX fixture 校验有解。
 
-## M3 春运主题试玩与官方构建
+本轮补齐了：
 
-[私密试玩](https://example.feyakit.dev) 已更新为 Cocos Creator 3.8.8 的正式 Web Mobile 导出。两关用归家夜路、车厢、年货标签和到家画面串起春运主题。浏览器需要 WebGL，链接限项目所有者访问。
+- 第 4.7 节设置：右上角红金齿轮按钮、音效/震动两个开关、默认开、`localStorage` 键 `smhj.game-settings.v1`；面板位于后备箱上方，不遮挡箱内网格。音效开关会立即静音/恢复，震动开关会阻止 `navigator.vibrate` 调用；不支持震动 API 时静默。
+- 第 4.7 节倒计时：≤10 秒数字变红、轻微跳动，每秒 `tick` 一次。
+- 第 4.7 节手感：合法落下按纵向 0.85 → 1.05 → 1.0、约 220ms 回弹；撤销和重开让物品以 180ms 飞回。
+- 第 4.8 节：重开二次确认“重新装车？”；时间到冻结盘面并弹出“时间到 · 再装一次”。
+- 第 4.9 节回归：点击屏幕跳到结算最后一帧；彩纸固定池 ≤120，结束/跳过/销毁全部回收。
 
-[官方构建与浏览器验收](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950) 提供 `trunk-home-web-mobile`。同一导出包在桌面鼠标与 Pixel 7 模拟触屏各通关两关，旋转、非法落点、拖回托盘、URL 直达及后台计时通过。实体手机仍待复测。
+## 本轮验证
 
-正式挑战关默认读取 `client/assets/resources/levels/v1/stage2.json`。仓库另带已验解的开发关卡 `client/assets/resources/dev-levels/demo.json`；只有 URL 带 `?level=demo` 等覆盖参数时才读取 `dev-levels/<名>`。使用其他关卡时，在仓库根目录生成并复制开发关卡。通过 HTTP 打开构建目录的 `index.html`，或用 `node --import tsx tools/cocos/smoke-web-mobile.mjs <构建目录> <截图目录>` 复跑验收。
-
-## 尚未开发的里程碑
-
-| 阶段 | 范围 |
+| 命令 | 结果 |
 | --- | --- |
-| M4 | 启动页、选老家省份、首页、转场和正式结算流程，帮忙模式、分享图、道具模拟 |
-| M5 | 微信小游戏适配、构建模板、主包与分包配置、微信开发者工具及真机 |
-| M6 | 微信登录、全国同一每日关卡、每人每天首次通关为老家接回一人、省榜与连胜、云端防作弊和真实关卡上传 |
-| M7 | 正式品牌、车型与年货美术，放置和关车厢动效、催促反馈、音效、真机性能 |
-| M8 | 断网重试、提交去重、埋点、上线验收 |
+| `npm test` | 109 通过，1 个既有性能测试默认跳过；类型检查通过；核心行覆盖率 98.81%。 |
+| `npm run art:check` | 通过：必需 PNG、尺寸、占用格外 alpha=0、3–6 张彩纸。 |
+| `npm run levels:v1` | 通过：stage2 10 件、11 个完整解、`nodesToFirst=3022`，关卡文件无差异。 |
+| `npm run test:performance` | 1 通过（本轮 630ms）。 |
 
-## 交付规则
+构建验收使用：
 
-按 M1 到 M8 顺序验收。核心代码保持纯 TypeScript，Cocos 场景、预制体和元数据由编辑器维护。微信 AppID、云环境、广告位、生产种子从本地或云环境配置读取。生成的解位于 `levels/solutions/`，由服务端使用。
+```sh
+/workspace/build-play.sh origin/codex/v1-11-checklist --no-publish
+```
 
-GitHub Actions 对 PR 自动运行类型检查、核心测试、五菱性能测试和七天关卡验证。查看 PR 的 Checks 可找到对应提交的执行结果。
+产物在 `/workspace/play-dist`；本任务截图在 `/workspace/play-check/task11/`。完整命令、构建结果和截图说明见 `/workspace/task11-report.md`。
+
+## 尚未完成 / 需要人工处理
+
+| 项 | 说明 |
+| --- | --- |
+| 4.3 托盘 | 第 2 关 10 件在窄屏仍会横向滚动；最小格长 56px 而非 20px；放置后剩余件会重排，拖回不保证原始槽位。需要重做托盘架构和槽位持久化，本任务列为遗留。 |
+| 4.11 正式音效 | `client/assets/resources/audio/` 只有 README，还没有 10 个 MP3。加载、开关、静音和失败回退已实现；产品方补文件后即可出声。 |
+| 4.12 真机性能 | 低端机 45/60fps、首屏 4G ≤3 秒尚未实测；本轮只有 Chromium Web Mobile 构建、单测和截图。 |
+| 真机手感 | iPhone/Android 的刘海、底部手势条、触屏拖动和震动仍需实体机复核。 |
+
+## 本地运行与验收
+
+从仓库根目录执行：
+
+```sh
+npm ci
+npm test
+npm run art:check
+npm run levels:v1
+npm run test:performance
+```
+
+第 2 关和妈妈模式的生成参数在 `tools/config/v1-levels.json`；改参数后运行 `npm run levels:v1`，不要手改生成出的关卡和解。浏览器试玩需要 WebGL，构建输出目录必须通过 HTTP 打开。详细玩法、构建和本地运行见 [README](../README.md)。
+
+## 后续里程碑
+
+V1 验收通过前不要开始 M5 及以后。页面流程、省份、每日关卡、排行榜、分享、登录、云端、广告、道具和微信适配都在 V1 范围外，按规格书后续里程碑推进。GitHub Actions 的 `verify` 会运行类型检查、`npm test`、`art:check`、性能测试和七天关卡验证；本轮没有等待 Actions，不声称 CI 已绿。
