@@ -1,11 +1,45 @@
 import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { dimensions, heldOffset, inRect, MIN_TRAY_CELL, previewVisible, trayLayout } from '../client/assets/scripts/game/InteractionGeometry';
+import { dimensions, heldOffset, inRect, MAX_TRAY_CELL, MIN_TRAY_CELL, previewVisible, trayLayout } from '../client/assets/scripts/game/InteractionGeometry';
 import { parseLevel } from '../client/assets/scripts/core/level';
 import type { Rotation } from '../client/assets/scripts/core/types';
 const tray = {x:24,y:880,w:702,h:270};
 const level = parseLevel(JSON.parse(readFileSync('client/assets/resources/levels/v1/stage2.json','utf8')));
 const demo = parseLevel(JSON.parse(readFileSync('client/assets/resources/dev-levels/demo.json','utf8')));
+const stage1 = parseLevel(JSON.parse(readFileSync('client/assets/resources/levels/v1/stage1.json','utf8')));
+
+it('grows a sparse four-piece tray to the largest cell that fits and centers it without scrolling', () => {
+  const phoneTray={x:5,y:1043,w:740,h:420};
+  const layout=trayLayout(stage1.pieces,phoneTray);
+  expect(layout.cell).toBe(MAX_TRAY_CELL);
+  expect(layout.maxScroll).toBe(0);
+  expect(layout.contentWidth).toBeLessThanOrEqual(phoneTray.w);
+  const left=Math.min(...layout.slots.map(s => s.rect.x));
+  const right=Math.max(...layout.slots.map(s => s.rect.x+s.rect.w));
+  expect(left-phoneTray.x).toBeCloseTo(phoneTray.x+phoneTray.w-right,5);
+  for (const {piece,rect} of layout.slots) {
+    const box=dimensions(piece,piece.initialRotation);
+    expect(rect.w).toBe(box.w*MAX_TRAY_CELL);
+    expect(rect.h).toBe(box.h*MAX_TRAY_CELL);
+    expect(rect.x).toBeGreaterThanOrEqual(phoneTray.x);
+    expect(rect.y).toBeGreaterThanOrEqual(phoneTray.y);
+    expect(rect.x+rect.w).toBeLessThanOrEqual(phoneTray.x+phoneTray.w);
+    expect(rect.y+rect.h).toBeLessThanOrEqual(phoneTray.y+phoneTray.h);
+  }
+});
+
+it('shrinks a sparse tray only as far as needed to keep every piece visible at once', () => {
+  const narrowTray={x:0,y:0,w:500,h:420};
+  const layout=trayLayout(stage1.pieces,narrowTray);
+  expect(layout.cell).toBeGreaterThan(MIN_TRAY_CELL);
+  expect(layout.cell).toBeLessThan(MAX_TRAY_CELL);
+  expect(layout.maxScroll).toBe(0);
+  for (const {rect} of layout.slots) {
+    expect(rect.x).toBeGreaterThanOrEqual(narrowTray.x);
+    expect(rect.x+rect.w).toBeLessThanOrEqual(narrowTray.x+narrowTray.w);
+    expect(rect.y+rect.h).toBeLessThanOrEqual(narrowTray.y+narrowTray.h);
+  }
+});
 
 it('keeps every 12-piece tray cargo complete and disjoint at the 56px minimum', () => {
   const pieces = [...level.pieces];
