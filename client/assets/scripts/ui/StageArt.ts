@@ -45,6 +45,10 @@ const shorts: Record<string,string> = {
 export function itemName(piece: PieceDef): string { return ITEMS[piece.shape].name; }
 export function itemShortName(piece: PieceDef): string { return shorts[ITEMS[piece.shape].key] ?? itemName(piece); }
 
+export function controlContentLayout(rect: Rect): {iconX: number; textX: number} {
+  return {iconX:rect.x+34,textX:rect.x+(rect.w+62)/2};
+}
+
 export function computeStageLayout(level: Pick<Level,'width'|'height'|'mode'>, height: number, top: number, bottom: number): StageLayout {
   const buttonH=112;
   const buttonY=height-bottom-24-buttonH;
