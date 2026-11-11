@@ -44,4 +44,5 @@ test('pool remains bounded, reuses identities, and recycles every particle at en
 test('stage buttons keep mom as an explicit interface',() => {
   expect(finishButtons(1)).toEqual([{title:'下一关',action:'next'}]);
   expect(finishButtons(2)).toEqual([{title:'再来一次',action:'replay'},{title:'试试妈妈模式',action:'mom'}]);
+  expect(finishButtons(3)).toEqual([{title:'再来一次',action:'replay'},{title:'回第 1 关',action:'first'}]);
 });
