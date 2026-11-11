@@ -11,16 +11,15 @@ import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
-import { computeStageLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { computeStageLayout, controlContentLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { drawItemFeature, itemTone } from '../ui/ItemArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
-const itemColors = [new Color(183,45,42),new Color(200,79,38),new Color(166,35,49),new Color(151,91,42),
-  new Color(206,56,43),new Color(128,79,49),new Color(177,54,34),new Color(194,94,31)];
 const shadow = new Color(40,20,10,70);
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
-interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
+interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
 
 export class StagePage {
@@ -28,6 +27,10 @@ export class StagePage {
   private readonly session: StageSession;
   private readonly sounds: SoundEffects;
   private readonly background: Graphics;
+  private readonly trayEmpty: Node;
+  private readonly trayEmptyArt: Graphics;
+  private readonly trayEmptyTitle: Label;
+  private readonly trayEmptyHint: Label;
   private readonly preview: Graphics;
   private readonly controls: Graphics;
   private readonly clock: Label;
@@ -91,6 +94,13 @@ export class StagePage {
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
+    this.trayEmpty = uiNode('TrayEmptyState',this.node,750,1334);
+    this.trayEmptyArt = this.trayEmpty.addComponent(Graphics);
+    this.trayEmptyTitle = label(this.trayEmpty,'TrayEmptyTitle','已全部装车',34,0,0);
+    this.trayEmptyTitle.color = cream;
+    this.trayEmptyHint = label(this.trayEmpty,'TrayEmptyHint','福气满箱 · 准备出发',21,0,0);
+    this.trayEmptyHint.color = gold;
+    this.trayEmpty.active = false;
     const look=vehicleLook(level.vehicle);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.clock.color = gold;
@@ -118,8 +128,10 @@ export class StagePage {
       const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
       const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
       sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
+      const featureNode = uiNode(`Feature${piece.id}`,node,1,1);
+      const feature = featureNode.addComponent(Graphics);
       const title = label(node,`Item${piece.id}`,itemShortName(piece),18,0,0);
-      this.pieces.set(piece.id,{node,sprite,graphics,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
+      this.pieces.set(piece.id,{node,sprite,graphics,featureNode,feature,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
@@ -253,7 +265,7 @@ export class StagePage {
   private button(text: string,x: number,w: number,action: () => void,duringDrag = false): Label {
     const index = this.buttons.length;
     this.buttons.push({rect:{x,y:this.buttonY,w,h:this.buttonH},action,duringDrag});
-    return label(this.node,`Button${index}`,text,30,0,0);
+    return label(this.node,`Button${index}`,text,28,0,0);
   }
   private updateControls(): void {
     this.controls.clear();
@@ -263,10 +275,10 @@ export class StagePage {
       this.rect(this.controls,b.rect,gold);
       this.rect(this.controls,{x:b.rect.x+4,y:b.rect.y+4,w:b.rect.w-8,h:b.rect.h-8},
         active ? new Color(239,181,62) : new Color(184,40,42));
-      const cx=b.rect.x+35-375,cy=this.height/2-(b.rect.y+b.rect.h/2);
-      this.drawControlIcon(this.controls,i,cx,cy,active ? ink : gold);
+      const content=controlContentLayout(b.rect),cy=this.height/2-(b.rect.y+b.rect.h/2);
+      this.drawControlIcon(this.controls,i,content.iconX-375,cy,active ? ink : gold);
       const text=this.node.getChildByName(`Button${i}`);
-      text?.setPosition(b.rect.x+b.rect.w/2+17-375,this.height/2-(b.rect.y+b.rect.h/2));
+      text?.setPosition(content.textX-375,cy);
     }
     const rotateTitle=this.node.getChildByName('Button0')?.getComponent(Label);
     if (rotateTitle) rotateTitle.color=this.selected ? ink : gold;
@@ -321,14 +333,39 @@ export class StagePage {
       view.node.active = visible;
       if (visible) this.renderPiece(piece);
     }
-    this.clearPreview(); this.updateControls();
+    this.clearPreview(); this.updateTrayState(); this.updateControls();
+  }
+  private remainingPieces(): readonly PieceDef[] {
+    return this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id));
   }
   private layoutTray(): void {
-    const unplaced = this.level.mode === 'mom'
-      ? this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id))
-      : this.session.pieces;
+    const unplaced = this.level.mode === 'mom' ? this.remainingPieces() : this.session.pieces;
     const tray = trayLayout(unplaced,this.tray);
     this.slots = tray.slots; this.trayCell = tray.cell;
+  }
+  private updateTrayState(): void {
+    const show=this.remainingPieces().length === 0 && this.level.mode !== 'mom';
+    this.trayEmpty.active=show;
+    if (!show) return;
+    const g=this.trayEmptyArt; g.clear();
+    const cx=0,cy=this.tray.y+this.tray.h/2;
+    const left=-this.tray.w/2;
+    fill(g,new Color(255,241,205,20),left+30,this.height/2-(this.tray.y+this.tray.h-34),this.tray.w-60,this.tray.h-68,26);
+    for (const x of [left+66,left+this.tray.w-66]) {
+      fill(g,new Color(255,218,153,85),x-12,this.height/2-(cy+5),24,2,1);
+      fill(g,new Color(255,218,153,85),x-12,this.height/2-(cy-5),24,2,1);
+    }
+    g.fillColor=new Color(255,218,153,80); g.circle(cx,this.height/2-(cy-42),64); g.fill();
+    g.fillColor=gold; g.circle(cx,this.height/2-(cy-42),55); g.fill();
+    g.fillColor=new Color(173,38,43); g.circle(cx,this.height/2-(cy-42),47); g.fill();
+    g.strokeColor=cream; g.lineWidth=8;
+    g.moveTo(cx-21,this.height/2-(cy-42)); g.lineTo(cx-6,this.height/2-(cy-27));
+    g.lineTo(cx+24,this.height/2-(cy-63)); g.stroke();
+    fill(g,gold,left+42,this.height/2-(cy+78),80,3,1);
+    fill(g,gold,left+this.tray.w-122,this.height/2-(cy+78),80,3,1);
+    const titleY=cy+35,hintY=cy+77;
+    this.trayEmptyTitle.node.setPosition(0,this.height/2-titleY);
+    this.trayEmptyHint.node.setPosition(0,this.height/2-hintY);
   }
   private renderPiece(piece: PieceDef): void {
     const view = this.pieces.get(piece.id)!;
@@ -352,22 +389,54 @@ export class StagePage {
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
     view.sprite.enabled=false; view.title.node.active=true;
-    const chosen=this.selected?.id === piece.id;
-    const bodyColor=failed ? new Color(172,35,37) : itemColors[(piece.id-1)%itemColors.length];
-    for (const [x,y] of pieceCells(piece,rotation)) {
-      if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
-      fill(g,chosen ? gold : new Color(255,211,124),x*size-w/2+1,h/2-(y+1)*size+1,size-2,size-2,5);
-      fill(g,bodyColor,x*size-w/2+4,h/2-(y+1)*size+4,size-8,size-8,4);
-      fill(g,new Color(255,235,181,48),x*size-w/2+8,h/2-y*size+Math.max(4,size*.62),Math.max(4,size-24),Math.max(3,size*.12),2);
+    const chosen=this.selected?.id === piece.id, tone=itemTone(piece);
+    const bodyColor=failed ? new Color(172,35,37) : tone.base;
+    const outline=failed ? new Color(92,20,22) : tone.edge;
+    const cells=pieceCells(piece,rotation);
+    const cellRect=([x,y]: readonly [number,number]) => ({
+      x:x*size-w/2,y:h/2-(y+1)*size,
+    });
+    for (const cell of cells) {
+      const r=cellRect(cell);
+      if (held) fill(g,shadow,r.x+8,r.y-9,size-3,size-3,5);
+      fill(g,bodyColor,r.x,r.y,size+1,size+1);
     }
+    g.strokeColor=chosen ? gold : outline;
+    g.lineWidth=Math.max(3,Math.min(6,size*.075));
+    const occupied=new Set(cells.map(([x,y]) => `${x},${y}`));
+    for (const [x,y] of cells) {
+      const r=cellRect([x,y]);
+      if (!occupied.has(`${x},${y-1}`)) { g.moveTo(r.x,r.y+size); g.lineTo(r.x+size,r.y+size); }
+      if (!occupied.has(`${x},${y+1}`)) { g.moveTo(r.x,r.y); g.lineTo(r.x+size,r.y); }
+      if (!occupied.has(`${x-1},${y}`)) { g.moveTo(r.x,r.y); g.lineTo(r.x,r.y+size); }
+      if (!occupied.has(`${x+1},${y}`)) { g.moveTo(r.x+size,r.y); g.lineTo(r.x+size,r.y+size); }
+    }
+    g.stroke();
+    g.strokeColor=chosen ? new Color(255,244,198,180) : tone.light;
+    g.lineWidth=Math.max(1,Math.min(2,size*.022));
+    for (const [x,y] of cells) {
+      if (occupied.has(`${x},${y-1}`)) continue;
+      const r=cellRect([x,y]);
+      g.moveTo(r.x+4,r.y+size-4); g.lineTo(r.x+size-4,r.y+size-4);
+    }
+    g.stroke();
     view.title.string=itemShortName(piece);
-    view.title.fontSize=Math.max(15,Math.min(26,size*.42)); view.title.color=cream;
-    view.title.lineHeight=view.title.fontSize+6;
-    const labelW=Math.min(w-8,Math.max(34,view.title.string.length*(view.title.fontSize-1)+18));
-    const labelH=view.title.fontSize+10;
-    fill(g,new Color(69,25,27,225),-labelW/2,-labelH/2,labelW,labelH,Math.min(12,labelH/2));
-    fill(g,new Color(255,214,145,220),-labelW/2,-labelH/2,labelW,2,1);
-    view.title.node.setPosition(0,0);
+    view.title.fontSize=Math.max(13,Math.min(22,size*.38)); view.title.color=cream;
+    view.title.lineHeight=view.title.fontSize+4;
+    const labelW=Math.min(w-8,Math.max(32,view.title.string.length*(view.title.fontSize-1)+16));
+    const labelH=view.title.fontSize+6, labelY=-h/2+labelH/2+3;
+    const centers=cells.map(([x,y]) => ({x:x*size-w/2+size/2,y:h/2-(y+.5)*size}));
+    const anchorX=centers.reduce((sum,p) => sum+p.x,0)/centers.length;
+    const anchorY=centers.reduce((sum,p) => sum+p.y,0)/centers.length;
+    const roomTop=h/2-4, roomBottom=labelY+labelH/2+3;
+    const featureHalf=Math.min(size*.55,Math.max(6,(roomTop-roomBottom)*.48));
+    const featureY=Math.max(roomBottom+featureHalf,Math.min(roomTop-featureHalf,anchorY));
+    view.feature.clear();
+    view.featureNode.setPosition(anchorX,featureY);
+    drawItemFeature(view.feature,piece,size,w,h,labelH,tone);
+    fill(g,new Color(30,24,28,228),-labelW/2,labelY-labelH/2,labelW,labelH,Math.min(10,labelH/2));
+    fill(g,new Color(255,214,145,210),-labelW/2,labelY-labelH/2,labelW,2,1);
+    view.title.node.setPosition(0,labelY);
   }
 
   private point(event: EventTouch): Point {
