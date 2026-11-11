@@ -1,4 +1,4 @@
-import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
+import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
@@ -28,6 +28,7 @@ export class StagePage {
   private readonly session: StageSession;
   private readonly sounds: SoundEffects;
   private readonly background: Graphics;
+  private readonly itemFrames = new Map<string,SpriteFrame | undefined>();
   private readonly preview: Graphics;
   private readonly controls: Graphics;
   private readonly clock: Label;
@@ -351,8 +352,9 @@ export class StagePage {
     const g=view.graphics; g.clear();
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
-    view.sprite.enabled=false; view.title.node.active=true;
     const chosen=this.selected?.id === piece.id;
+    if (this.drawPieceArt(piece,view,rotation,size,w,h,held,failed,chosen)) return;
+    view.sprite.enabled=false; view.title.node.active=true;
     const bodyColor=failed ? new Color(172,35,37) : itemColors[(piece.id-1)%itemColors.length];
     for (const [x,y] of pieceCells(piece,rotation)) {
       if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
@@ -368,6 +370,43 @@ export class StagePage {
     fill(g,new Color(69,25,27,225),-labelW/2,-labelH/2,labelW,labelH,Math.min(12,labelH/2));
     fill(g,new Color(255,214,145,220),-labelW/2,-labelH/2,labelW,2,1);
     view.title.node.setPosition(0,0);
+  }
+
+  // Real item art: one Sprite per piece, rotated as a whole (art is drawn for rotation 0).
+  // Until the frame is available the coloured-cell fallback is drawn instead.
+  private drawPieceArt(piece: PieceDef,view: PieceView,rotation: Rotation,size: number,w: number,h: number,held: boolean,failed: boolean,chosen: boolean): boolean {
+    const key=ITEMS[piece.shape].key;
+    const frame=this.itemFrames.get(key);
+    if (!frame) {
+      if (!this.itemFrames.has(key)) {
+        this.itemFrames.set(key,undefined);
+        void loadArt(`items/${key}`).then(loaded => {
+          if (!loaded || !this.node.isValid) return;
+          this.itemFrames.set(key,loaded);
+          for (const other of this.allPieces) if (ITEMS[other.shape].key === key) {
+            const pv=this.pieces.get(other.id)!;
+            if (pv.size) this.drawPiece(other,pv.rotation,pv.size,pv.held,pv.failed);
+          }
+        });
+      }
+      return false;
+    }
+    const g=view.graphics;
+    const base=dimensions(piece,0);
+    // Soft glow under the occupied cells shows selection / pickup without hiding the art.
+    for (const [x,y] of pieceCells(piece,rotation)) {
+      const cx=x*size-w/2, cy=h/2-(y+1)*size;
+      if (held) fill(g,shadow,cx+8,cy-9,size-3,size-3,Math.max(6,size*.18));
+      if (chosen || held) fill(g,new Color(255,214,120,held ? 70 : 95),cx+1,cy+1,size-2,size-2,Math.max(6,size*.18));
+      if (failed) fill(g,new Color(220,40,40,90),cx+1,cy+1,size-2,size-2,Math.max(6,size*.18));
+    }
+    const sn=view.sprite.node;
+    sn.getComponent(UITransform)!.setContentSize(base.w*size,base.h*size);
+    sn.angle=90*rotation; sn.setPosition(0,0);
+    view.sprite.spriteFrame=frame; view.sprite.enabled=true;
+    view.sprite.color=failed ? new Color(255,150,150) : Color.WHITE;
+    view.title.node.active=false;
+    return true;
   }
 
   private point(event: EventTouch): Point {
