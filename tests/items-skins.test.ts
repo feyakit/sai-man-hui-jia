@@ -42,3 +42,9 @@ test('shipped stage 2 and mom levels mix skins, each key at most twice, skins ma
     expect(all.some(piece => EXTRA_ITEMS.some(item => item.key === piece.item))).toBe(true);
   }
 });
+
+test('the 20-piece challenge demo only uses skins drawn for each piece shape', () => {
+  const level = JSON.parse(readFileSync('client/assets/resources/dev-levels/demo.json','utf8')) as Level;
+  for (const piece of level.pieces) expect(skinsFor(piece.shape).map(skin => skin.key)).toContain(piece.item);
+  expect(new Set(level.pieces.map(piece => piece.item)).size).toBeGreaterThanOrEqual(8);
+});
