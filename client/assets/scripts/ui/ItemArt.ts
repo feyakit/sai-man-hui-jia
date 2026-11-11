@@ -1,4 +1,4 @@
-import { Color } from 'cc';
+import { Color, Graphics } from 'cc';
 import { ITEMS } from '../core/items';
 import type { PieceDef } from '../core/types';
 
@@ -36,4 +36,221 @@ const fallback: ItemTone = {hex:'#4E7D78',base:new Color(78,125,120),edge:new Co
 
 export function itemTone(piece: PieceDef): ItemTone {
   return tones[ITEMS[piece.shape].key] ?? fallback;
+}
+
+function block(g: Graphics,color: Color,x: number,y: number,w: number,h: number,r = 0): void {
+  g.fillColor=color;
+  if (r) g.roundRect(x,y,w,h,r); else g.rect(x,y,w,h);
+  g.fill();
+}
+
+function shape(g: Graphics,color: Color,points: readonly (readonly [number,number])[]): void {
+  g.fillColor=color;
+  g.moveTo(points[0][0],points[0][1]);
+  for (const [x,y] of points.slice(1)) g.lineTo(x,y);
+  g.close(); g.fill();
+}
+
+function line(g: Graphics,color: Color,width: number,points: readonly (readonly [number,number])[]): void {
+  g.strokeColor=color; g.lineWidth=width;
+  g.moveTo(points[0][0],points[0][1]);
+  for (const [x,y] of points.slice(1)) g.lineTo(x,y);
+  g.stroke();
+}
+
+function dot(g: Graphics,color: Color,x: number,y: number,r: number): void {
+  g.fillColor=color; g.circle(x,y,r); g.fill();
+}
+
+/** A compact, upright cargo emblem that stays legible at tray and board sizes. */
+export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: number,height: number,labelHeight: number,tone: ItemTone): void {
+  const key=ITEMS[piece.shape].key;
+  const top=height/2-4, bottom=-height/2+labelHeight+4;
+  const room=Math.max(12,top-bottom), s=Math.max(12,Math.min(size*.72,room));
+  const y=bottom+room/2, lw=Math.max(1,Math.min(3,s*.07));
+  const edge=tone.edge, accent=tone.accent, light=tone.light;
+
+  switch (key) {
+    case 'liquor': {
+      const bw=Math.max(13,s*.48), bh=Math.max(18,s*.9);
+      block(g,light,-bw/2,y-bh*.43,bw,bh*.74,Math.max(2,bw*.16));
+      block(g,accent,-bw*.16,y+bh*.32,bw*.32,bh*.15,1);
+      block(g,accent,-bw/2+2,y-bh*.17,bw-4,bh*.3,1);
+      line(g,edge,lw,[[-bw/2,y-bh*.43],[-bw/2,y+bh*.43]]);
+      line(g,edge,lw,[[bw/2,y-bh*.43],[bw/2,y+bh*.43]]);
+      dot(g,light,-bw*.14,y+bh*.02,Math.max(1.5,s*.045));
+      dot(g,light,bw*.1,y-bh*.08,Math.max(1.5,s*.045));
+      break;
+    }
+    case 'milk': {
+      const bw=Math.max(22,s*.75), bh=Math.max(18,s*.62), bodyH=bh*.68;
+      block(g,light,-bw/2,y-bh*.45,bw,bodyH,2);
+      shape(g,accent,[[-bw/2,y+bh*.23],[0,y+bh*.45],[bw/2,y+bh*.23],[bw/2,y+bh*.13],[-bw/2,y+bh*.13]]);
+      block(g,accent,-bw/2+3,y-bh*.2,bw-6,Math.max(3,bh*.15),1);
+      line(g,edge,lw,[[-bw/2,y-bh*.45],[-bw/2,y+bh*.24]]);
+      line(g,edge,lw,[[bw/2,y-bh*.45],[bw/2,y+bh*.24]]);
+      shape(g,accent,[[bw*.02,y+bh*.07],[bw*.24,y+bh*.22],[bw*.34,y+bh*.03],[bw*.12,y-bh*.03]]);
+      break;
+    }
+    case 'sugarcane': {
+      const half=Math.max(16,s*.46);
+      line(g,accent,Math.max(3,s*.13),[[-half*.65,y-half*.42],[-half*.18,y+half*.4]]);
+      line(g,tone.base,Math.max(3,s*.13),[[-half*.3,y-half*.46],[half*.25,y+half*.44]]);
+      line(g,light,Math.max(1,s*.035),[[-half*.55,y-half*.24],[-half*.31,y+half*.22]]);
+      line(g,edge,lw,[[-half*.9,y],[-half*.18,y+half*.12],[half*.42,y+half*.03],[half*.72,y+half*.28]]);
+      line(g,edge,lw,[[-half*.9,y],[-half*.18,y-half*.08],[half*.42,y-half*.15],[half*.72,y+half*.05]]);
+      dot(g,accent,-half*.72,y+half*.1,Math.max(2,s*.055));
+      break;
+    }
+    case 'nutbox': {
+      const bw=Math.max(22,s*.68), bh=Math.max(18,s*.54);
+      block(g,tone.light,-bw/2,y-bh*.28,bw,bh*.62,2);
+      block(g,accent,-bw/2,y+bh*.18,bw,bh*.2,1);
+      block(g,light,-bw*.09,y-bh*.3,bw*.18,bh*.72,1);
+      shape(g,edge,[[-bw*.09,y+bh*.37],[-bw*.3,y+bh*.52],[-bw*.11,y+bh*.27]]);
+      shape(g,edge,[[bw*.09,y+bh*.37],[bw*.3,y+bh*.52],[bw*.11,y+bh*.27]]);
+      dot(g,accent,0,y+bh*.36,Math.max(2,s*.06));
+      break;
+    }
+    case 'frozenbox': {
+      const bw=Math.max(24,s*.76), bh=Math.max(18,s*.58);
+      block(g,light,-bw/2,y-bh*.44,bw,bh*.88,3);
+      block(g,accent,-bw/2,y+bh*.2,bw,bh*.17,1);
+      line(g,edge,lw,[[0,y+bh*.08],[0,y-bh*.27]]);
+      line(g,edge,lw,[[-bw*.17,y-bh*.09],[bw*.17,y-bh*.09]]);
+      line(g,edge,lw,[[-bw*.11,y+bh*.06],[bw*.11,y-bh*.22]]);
+      line(g,edge,lw,[[bw*.11,y+bh*.06],[-bw*.11,y-bh*.22]]);
+      break;
+    }
+    case 'tv': {
+      const bw=Math.max(25,s*.8), bh=Math.max(16,s*.48);
+      block(g,edge,-bw/2,y-bh*.28,bw,bh*.62,3);
+      block(g,accent,-bw/2+3,y-bh*.21,bw-6,bh*.47,2);
+      shape(g,new Color(235,252,250,150),[[-bw*.34,y+bh*.2],[-bw*.14,y+bh*.2],[-bw*.32,y-bh*.14]]);
+      block(g,edge,-bw*.28,y-bh*.46,bw*.56,bh*.14,1);
+      line(g,tone.light,lw,[[-bw*.1,y+bh*.08],[bw*.22,y-bh*.1]]);
+      break;
+    }
+    case 'painting': {
+      const bw=Math.max(22,s*.56), bh=Math.max(18,s*.78);
+      block(g,tone.light,-bw/2,y-bh*.42,bw,bh*.84,2);
+      block(g,accent,-bw/2+3,y-bh*.36,bw-6,bh*.1,1);
+      block(g,accent,-bw*.34,y-bh*.2,bw*.25,bh*.34,1);
+      line(g,tone.base,Math.max(1,s*.035),[[-bw*.03,y+bh*.28],[-bw*.03,y-bh*.02]]);
+      line(g,tone.base,Math.max(1,s*.035),[[bw*.2,y+bh*.2],[bw*.2,y-bh*.12]]);
+      block(g,accent,bw*.16,y-bh*.4,bw*.07,bw*.07,1);
+      block(g,edge,bw*.2,y+bh*.45,bw*.18,bh*.1,1);
+      break;
+    }
+    case 'duck': {
+      const bw=Math.max(22,s*.72), bh=Math.max(18,s*.5);
+      block(g,tone.light,-bw/2,y-bh*.25,bw,bh*.56,bh*.25);
+      dot(g,tone.light,bw*.29,y+bh*.22,Math.max(4,s*.12));
+      shape(g,accent,[[bw*.39,y+bh*.22],[bw*.57,y+bh*.16],[bw*.4,y+bh*.1]]);
+      shape(g,light,[[-bw*.17,y+bh*.05],[bw*.04,y+bh*.16],[bw*.12,y-bh*.05],[-bw*.1,y-bh*.12]]);
+      line(g,edge,lw,[[-bw*.42,y-bh*.23],[bw*.05,y-bh*.1],[bw*.48,y-bh*.19]]);
+      line(g,edge,lw,[[0,y+bh*.32],[0,y+bh*.55]]);
+      break;
+    }
+    case 'sausage': {
+      const bw=Math.max(23,s*.75), bh=Math.max(16,s*.45);
+      for (const [ox,oy] of [[-bw*.25,bh*.18],[0,-bh*.02],[bw*.25,bh*.16]]) {
+        block(g,tone.light,ox-bw*.19,oy-bh*.24,bw*.38,bh*.48,bh*.24);
+        line(g,accent,Math.max(1,s*.035),[[ox-bw*.06,oy-bh*.22],[ox+bw*.06,oy+bh*.22]]);
+      }
+      line(g,edge,lw,[[-bw*.4,y+bh*.3],[0,y+bh*.42],[bw*.4,y+bh*.28]]);
+      break;
+    }
+    case 'fish': {
+      const bw=Math.max(26,s*.82), bh=Math.max(16,s*.46);
+      block(g,tone.light,-bw*.34,y-bh*.32,bw*.66,bh*.64,bh*.3);
+      shape(g,accent,[[bw*.27,y],[bw*.5,y+bh*.3],[bw*.47,y-bh*.3]]);
+      shape(g,light,[[-bw*.1,y+bh*.05],[-bw*.24,y+bh*.3],[bw*.02,y+bh*.18]]);
+      dot(g,edge,-bw*.33,y+bh*.08,Math.max(1.5,s*.04));
+      line(g,edge,lw,[[-bw*.7,y],[bw*.5,y]]);
+      break;
+    }
+    case 'suitcase_s':
+    case 'suitcase_l': {
+      const bw=Math.max(24,s*.68), bh=Math.max(20,s*.58);
+      block(g,tone.light,-bw/2,y-bh*.4,bw,bh*.78,3);
+      line(g,accent,Math.max(2,s*.06),[[-bw*.24,y+bh*.38],[-bw*.24,y+bh*.56],[bw*.24,y+bh*.56],[bw*.24,y+bh*.38]]);
+      block(g,accent,-bw*.34,y-bh*.34,bw*.12,bh*.68,1);
+      block(g,accent,bw*.22,y-bh*.34,bw*.12,bh*.68,1);
+      dot(g,edge,-bw*.35,y-bh*.45,Math.max(1.5,s*.04));
+      dot(g,edge,bw*.35,y-bh*.45,Math.max(1.5,s*.04));
+      break;
+    }
+    case 'duffel': {
+      const bw=Math.max(26,s*.8), bh=Math.max(17,s*.48);
+      block(g,tone.light,-bw/2,y-bh*.32,bw,bh*.64,bh*.24);
+      line(g,accent,Math.max(2,s*.055),[[-bw*.25,y+bh*.35],[-bw*.12,y+bh*.56],[bw*.12,y+bh*.56],[bw*.25,y+bh*.35]]);
+      line(g,edge,lw,[[-bw*.43,y-bh*.06],[bw*.43,y-bh*.06]]);
+      block(g,accent,bw*.34,y-bh*.1,bw*.08,bh*.22,2);
+      break;
+    }
+    case 'quilt': {
+      const bw=Math.max(25,s*.76), bh=Math.max(17,s*.52);
+      block(g,tone.light,-bw/2,y-bh*.3,bw,bh*.5,4);
+      block(g,accent,-bw/2,y+bh*.14,bw,bh*.18,3);
+      line(g,edge,Math.max(1,s*.035),[[-bw*.38,y-bh*.1],[bw*.38,y+bh*.14]]);
+      line(g,edge,Math.max(1,s*.035),[[-bw*.38,y+bh*.14],[bw*.38,y-bh*.1]]);
+      line(g,accent,Math.max(1,s*.03),[[-bw*.4,y+bh*.23],[bw*.4,y+bh*.23]]);
+      break;
+    }
+    case 'coop': {
+      const bw=Math.max(24,s*.72), bh=Math.max(20,s*.58);
+      block(g,new Color(66,58,48,70),-bw/2,y-bh*.4,bw,bh*.8,3);
+      line(g,edge,lw,[[-bw/2,y-bh*.4],[-bw/2,y+bh*.4],[bw/2,y+bh*.4],[bw/2,y-bh*.4]]);
+      line(g,accent,Math.max(1,s*.035),[[-bw*.25,y-bh*.35],[-bw*.25,y+bh*.35]]);
+      line(g,accent,Math.max(1,s*.035),[[0,y-bh*.35],[0,y+bh*.35]]);
+      line(g,accent,Math.max(1,s*.035),[[bw*.25,y-bh*.35],[bw*.25,y+bh*.35]]);
+      line(g,edge,lw,[[-bw*.24,y+bh*.4],[0,y+bh*.58],[bw*.24,y+bh*.4]]);
+      break;
+    }
+    case 'crab': {
+      const bw=Math.max(25,s*.72), bh=Math.max(17,s*.5);
+      block(g,tone.light,-bw/2,y-bh*.39,bw,bh*.74,3);
+      block(g,accent,-bw/2,y+bh*.18,bw,bh*.16,1);
+      block(g,edge,-bw*.25,y-bh*.05,bw*.5,bh*.22,bh*.11);
+      line(g,edge,Math.max(2,s*.05),[[-bw*.24,y+bh*.06],[-bw*.43,y+bh*.28],[-bw*.5,y+bh*.13]]);
+      line(g,edge,Math.max(2,s*.05),[[bw*.24,y+bh*.06],[bw*.43,y+bh*.28],[bw*.5,y+bh*.13]]);
+      dot(g,accent,-bw*.1,y+bh*.08,Math.max(1.5,s*.035));
+      dot(g,accent,bw*.1,y+bh*.08,Math.max(1.5,s*.035));
+      break;
+    }
+    case 'lotusroot': {
+      const bw=Math.max(26,s*.82), bh=Math.max(15,s*.42);
+      block(g,tone.light,-bw/2,y-bh*.28,bw*.55,bh*.56,bh*.26);
+      block(g,tone.light,bw*.01,y-bh*.18,bw*.43,bh*.42,bh*.2);
+      dot(g,edge,-bw*.28,y,Math.max(1.4,s*.035));
+      dot(g,edge,-bw*.12,y,Math.max(1.4,s*.035));
+      dot(g,edge,bw*.15,y+bh*.02,Math.max(1.4,s*.035));
+      line(g,accent,Math.max(1,s*.03),[[-bw*.02,y-bh*.22],[-bw*.02,y+bh*.22]]);
+      break;
+    }
+    case 'couplets': {
+      const bw=Math.max(24,s*.7), bh=Math.max(20,s*.7);
+      for (const ox of [-bw*.28,bw*.28]) {
+        block(g,tone.light,ox-bw*.13,y-bh*.4,bw*.26,bh*.8,2);
+        block(g,accent,ox-bw*.13,y+bh*.22,bw*.26,bh*.12,1);
+        block(g,accent,ox-bw*.13,y-bh*.34,bw*.26,bh*.09,1);
+        line(g,edge,Math.max(1,s*.035),[[ox,y+bh*.16],[ox,y-bh*.22]]);
+      }
+      line(g,accent,Math.max(2,s*.05),[[-bw*.15,y+bh*.42],[0,y+bh*.52],[bw*.15,y+bh*.42]]);
+      dot(g,accent,0,y+bh*.46,Math.max(2,s*.06));
+      break;
+    }
+    case 'ricecooker': {
+      const bw=Math.max(25,s*.72), bh=Math.max(18,s*.55);
+      block(g,tone.light,-bw/2,y-bh*.3,bw,bh*.64,bh*.16);
+      block(g,accent,-bw*.42,y+bh*.18,bw*.84,bh*.16,bh*.08);
+      line(g,edge,lw,[[-bw*.3,y+bh*.36],[-bw*.15,y+bh*.55],[bw*.15,y+bh*.55],[bw*.3,y+bh*.36]]);
+      dot(g,accent,bw*.33,y+bh*.05,Math.max(2,s*.06));
+      break;
+    }
+    default:
+      line(g,accent,Math.max(2,s*.06),[[-s*.22,y-s*.2],[s*.22,y+s*.2]]);
+      line(g,accent,Math.max(2,s*.06),[[-s*.22,y+s*.2],[s*.22,y-s*.2]]);
+  }
 }

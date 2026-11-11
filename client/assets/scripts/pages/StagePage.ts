@@ -12,7 +12,7 @@ import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
 import { computeStageLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
-import { itemTone } from '../ui/ItemArt';
+import { drawItemFeature, itemTone } from '../ui/ItemArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
@@ -383,13 +383,14 @@ export class StagePage {
     }
     g.stroke();
     view.title.string=itemShortName(piece);
-    view.title.fontSize=Math.max(15,Math.min(24,size*.4)); view.title.color=cream;
-    view.title.lineHeight=view.title.fontSize+6;
-    const labelW=Math.min(w-8,Math.max(34,view.title.string.length*(view.title.fontSize-1)+18));
-    const labelH=view.title.fontSize+10;
-    fill(g,new Color(69,25,27,225),-labelW/2,-labelH/2,labelW,labelH,Math.min(12,labelH/2));
-    fill(g,new Color(255,214,145,220),-labelW/2,-labelH/2,labelW,2,1);
-    view.title.node.setPosition(0,0);
+    view.title.fontSize=Math.max(13,Math.min(22,size*.38)); view.title.color=cream;
+    view.title.lineHeight=view.title.fontSize+4;
+    const labelW=Math.min(w-8,Math.max(32,view.title.string.length*(view.title.fontSize-1)+16));
+    const labelH=view.title.fontSize+6, labelY=-h/2+labelH/2+3;
+    drawItemFeature(g,piece,size,w,h,labelH,tone);
+    fill(g,new Color(30,24,28,228),-labelW/2,labelY-labelH/2,labelW,labelH,Math.min(10,labelH/2));
+    fill(g,new Color(255,214,145,210),-labelW/2,labelY-labelH/2,labelW,2,1);
+    view.title.node.setPosition(0,labelY);
   }
 
   private point(event: EventTouch): Point {

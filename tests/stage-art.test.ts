@@ -21,12 +21,12 @@ vi.mock('cc',() => {
     Tween:{stopAllByTarget:vi.fn()},Game:{EVENT_HIDE:'hide'},game:{on:vi.fn(),off:vi.fn()},
     sys:{getSafeAreaRect:() => ({x:0,y:0,width:750,height:1334})},view:{getVisibleSize:() => ({width:750,height:1334})}};
 });
-import { Label, Node, Sprite, UITransform } from 'cc';
+import { Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
-import { itemTone } from '../client/assets/scripts/ui/ItemArt';
+import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
 import { ITEMS } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
 test('one code-drawn card per item with a clear short label',() => {
@@ -67,4 +67,14 @@ test('every cargo category has a distinct cool-to-warm palette and deep outline'
   const entries=Object.entries(ITEMS).map(([shape,meta]) => itemTone({id:1,shape:shape as any,item:meta.key,initialRotation:0}));
   expect(new Set(entries.map(tone => tone.hex)).size).toBe(entries.length);
   expect(entries.every(tone => tone.hex.startsWith('#'))).toBe(true);
+});
+
+test('draws a representative emblem for every cargo item',() => {
+  const g=new Graphics();
+  for (const [shape,meta] of Object.entries(ITEMS)) {
+    const piece={id:1,shape:shape as any,item:meta.key,initialRotation:0 as const} as PieceDef;
+    drawItemFeature(g,piece,60,120,60,22,itemTone(piece));
+  }
+  expect(g.fill.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length*2);
+  expect(g.stroke.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length);
 });
