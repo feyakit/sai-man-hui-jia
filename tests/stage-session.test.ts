@@ -129,9 +129,14 @@ it('appends mom batches only after the active tray clears and never undoes an ap
       expect(session.readyForNextBatch).toBe(true);
       expect(session.appendNextBatch()).toBe(true);
       expect(session.pieces.at(-1)!.id).toBe(mom.extras![index+1][0].id);
+      expect(session.rotationFor(mom.extras![index+1][0].id)).toBe(mom.extras![index+1][0].initialRotation);
     }
   }
   expect(session.solved).toBe(true);
+  const lastExtra=mom.extras!.at(-1)![0];
+  session.undo();
+  expect(session.pieces.some(piece => piece.id === lastExtra.id)).toBe(true);
+  expect(session.rotationFor(lastExtra.id)).toBe(lastExtra.initialRotation);
   session.restart();
   expect(session.pieces).toHaveLength(mom.pieces.length);
   expect(session.pendingBatches).toBe(mom.extras!.length);
@@ -144,4 +149,20 @@ it('never appends extras outside mom mode', () => {
   expect(session.readyForNextBatch).toBe(false);
   expect(session.appendNextBatch()).toBe(false);
   expect(session.pieces).toHaveLength(4);
+});
+
+it('keeps an appended batch and its rotation when undo crosses the append snapshot', () => {
+  const session = new StageSession(mom,() => 0);
+  const solution = (momSolution as {pieceId:number;x:number;y:number;rotation:0|1|2|3}[]);
+  for (const placement of solution.filter(entry => entry.pieceId <= mom.pieces.length)) session.drop(placement);
+  session.appendNextBatch();
+  const first=mom.extras![0][0];
+  session.drop(solution.find(entry => entry.pieceId === first.id)!);
+  session.appendNextBatch();
+  const second=mom.extras![1][0];
+  expect(second.initialRotation).not.toBe(0);
+  expect(session.rotationFor(second.id)).toBe(second.initialRotation);
+  session.undo();
+  expect(session.pieces.some(piece => piece.id === second.id)).toBe(true);
+  expect(session.rotationFor(second.id)).toBe(second.initialRotation);
 });
