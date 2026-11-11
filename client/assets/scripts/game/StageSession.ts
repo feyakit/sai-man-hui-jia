@@ -44,8 +44,9 @@ export class StageSession {
   appendNextBatch(): boolean {
     if (!this.readyForNextBatch) return false;
     this.batchIndex++;
-    this.active.push(...this.batches[this.batchIndex]);
-    for (const piece of this.pieces) this.state.rotations.set(piece.id,piece.initialRotation);
+    const added = this.batches[this.batchIndex];
+    this.active.push(...added);
+    for (const piece of added) this.state.rotations.set(piece.id,piece.initialRotation);
     return true;
   }
 
