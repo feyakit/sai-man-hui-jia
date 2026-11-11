@@ -221,8 +221,8 @@ export function drawCarRear(graphics: Graphics, width: number, height: number, t
   // Trunk opening rim and deep interior.
   rect(trunk.x-13,trunk.y-13,trunk.w+26,trunk.h+26,look.trim,20);
   rect(trunk.x-8,trunk.y-8,trunk.w+16,trunk.h+16,look.deep,16);
-  rect(trunk.x,trunk.y,trunk.w,trunk.h,new Color(48,27,32),12);
-  rect(trunk.x+8,trunk.y+8,trunk.w-16,trunk.h-16,new Color(70,35,37),8);
+  rect(trunk.x,trunk.y,trunk.w,trunk.h,new Color(27,31,34),12);
+  rect(trunk.x+8,trunk.y+8,trunk.w-16,trunk.h-16,new Color(37,42,45),8);
 
   // Tail lights, reflector strip, plate recess and exhaust.
   for (const x of [car.x+50,car.x+car.w-190]) {
@@ -244,15 +244,15 @@ export function drawTrunkFloor(graphics: Graphics, width: number, height: number
     if (r) { graphics.fillColor=c; graphics.roundRect(p.x(x),p.y(y+h),w,h,r); graphics.fill(); }
     else { graphics.fillColor=c; graphics.rect(p.x(x),p.y(y+h),w,h); graphics.fill(); }
   };
-  rect(trunk.x+12,trunk.y+12,trunk.w-24,trunk.h-24,new Color(59,32,34),8);
-  for (let y=trunk.y+26;y<trunk.y+trunk.h-20;y+=44) rect(trunk.x+17,y,trunk.w-34,2,new Color(255,214,143,24));
-  rect(board.x-5,board.y-5,board.w+10,board.h+10,new Color(35,20,25),8);
+  rect(trunk.x+12,trunk.y+12,trunk.w-24,trunk.h-24,new Color(24,28,31),8);
+  for (let y=trunk.y+26;y<trunk.y+trunk.h-20;y+=44) rect(trunk.x+17,y,trunk.w-34,2,new Color(226,232,225,18));
+  rect(board.x-5,board.y-5,board.w+10,board.h+10,new Color(13,17,19),8);
   for (let y=0;y<level.height;y++) for (let x=0;x<level.width;x++) {
     const blocked=level.blocked.some(([bx,by]) => bx === x && by === y);
     const rx=board.x+x*cell, ry=board.y+y*cell;
-    rect(rx+1,ry+1,cell-2,cell-2,blocked ? new Color(39,24,27) : (x+y)%2 ? new Color(96,45,44) : new Color(105,50,46));
+    rect(rx+1,ry+1,cell-2,cell-2,blocked ? new Color(24,28,31) : (x+y)%2 ? new Color(43,49,52) : new Color(49,56,59));
     if (blocked) {
-      rect(rx+7,ry+7,cell-14,cell-14,new Color(53,30,32),7);
+      rect(rx+7,ry+7,cell-14,cell-14,new Color(31,36,39),7);
       graphics.strokeColor=new Color(246,195,67,145); graphics.lineWidth=2;
       graphics.moveTo(p.x(rx+15),p.y(ry+cell-15));
       graphics.lineTo(p.x(rx+cell-15),p.y(ry+15));
@@ -260,8 +260,8 @@ export function drawTrunkFloor(graphics: Graphics, width: number, height: number
       graphics.lineTo(p.x(rx+cell-15),p.y(ry+cell-15));
       graphics.stroke();
     }
-    rect(rx+cell-1,ry+1,1,cell-2,new Color(255,215,151,35));
-    rect(rx+1,ry+cell-1,cell-2,1,new Color(255,215,151,35));
+    rect(rx+cell-1,ry+1,1,cell-2,new Color(224,231,226,24));
+    rect(rx+1,ry+cell-1,cell-2,1,new Color(224,231,226,24));
   }
   // The mat around a small stage-one grid still reads as a real trunk floor.
   rect(board.x,board.y,board.w,2,new Color(255,218,153,90));
