@@ -11,7 +11,7 @@ import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
-import { computeStageLayout, drawBlockedCells, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { computeStageLayout, drawCarRear, drawTrunkGrid, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
@@ -273,9 +273,8 @@ export class StagePage {
     if (body) this.drawCarBody(body); else drawCarRear(g,750,this.height,0,this.car,this.trunk,look);
     if (trunk) {
       this.rect(g,this.trunk,new Color(28,22,24));
-      this.rect(g,{x:this.board.x-5,y:this.board.y-5,w:this.board.w+10,h:this.board.h+10},new Color(18,14,16));
-      this.showImage(this.trunkImage,trunk,this.board.x+this.board.w/2,this.board.y+this.board.h/2,this.board.w,this.board.h);
-      drawBlockedCells(this.floorMarks,750,this.height,0,this.board,this.level,this.cell);
+      this.showImage(this.trunkImage,trunk,this.trunk.x+this.trunk.w/2,this.trunk.y+this.trunk.h/2,this.trunk.w,this.trunk.h);
+      drawTrunkGrid(this.floorMarks,750,this.height,0,this.board,this.level,this.cell);
     } else drawTrunkFloor(g,750,this.height,0,this.trunk,this.board,this.level,this.cell);
     drawStageChrome(g,750,this.height,0,this.board,this.tray,this.tray.y-20,look);
   }
@@ -298,6 +297,7 @@ export class StagePage {
     this.placeLabel('Plate',this.trunk.y+this.trunk.h+(BODY_PLATE_Y-BODY_HOLE.bottom)*s);
     this.placeLabel('TrunkLidSeal',this.trunk.y-(BODY_HOLE.top-BODY_SEAL_Y)*s);
     this.lidSeal.color=new Color(150,28,32);
+    this.plate.color=new Color(150,28,32);
   }
 
   private drawMomIntroBubble(g: Graphics): void {
