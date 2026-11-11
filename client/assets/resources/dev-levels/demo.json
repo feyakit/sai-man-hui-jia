@@ -59,43 +59,43 @@
     {
       "id": 1,
       "shape": "I3",
-      "item": "sausage",
+      "item": "ricecake",
       "initialRotation": 1
     },
     {
       "id": 2,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "lanterns",
       "initialRotation": 0
     },
     {
       "id": 3,
       "shape": "Z4",
-      "item": "duck",
+      "item": "candy",
       "initialRotation": 3
     },
     {
       "id": 4,
       "shape": "Y5",
-      "item": "frozenbox",
+      "item": "couplets",
       "initialRotation": 0
     },
     {
       "id": 5,
       "shape": "Z4",
-      "item": "nutbox",
+      "item": "duck",
       "initialRotation": 2
     },
     {
       "id": 6,
       "shape": "Y5",
-      "item": "lotusroot",
+      "item": "lanterns",
       "initialRotation": 1
     },
     {
       "id": 7,
       "shape": "R6",
-      "item": "suitcase_l",
+      "item": "woven",
       "initialRotation": 1
     },
     {
@@ -107,73 +107,73 @@
     {
       "id": 9,
       "shape": "Z4",
-      "item": "duck",
+      "item": "candy",
       "initialRotation": 2
     },
     {
       "id": 10,
       "shape": "Z4",
-      "item": "coop",
+      "item": "duck",
       "initialRotation": 0
     },
     {
       "id": 11,
       "shape": "Y5",
-      "item": "frozenbox",
+      "item": "lanterns",
       "initialRotation": 1
     },
     {
       "id": 12,
       "shape": "L3",
-      "item": "ricecooker",
+      "item": "oil",
       "initialRotation": 2
     },
     {
       "id": 13,
       "shape": "Y5",
-      "item": "lotusroot",
+      "item": "couplets",
       "initialRotation": 2
     },
     {
       "id": 14,
       "shape": "Z4",
-      "item": "duck",
+      "item": "candy",
       "initialRotation": 3
     },
     {
       "id": 15,
       "shape": "Z4",
-      "item": "nutbox",
+      "item": "duck",
       "initialRotation": 1
     },
     {
       "id": 16,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "lanterns",
       "initialRotation": 1
     },
     {
       "id": 17,
       "shape": "Y5",
-      "item": "frozenbox",
+      "item": "couplets",
       "initialRotation": 0
     },
     {
       "id": 18,
       "shape": "Y5",
-      "item": "lotusroot",
+      "item": "lanterns",
       "initialRotation": 1
     },
     {
       "id": 19,
       "shape": "I2",
-      "item": "liquor",
+      "item": "winebox",
       "initialRotation": 1
     },
     {
       "id": 20,
       "shape": "Z4",
-      "item": "coop",
+      "item": "candy",
       "initialRotation": 3
     }
   ]
