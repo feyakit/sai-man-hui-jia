@@ -1,5 +1,5 @@
 import { solve, type SolveResult } from './dlx';
-import { ITEMS } from './items';
+import { ITEMS, diversifySkins } from './items';
 import { createRng, shuffle } from './rng';
 import { orientations, SHAPES } from './shapes';
 import type { DifficultyStats, Level, LevelSolution, Placement, Rotation, ShapeId, VehicleTemplate } from './types';
@@ -62,10 +62,11 @@ export function generateLevel(template: VehicleTemplate, cfg: GeneratorConfig, s
     const indices = shuffle(shapes.map((_,index) => index), random);
     const level: Level = {
       ...board,
-      pieces:indices.map((source,index) => ({
+      // Same shapes, ids and rotations as before; only the drawn cargo is mixed across skins.
+      pieces:diversifySkins(indices.map((source,index) => ({
         id:index+1, shape:shapes[source], item:ITEMS[shapes[source]].key,
         initialRotation:(cfg.randomInitialRotation === false ? 0 : Math.floor(random()*4)) as Rotation,
-      })),
+      }))),
     };
     const placements = indices.map((source,index) => {
       const {x,y,rotation} = pieces[source];
