@@ -1,5 +1,5 @@
-import { freeCards, isBlocked, PACK_SIZE, SLOT_CAPACITY, slotInsertIndex } from './rules';
-import type { StackCard, StackLevel, StackSolveResult } from './types';
+import { freeCards, isBlocked, PACK_SIZE, SLOT_CAPACITY, slotInsertIndex } from './stack-rules';
+import type { StackCard, StackLevel, StackSolveResult } from './stack-types';
 
 export interface StackSolveOptions {
   readonly maxNodes?: number;

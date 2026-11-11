@@ -1,4 +1,4 @@
-import type { StackItemDef } from './types';
+import type { StackItemDef } from './stack-types';
 
 /** A deliberately distinct subset keeps the dense second pile readable at phone size. */
 export const STAGE1_ITEMS: readonly StackItemDef[] = [
