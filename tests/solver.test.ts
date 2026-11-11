@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { solve } from '../client/assets/scripts/core/dlx';
+import { skinsFor } from '../client/assets/scripts/core/items';
 import { generateLevel, type GeneratorConfig } from '../client/assets/scripts/core/generator';
 import { createRng, shuffle } from '../client/assets/scripts/core/rng';
 import { validateSolution } from '../client/assets/scripts/core/validate';
@@ -38,6 +39,20 @@ describe('generator', () => {
    expect(validateSolution(level,solution.placements).ok).toBe(true);
   }
  },30000);
+ it('mixes cargo skins at runtime without changing shapes', () => {
+  for (let i=0;i<50;i++) {
+   const {level}=generateLevel(template,cfg,'skin'+i);
+   const counts=new Map<string,number>();
+   for (const piece of level.pieces) {
+    expect(skinsFor(piece.shape).map(skin => skin.key)).toContain(piece.item);
+    counts.set(piece.item,(counts.get(piece.item) ?? 0)+1);
+   }
+   for (const shape of new Set(level.pieces.map(p => p.shape))) {
+    const same=level.pieces.filter(p => p.shape === shape);
+    expect(new Set(same.map(p => p.item)).size).toBe(Math.min(same.length,skinsFor(shape).length));
+   }
+  }
+ });
  it('stops when constraints cannot be met', () => {
   expect(() => generateLevel(template,{...cfg,minPieces:20,maxPieces:20,maxAttempts:2,maxPartitionTries:10},'no')).toThrow();
  });

@@ -65,19 +65,19 @@
     {
       "id": 2,
       "shape": "Y5",
-      "item": "lanterns",
+      "item": "scallion",
       "initialRotation": 0
     },
     {
       "id": 3,
       "shape": "Z4",
-      "item": "candy",
+      "item": "milkflat",
       "initialRotation": 3
     },
     {
       "id": 4,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "dryfish",
       "initialRotation": 0
     },
     {
@@ -89,13 +89,13 @@
     {
       "id": 6,
       "shape": "Y5",
-      "item": "lanterns",
+      "item": "giftstack",
       "initialRotation": 1
     },
     {
       "id": 7,
       "shape": "R6",
-      "item": "woven",
+      "item": "suitcase_l",
       "initialRotation": 1
     },
     {
@@ -113,7 +113,7 @@
     {
       "id": 10,
       "shape": "Z4",
-      "item": "duck",
+      "item": "dates",
       "initialRotation": 0
     },
     {
@@ -125,55 +125,55 @@
     {
       "id": 12,
       "shape": "L3",
-      "item": "oil",
+      "item": "pomelo",
       "initialRotation": 2
     },
     {
       "id": 13,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "scallion",
       "initialRotation": 2
     },
     {
       "id": 14,
       "shape": "Z4",
-      "item": "candy",
+      "item": "noodles",
       "initialRotation": 3
     },
     {
       "id": 15,
       "shape": "Z4",
-      "item": "duck",
+      "item": "milkflat",
       "initialRotation": 1
     },
     {
       "id": 16,
       "shape": "Y5",
-      "item": "lanterns",
+      "item": "dryfish",
       "initialRotation": 1
     },
     {
       "id": 17,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "giftstack",
       "initialRotation": 0
     },
     {
       "id": 18,
       "shape": "Y5",
-      "item": "lanterns",
+      "item": "couplets",
       "initialRotation": 1
     },
     {
       "id": 19,
       "shape": "I2",
-      "item": "winebox",
+      "item": "liquor",
       "initialRotation": 1
     },
     {
       "id": 20,
       "shape": "Z4",
-      "item": "candy",
+      "item": "duck",
       "initialRotation": 3
     }
   ]

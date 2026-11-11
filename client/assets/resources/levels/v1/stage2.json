@@ -19,7 +19,7 @@
     {
       "id": 1,
       "shape": "T4",
-      "item": "nutbox",
+      "item": "pastry",
       "initialRotation": 2
     },
     {
@@ -55,13 +55,13 @@
     {
       "id": 7,
       "shape": "Z5",
-      "item": "painting",
+      "item": "fudeco",
       "initialRotation": 3
     },
     {
       "id": 8,
       "shape": "Z5",
-      "item": "fudeco",
+      "item": "hongbao",
       "initialRotation": 0
     },
     {

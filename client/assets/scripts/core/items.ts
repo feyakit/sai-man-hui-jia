@@ -15,6 +15,11 @@ export const EXTRA_ITEMS: readonly SkinDef[] = [
  {key:'ham',name:'金华火腿',shape:'L5'}, {key:'kumquat',name:'金桔盆栽',shape:'T5'}, {key:'fruitbasket',name:'果篮',shape:'U5'},
  {key:'apples',name:'苹果箱',shape:'V5'}, {key:'fudeco',name:'窗花礼包',shape:'Z5'}, {key:'larou',name:'腊肉',shape:'N5'},
  {key:'lanterns',name:'红灯笼',shape:'Y5'}, {key:'woven',name:'土特产编织袋',shape:'R6'},
+ {key:'scallion',name:'大葱',shape:'Y5'}, {key:'dryfish',name:'腊鱼',shape:'Y5'}, {key:'giftstack',name:'年货礼盒',shape:'Y5'},
+ {key:'dates',name:'红枣礼盒',shape:'Z4'}, {key:'noodles',name:'方便面',shape:'Z4'}, {key:'milkflat',name:'牛奶饮料',shape:'Z4'},
+ {key:'firecracker',name:'鞭炮礼盒',shape:'I3'}, {key:'guamian',name:'挂面礼盒',shape:'I4'}, {key:'pomelo',name:'柚子',shape:'L3'},
+ {key:'thermos',name:'保温壶',shape:'J4'}, {key:'pastry',name:'糕点礼盒',shape:'T4'}, {key:'driedgoods',name:'干货礼包',shape:'P5'},
+ {key:'hongbao',name:'红包',shape:'Z5'}, {key:'oven',name:'电烤箱',shape:'R6'},
 ];
 
 const byKey = new Map<string,ItemDef>([...Object.values(ITEMS),...EXTRA_ITEMS].map(item => [item.key,item]));
