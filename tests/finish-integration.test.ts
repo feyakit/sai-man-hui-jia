@@ -222,3 +222,18 @@ test('mom reveals every batch, appends only after a cleared tray, and finishes a
   finish.press(375,1004); expect(route).toHaveBeenCalledWith('replay');
   finish.press(375,1112); expect(route).toHaveBeenCalledWith('first');
 });
+
+test('restarting mom returns to the first batch and forgets the append sequence',() => {
+  let now=0; const page=new StagePage(new Node(),parseLevel(momLevel),() => now,vi.fn());
+  const p=page as any;
+  for (const placement of momSolution.placements.filter(entry => entry.pieceId <= 7)) p.session.drop(placement);
+  page.tick(); now=700; page.tick();
+  expect(p.session.pieces).toHaveLength(8);
+  expect(p.session.placements).toHaveLength(7);
+  p.restartStage(); page.tick();
+  expect(p.session.pieces).toHaveLength(7);
+  expect(p.session.pendingBatches).toBe(3);
+  expect(p.session.placements).toHaveLength(0);
+  expect(p.mom).toBeUndefined();
+  expect(p.momIntro.node.active).toBe(true);
+});
