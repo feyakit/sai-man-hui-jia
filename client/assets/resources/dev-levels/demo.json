@@ -77,19 +77,19 @@
     {
       "id": 4,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "frozenbox",
       "initialRotation": 0
     },
     {
       "id": 5,
       "shape": "Z4",
-      "item": "duck",
+      "item": "nutbox",
       "initialRotation": 2
     },
     {
       "id": 6,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "lotusroot",
       "initialRotation": 1
     },
     {
@@ -113,13 +113,13 @@
     {
       "id": 10,
       "shape": "Z4",
-      "item": "duck",
+      "item": "coop",
       "initialRotation": 0
     },
     {
       "id": 11,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "frozenbox",
       "initialRotation": 1
     },
     {
@@ -131,7 +131,7 @@
     {
       "id": 13,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "lotusroot",
       "initialRotation": 2
     },
     {
@@ -143,7 +143,7 @@
     {
       "id": 15,
       "shape": "Z4",
-      "item": "duck",
+      "item": "nutbox",
       "initialRotation": 1
     },
     {
@@ -155,13 +155,13 @@
     {
       "id": 17,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "frozenbox",
       "initialRotation": 0
     },
     {
       "id": 18,
       "shape": "Y5",
-      "item": "couplets",
+      "item": "lotusroot",
       "initialRotation": 1
     },
     {
@@ -173,7 +173,7 @@
     {
       "id": 20,
       "shape": "Z4",
-      "item": "duck",
+      "item": "coop",
       "initialRotation": 3
     }
   ]
