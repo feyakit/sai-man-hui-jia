@@ -271,3 +271,25 @@ export function drawTrunkFloor(graphics: Graphics, width: number, height: number
   rect(board.x,board.y,board.w,2,new Color(255,218,153,90));
   rect(board.x,board.y+board.h-2,board.w,2,new Color(255,218,153,90));
 }
+
+// Barely-there cell lines and wheel-arch cells over the painted trunk carpet.
+export function drawTrunkGrid(graphics: Graphics, width: number, height: number, top: number, board: Rect, level: Pick<Level,'width'|'height'|'blocked'>, cell: number): void {
+  const p=topDown(width,height,top);
+  graphics.fillColor=new Color(255,226,170,18);
+  graphics.roundRect(p.x(board.x),p.y(board.y+board.h),board.w,board.h,6); graphics.fill();
+  graphics.strokeColor=new Color(255,214,140,120); graphics.lineWidth=3;
+  graphics.roundRect(p.x(board.x-3),p.y(board.y+board.h+3),board.w+6,board.h+6,8); graphics.stroke();
+  graphics.strokeColor=new Color(255,226,170,38); graphics.lineWidth=1.5;
+  for (let x=1;x<level.width;x++) { graphics.moveTo(p.x(board.x+x*cell),p.y(board.y)); graphics.lineTo(p.x(board.x+x*cell),p.y(board.y+board.h)); }
+  for (let y=1;y<level.height;y++) { graphics.moveTo(p.x(board.x),p.y(board.y+y*cell)); graphics.lineTo(p.x(board.x+board.w),p.y(board.y+y*cell)); }
+  graphics.stroke();
+  for (const [x,y] of level.blocked) {
+    const rx=board.x+x*cell, ry=board.y+y*cell;
+    graphics.fillColor=new Color(14,11,13,235);
+    graphics.roundRect(p.x(rx+2),p.y(ry+cell-2),cell-4,cell-4,10); graphics.fill();
+    graphics.strokeColor=new Color(246,195,67,120); graphics.lineWidth=2;
+    graphics.moveTo(p.x(rx+16),p.y(ry+cell-16)); graphics.lineTo(p.x(rx+cell-16),p.y(ry+16));
+    graphics.moveTo(p.x(rx+16),p.y(ry+16)); graphics.lineTo(p.x(rx+cell-16),p.y(ry+cell-16));
+    graphics.stroke();
+  }
+}
