@@ -29,7 +29,7 @@ import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, controlContentLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
 import { ITEMS } from '../client/assets/scripts/core/items';
-import { itemKey, itemMeta } from '../client/assets/scripts/core/items';
+import { itemKey, itemMeta, itemScale } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
 test('each item shows a code-drawn card with its short label until its art arrives',() => {
   const level=stage1('2027-01-15');
@@ -96,6 +96,13 @@ test('falls back to the shape item key when level data has an unknown skin', () 
   const piece={...stage1('2027-01-15').pieces[0],item:'not-a-cargo'};
   expect(itemKey(piece)).toBe('sugarcane');
   expect(itemMeta(piece).name).toBe('甘蔗');
+});
+
+test('keeps only the slim sausage and lotus-root art stretched vertically',() => {
+  const level=stage1('2027-01-15');
+  expect(itemScale({...level.pieces[0],shape:'I3',item:'sausage'})).toEqual({x:1,y:1.6});
+  expect(itemScale({...level.pieces[0],shape:'N5',item:'lotusroot'})).toEqual({x:1,y:1.12});
+  expect(itemScale(level.pieces[0])).toEqual({x:1,y:1});
 });
 
 test('phone layout reserves separate header, open trunk and tray bands',() => {
