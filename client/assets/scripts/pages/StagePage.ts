@@ -26,6 +26,7 @@ const BODY_PLATE_Y = 498, BODY_SEAL_Y = 72;
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
+interface TrayPan { id: number; startX: number; startY: number; startScroll: number; active: boolean }
 
 export class StagePage {
   readonly node: Node;
@@ -67,6 +68,10 @@ export class StagePage {
   private buttonH = 120;
   private cell = 0;
   private trayCell = 0;
+  private trayScrollX = 0;
+  private trayScrollMax = 0;
+  private trayContentWidth = 0;
+  private trayPan?: TrayPan;
   private width = 750;
   private height = 1334;
   private selected?: PieceDef;
@@ -344,9 +349,17 @@ export class StagePage {
       const text=this.node.getChildByName(`Button${i}`)?.getComponent(Label);
       if (text) text.color=cream;
     }
-    this.notice.string = this.selected ? `已选中 · ${itemMeta(this.selected).name}` : '轻点年货选中 · 拖进后备箱';
+    this.notice.string = this.selected ? `已选中 · ${itemMeta(this.selected).name}` :
+      this.trayScrollMax > 0 ? '轻点年货选中 · 拖进后备箱 · 托盘左右滑动' : '轻点年货选中 · 拖进后备箱';
     const total = this.level.mode === 'mom' ? this.session.totalPieces : this.session.pieces.length;
     this.packed.string = `已装车 ${this.session.placements.length} / ${total} 件`;
+    if (this.trayScrollMax > 0) {
+      const trackW=this.tray.w-40, trackY=this.height/2-(this.tray.y+this.tray.h-18);
+      const thumbW=Math.max(52,trackW*this.tray.w/this.trayContentWidth);
+      const thumbX=-trackW/2+(trackW-thumbW)*this.trayScrollX/this.trayScrollMax;
+      fill(this.controls,new Color(255,218,153,48),-trackW/2,trackY,trackW,4,2);
+      fill(this.controls,gold,thumbX,trackY,thumbW,4,2);
+    }
   }
 
   private drawControlIcon(g: Graphics,index: number,cx: number,cy: number,color: Color): void {
@@ -384,7 +397,7 @@ export class StagePage {
   private confirmRect(): Rect { return {x:225,y:this.height/2+20,w:300,h:120}; }
 
   private sync(): void {
-    if (this.level.mode === 'mom') this.layoutTray();
+    this.layoutTray();
     const active = new Set(this.session.pieces.map(piece => piece.id));
     for (const piece of this.allPieces) {
       const visible = active.has(piece.id), view = this.pieces.get(piece.id)!;
@@ -397,9 +410,10 @@ export class StagePage {
     return this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id));
   }
   private layoutTray(): void {
-    const unplaced = this.level.mode === 'mom' ? this.remainingPieces() : this.session.pieces;
-    const tray = trayLayout(unplaced,this.tray);
+    const tray = trayLayout(this.remainingPieces(),this.tray,piece => this.session.rotationFor(piece.id));
     this.slots = tray.slots; this.trayCell = tray.cell;
+    this.trayContentWidth = tray.contentWidth; this.trayScrollMax = tray.maxScroll;
+    this.trayScrollX = Math.max(0,Math.min(this.trayScrollX,this.trayScrollMax));
   }
   private updateTrayState(): void {
     const show=this.remainingPieces().length === 0 && this.level.mode !== 'mom';
@@ -432,12 +446,15 @@ export class StagePage {
     const rotation = this.session.rotationFor(piece.id);
     const size = placement ? this.cell : this.trayCell;
     const box = dimensions(piece,rotation);
-    const slot = this.slots.find(s => s.piece.id === piece.id)?.rect ?? this.tray;
+    const slot = this.slots.find(s => s.piece.id === piece.id)?.rect;
     const rect = placement ? {x:this.board.x+placement.x*size,y:this.board.y+placement.y*size,w:box.w*size,h:box.h*size} :
-      {x:slot.x+(slot.w-box.w*size)/2,y:slot.y+(slot.h-box.h*size)/2,w:box.w*size,h:box.h*size};
+      {x:(slot?.x ?? this.tray.x)-this.trayScrollX+((slot?.w ?? this.tray.w)-box.w*size)/2,
+       y:(slot?.y ?? this.tray.y)+((slot?.h ?? this.tray.h)-box.h*size)/2,w:box.w*size,h:box.h*size};
     view.rect=rect; view.rotation=rotation; view.size=size;
     this.drawPiece(piece,rotation,size,false);
     this.position(view,rect.x+rect.w/2,rect.y+rect.h/2);
+    view.node.active=!!placement ||
+      (rect.x >= this.tray.x-0.5 && rect.x+rect.w <= this.tray.x+this.tray.w+0.5);
   }
   private position(view: PieceView,x: number,y: number): void { view.node.setPosition(x-375,this.height/2-y); }
   private drawPiece(piece: PieceDef,rotation: Rotation,size: number,held: boolean,failed = false): void {
@@ -563,16 +580,36 @@ export class StagePage {
     if (button) { if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action(); return; }
     if (this.drag.active) return;
     // The entire grid bounding region includes the gaps between occupied cells.
-    const piece=this.session.pieces.slice().reverse().find(piece => inRect(p,this.pieces.get(piece.id)!.rect));
+    const piece=this.session.pieces.slice().reverse().find(piece => {
+      const view=this.pieces.get(piece.id)!;
+      return view.node.active && inRect(p,view.rect);
+    });
     if (piece && this.selected && piece.id !== this.selected.id) {
       const old=this.selected; this.selected=undefined; this.renderPiece(old); this.updateControls();
     }
-    this.drag.begin({id:event.getID() ?? 0,start:p,time:this.now(),piece,fromTray:inRect(p,this.tray),
+    const id=event.getID() ?? 0,fromTray=inRect(p,this.tray);
+    if (fromTray && this.trayScrollMax > 0) this.trayPan={id,startX:p.x,startY:p.y,startScroll:this.trayScrollX,active:false};
+    this.drag.begin({id,start:p,time:this.now(),piece,fromTray,
       rotation:piece ? this.session.rotationFor(piece.id) : 0,offset:{x:0,y:0}});
   }
   private move(event: EventTouch): void {
+    const id=event.getID() ?? 0,p=this.point(event),pan=this.trayPan;
+    if (pan && pan.id === id) {
+      const dx=p.x-pan.startX,dy=p.y-pan.startY;
+      if (!pan.active && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)*1.25) {
+        pan.active=true;
+        this.drag.cancel(id);
+        this.selected=undefined;
+      }
+      if (pan.active) {
+        this.trayScrollX=Math.max(0,Math.min(pan.startScroll-dx,this.trayScrollMax));
+        this.sync();
+        return;
+      }
+      if (Math.abs(dy) > 8) this.trayPan=undefined;
+    }
     const previous=this.drag.active?.mode;
-    const gesture=this.drag.move(event.getID() ?? 0,this.point(event));
+    const gesture=this.drag.move(id,p);
     if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
     if (previous !== 'drag') {
       this.sounds.play('pickup');
@@ -628,7 +665,10 @@ export class StagePage {
     }
   }
   private end(event: EventTouch): void {
-    const released=this.drag.release(event.getID() ?? 0,this.point(event),this.now());
+    const id=event.getID() ?? 0,pan=this.trayPan;
+    this.trayPan=undefined;
+    if (pan?.active) { this.drag.cancel(id); return; }
+    const released=this.drag.release(id,this.point(event),this.now());
     if (!released) return;
     const {gesture:g,tap}=released;
     if (this.session.expired) { this.cancelDrag(); this.sync(); return; }
@@ -728,6 +768,6 @@ export class StagePage {
     this.momIntroUntil=this.level.mode === 'mom' ? this.now()+MOM_INTRO_MS : 0;
     this.sync(); this.updateOverlay();
   }
-  private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
-  private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
+  private cancelDrag(): void { this.trayPan=undefined; if (this.drag.cancel()) this.sync(); }
+  private cancel(event: EventTouch): void { this.trayPan=undefined; if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
 }
