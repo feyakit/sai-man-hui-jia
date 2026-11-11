@@ -203,3 +203,17 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 截图（390×844，DPR 2）——`/workspace/play-check/task6/stage1.png`（第 1 关初始）、`/workspace/play-check/task6/stage2.png`（第 2 关两行托盘）、`/workspace/play-check/task6/mom.png`（`?mode=mom` 妈妈说气泡）；另附 `/workspace/play-check/task6/stage1-loaded.png`（第 1 关 4/4 装车后）。
 - 部分/限制——截图来自 Web Mobile 正式构建产物 + Chromium 390×844 视口（DPR 2），不是实体手机；车型差异为代码配色映射，未替换既有的年货/背景/车尾等占位 PNG，主视觉全部由 `Graphics` 绘制；未实测真机帧率、触感或音频。Actions 未运行 `gh run watch`，不宣称 CI 全绿。
 - 完整验收结论写入仓库外 `/workspace/task6-report.md`；PR 描述已逐项标注通过/部分/未做。
+
+## 2026-11-11 · 任务 7：外观打磨
+
+- 基于最新 `work/m1-core`（`d4cf05f`）创建 `codex/v1-7-polish`；Draft PR #10：https://github.com/feyakit/sai-man-hui-jia/pull/10，目标 `work/m1-core`，不修改 main、不合并、不运行 `gh run watch`。实现提交 `bde693c`、`04e560c`、`1469edb`、`e01044a`、`ca9a4cd`、`b51d178`。
+- 通过——年货配色：新增 `client/assets/scripts/ui/ItemArt.ts`，白酒青花白蓝、牛奶白绿、甘蔗绿紫、坚果棕、冻品冰蓝、电视灰黑、年画暖金、腊鸭烟熏棕、行李箱深蓝/紫等 19 类色板互不重复；年货外轮廓加粗为深色，后备箱内胆、网格与箱底改为中性深灰，红车与年货对比明显。
+- 通过——物品特征：每类年货增加代表性图形，包括白酒瓶身、牛奶利乐包、甘蔗捆绳、坚果礼盒丝带、冻品雪花、电视屏幕、年画卷轴、腊鸭悬挂绳、鱼尾、行李箱把手与锁扣、拉杆包提带、被子绑带、鸡鸭笼栏、闸蟹礼盒等；横长件的图形按箱体宽度放大，异形件图形按实际占格重心定位。
+- 通过——按钮排版：控制图标固定在按钮左侧图标列，“旋转 90°”等文字拥有独立文字区并统一为 28px，图标与文字不再重叠。
+- 通过——空托盘：普通关货物全部装车后，空托盘显示红金对勾徽章、“已全部装车”“福气满箱 · 准备出发”和对称金线装饰；撤销返盘后提示自动隐藏。
+- 通过——顶部留白：普通关后备箱整体下移 20 个设计像素（`carTop` 266→286），HUD 下沿到“福”横条上沿保留 100 个以上设计像素，390×844 截图中顶部不拥挤。
+- 通过/未改——玩法规则、计分/计时、撤销、旋转、妈妈追加和全部关卡数据均未修改；`levels:v1` 执行后无文件差异。
+- 验证——`npm test`：79 通过、1 个既有性能测试默认跳过，含 typecheck，行覆盖率 98.76%；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点），未产生关卡文件差异；`/workspace/build-play.sh origin/codex/v1-7-polish --no-publish` 成功，产物为 `b51d178`，本地验收 `result.json` 为 `ok: true`、`dragPlaced: true`，无页面/控制台错误。
+- 截图（390×844，DPR 1）——`/workspace/play-check/task7/stage1.png`（第 1 关初始）、`/workspace/play-check/task7/stage1-loaded.png`（第 1 关 4/4 装车、空托盘提示）、`/workspace/play-check/task7/stage2.png`（第 2 关 10 件托盘）、`/workspace/play-check/task7/mom.png`（`?mode=mom` 妈妈说气泡）。
+- 部分/限制——截图来自 Web Mobile 正式产物 + Chromium 390×844 视口，不是实体手机；第 2 关 10 件托盘单格约 44 设计像素，图形特征配合分类色和 2–3 字名称识别，未实测真机小屏触控手感、帧率或音频；第 1 关装满图通过把测试夹具落位写入运行时会话后截图，以保留空托盘提示画面，未改变正式结算规则。
+- 完整验收结论写入仓库外 `/workspace/task7-report.md`。
