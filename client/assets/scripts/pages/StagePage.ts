@@ -1,7 +1,7 @@
 import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
-import { ITEMS } from '../core/items';
+import { itemKey, itemMeta } from '../core/items';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
@@ -344,7 +344,7 @@ export class StagePage {
       const text=this.node.getChildByName(`Button${i}`)?.getComponent(Label);
       if (text) text.color=cream;
     }
-    this.notice.string = this.selected ? `已选中 · ${ITEMS[this.selected.shape].name}` : '轻点年货选中 · 拖进后备箱';
+    this.notice.string = this.selected ? `已选中 · ${itemMeta(this.selected).name}` : '轻点年货选中 · 拖进后备箱';
     const total = this.level.mode === 'mom' ? this.session.totalPieces : this.session.pieces.length;
     this.packed.string = `已装车 ${this.session.placements.length} / ${total} 件`;
   }
@@ -502,7 +502,7 @@ export class StagePage {
   // Real item art: one Sprite per piece, rotated as a whole (art is drawn for rotation 0).
   // Until the frame is available the coloured-cell fallback is drawn instead.
   private drawPieceArt(piece: PieceDef,view: PieceView,rotation: Rotation,size: number,w: number,h: number,held: boolean,failed: boolean,chosen: boolean): boolean {
-    const key=ITEMS[piece.shape].key;
+    const key=itemKey(piece);
     const frame=this.itemFrames.get(key);
     if (!frame) {
       if (!this.itemFrames.has(key)) {
@@ -510,7 +510,7 @@ export class StagePage {
         void loadArt(`items/${key}`).then(loaded => {
           if (!loaded || !this.node.isValid) return;
           this.itemFrames.set(key,loaded);
-          for (const other of this.allPieces) if (ITEMS[other.shape].key === key) {
+          for (const other of this.allPieces) if (itemKey(other) === key) {
             const pv=this.pieces.get(other.id)!;
             if (pv.size) this.drawPiece(other,pv.rotation,pv.size,pv.held,pv.failed);
           }

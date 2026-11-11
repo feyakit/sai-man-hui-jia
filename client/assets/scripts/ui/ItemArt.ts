@@ -1,5 +1,5 @@
 import { Color, Graphics } from 'cc';
-import { ITEMS } from '../core/items';
+import { itemKey } from '../core/items';
 import type { PieceDef } from '../core/types';
 
 export interface ItemTone {
@@ -35,7 +35,7 @@ const tones: Record<string,ItemTone> = {
 const fallback: ItemTone = {hex:'#4E7D78',base:new Color(78,125,120),edge:new Color(30,55,52),accent:new Color(238,196,105),light:new Color(128,170,161)};
 
 export function itemTone(piece: PieceDef): ItemTone {
-  return tones[ITEMS[piece.shape].key] ?? fallback;
+  return tones[itemKey(piece)] ?? fallback;
 }
 
 function block(g: Graphics,color: Color,x: number,y: number,w: number,h: number,r = 0): void {
@@ -64,7 +64,7 @@ function dot(g: Graphics,color: Color,x: number,y: number,r: number): void {
 
 /** A compact, upright cargo emblem that stays legible at tray and board sizes. */
 export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: number,height: number,labelHeight: number,tone: ItemTone): void {
-  const key=ITEMS[piece.shape].key;
+  const key=itemKey(piece);
   const room=Math.max(12,height-labelHeight-8), s=Math.max(12,Math.min(size*.95,room));
   const long=Math.max(20,Math.min(width*.7,size*2.45));
   const y=0, lw=Math.max(1,Math.min(3,s*.07));

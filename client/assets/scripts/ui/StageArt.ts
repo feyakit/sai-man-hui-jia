@@ -1,5 +1,5 @@
 import { Color, Graphics } from 'cc';
-import { ITEMS } from '../core/items';
+import { itemMeta } from '../core/items';
 import type { Level, PieceDef } from '../core/types';
 import type { Rect } from '../game/InteractionGeometry';
 
@@ -42,8 +42,8 @@ const shorts: Record<string,string> = {
   quilt:'被子', frozenbox:'冻品', tv:'电视', coop:'鸡鸭笼', crab:'闸蟹',
   painting:'年画', lotusroot:'莲藕', couplets:'春联', suitcase_l:'行李箱',
 };
-export function itemName(piece: PieceDef): string { return ITEMS[piece.shape].name; }
-export function itemShortName(piece: PieceDef): string { return shorts[ITEMS[piece.shape].key] ?? itemName(piece); }
+export function itemName(piece: PieceDef): string { return itemMeta(piece).name; }
+export function itemShortName(piece: PieceDef): string { return shorts[itemMeta(piece).key] ?? itemName(piece); }
 
 export function controlContentLayout(rect: Rect): {iconX: number; textX: number} {
   return {iconX:rect.x+34,textX:rect.x+(rect.w+62)/2};

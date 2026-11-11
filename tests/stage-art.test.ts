@@ -29,6 +29,7 @@ import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, controlContentLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
 import { ITEMS } from '../client/assets/scripts/core/items';
+import { itemKey, itemMeta } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
 test('each item shows a code-drawn card with its short label until its art arrives',() => {
   const level=stage1('2027-01-15');
@@ -69,6 +70,32 @@ test('loaded item art replaces the card and rotates the whole picture',async () 
   // The art is authored for rotation 0, so the sprite keeps the unrotated 2×1 box.
   expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenLastCalledWith(80,40);
   assets.load.mockImplementation(async () => undefined);
+});
+
+test('uses each piece item key before its shape default', async () => {
+  const frame={name:'duck-art'};
+  assets.load.mockImplementation(async (file: string) => file === 'items/duck' ? frame : undefined);
+  const level=stage1('2027-01-15');
+  const base=level.pieces[0];
+  const piece={...base,item:'duck'};
+  expect(itemKey(piece)).toBe('duck');
+  expect(itemMeta(piece).name).toBe('腊鸭');
+  expect(itemTone(piece).hex).toBe(itemTone({...base,shape:'Z4',item:'duck'}).hex);
+  const page=new StagePage(new Node(),{...level,pieces:[...level.pieces.slice(1),piece]},() => 0,vi.fn());
+  (page as unknown as TestPage).drawPiece(piece,0,40,false);
+  await new Promise(resolve => setTimeout(resolve,0));
+  expect(assets.load.mock.calls.some(([name]) => name === 'items/duck')).toBe(true);
+  const root=page.node.getChildByName(`Piece${piece.id}`)!;
+  const image=root.getChildByName(`Sprite${piece.id}`)!;
+  expect(image.getComponent(Sprite)!.spriteFrame).toBe(frame);
+  expect(image.getComponent(Sprite)!.enabled).toBe(true);
+  assets.load.mockImplementation(async () => undefined);
+});
+
+test('falls back to the shape item key when level data has an unknown skin', () => {
+  const piece={...stage1('2027-01-15').pieces[0],item:'not-a-cargo'};
+  expect(itemKey(piece)).toBe('sugarcane');
+  expect(itemMeta(piece).name).toBe('甘蔗');
 });
 
 test('phone layout reserves separate header, open trunk and tray bands',() => {
