@@ -1,7 +1,7 @@
 import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
-import { itemKey, itemMeta } from '../core/items';
+import { itemKey, itemMeta, itemScale } from '../core/items';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
 import { StageSession } from '../game/StageSession';
 import { DragController, type Gesture } from '../game/DragController';
@@ -552,9 +552,12 @@ export class StagePage {
     const sn=view.sprite.node;
     sn.getComponent(UITransform)!.setContentSize(fitted.w,fitted.h);
     sn.angle=90*rotation; sn.setPosition(0,0);
+    const artScale=itemScale(piece);
+    sn.setScale(artScale.x,artScale.y,1);
     const shadowNode=view.shadow.node;
     shadowNode.getComponent(UITransform)!.setContentSize(fitted.w,fitted.h);
     shadowNode.angle=90*rotation; shadowNode.setPosition(4,-6);
+    shadowNode.setScale(artScale.x,artScale.y,1);
     view.shadow.spriteFrame=frame;
     view.shadow.color=new Color(18,12,16,80);
     view.shadow.enabled=placed;
