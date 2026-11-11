@@ -14,7 +14,10 @@ export class Api {
   }
 
   async loadChallenge(): Promise<Level> {
-    const level = await this.load(`dev-levels/${this.platform.levelFilename()}`);
+    const path = this.platform.hasLevelOverride()
+      ? `dev-levels/${this.platform.levelFilename()}`
+      : 'levels/v1/stage2';
+    const level = await this.load(path);
     if (level.stage !== 2) throw new Error('挑战关数据无效');
     return level;
   }
