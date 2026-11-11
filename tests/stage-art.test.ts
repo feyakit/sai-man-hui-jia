@@ -68,7 +68,7 @@ test('loaded item art replaces the card and rotates the whole picture',async () 
   expect(title.active).toBe(false);
   expect(image.angle).toBe(90);
   // The art is authored for rotation 0, so the sprite keeps the unrotated 2×1 box.
-  expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenLastCalledWith(80,40);
+  expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenLastCalledWith(80*1.025,40*1.025);
   assets.load.mockImplementation(async () => undefined);
 });
 

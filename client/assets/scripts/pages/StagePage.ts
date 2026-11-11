@@ -24,7 +24,8 @@ const BODY_HOLE = {left:159,right:878,top:104,bottom:425};
 const BODY_SLICE = {top:150,bottom:380};
 const BODY_PLATE_Y = 498, BODY_SEAL_Y = 72;
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
-interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
+const ITEM_OVERSCAN = 1.025;
+interface PieceView { node: Node; sprite: Sprite; shadow: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
 interface TrayPan { id: number; startX: number; startY: number; startScroll: number; active: boolean }
 
@@ -154,12 +155,14 @@ export class StagePage {
     for (const piece of this.allPieces) {
       const node = uiNode(`Piece${piece.id}`,this.node,1,1);
       const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
+      const shadowSprite = uiNode(`Shadow${piece.id}`,node,1,1).addComponent(Sprite);
+      shadowSprite.sizeMode=Sprite.SizeMode.CUSTOM; shadowSprite.trim=false; shadowSprite.enabled=false;
       const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
       sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
       const featureNode = uiNode(`Feature${piece.id}`,node,1,1);
       const feature = featureNode.addComponent(Graphics);
       const title = label(node,`Item${piece.id}`,itemShortName(piece),18,0,0);
-      this.pieces.set(piece.id,{node,sprite,graphics,featureNode,feature,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
+      this.pieces.set(piece.id,{node,sprite,shadow:shadowSprite,graphics,featureNode,feature,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
@@ -465,7 +468,7 @@ export class StagePage {
     view.node.getComponent(UITransform)!.setContentSize(w,h);
     const chosen=this.selected?.id === piece.id;
     if (this.drawPieceArt(piece,view,rotation,size,w,h,held,failed,chosen)) return;
-    view.sprite.enabled=false; view.title.node.active=true;
+    view.sprite.enabled=false; view.shadow.enabled=false; view.title.node.active=true;
     const tone=itemTone(piece);
     const bodyColor=failed ? new Color(172,35,37) : tone.base;
     const outline=failed ? new Color(92,20,22) : tone.edge;
@@ -537,6 +540,8 @@ export class StagePage {
     }
     const g=view.graphics;
     const base=dimensions(piece,0);
+    const fitted={w:base.w*size*ITEM_OVERSCAN,h:base.h*size*ITEM_OVERSCAN};
+    const placed=!held && this.session.placements.some(p => p.pieceId === piece.id);
     // Soft glow under the occupied cells shows selection / pickup without hiding the art.
     for (const [x,y] of pieceCells(piece,rotation)) {
       const cx=x*size-w/2, cy=h/2-(y+1)*size;
@@ -545,8 +550,14 @@ export class StagePage {
       if (failed) fill(g,new Color(220,40,40,90),cx+1,cy+1,size-2,size-2,Math.max(6,size*.18));
     }
     const sn=view.sprite.node;
-    sn.getComponent(UITransform)!.setContentSize(base.w*size,base.h*size);
+    sn.getComponent(UITransform)!.setContentSize(fitted.w,fitted.h);
     sn.angle=90*rotation; sn.setPosition(0,0);
+    const shadowNode=view.shadow.node;
+    shadowNode.getComponent(UITransform)!.setContentSize(fitted.w,fitted.h);
+    shadowNode.angle=90*rotation; shadowNode.setPosition(4,-6);
+    view.shadow.spriteFrame=frame;
+    view.shadow.color=new Color(18,12,16,80);
+    view.shadow.enabled=placed;
     view.sprite.spriteFrame=frame; view.sprite.enabled=true;
     view.sprite.color=failed ? new Color(255,150,150) : Color.WHITE;
     view.title.node.active=false;
