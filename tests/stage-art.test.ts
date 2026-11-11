@@ -58,6 +58,7 @@ test('phone layout reserves separate header, open trunk and tray bands',() => {
   expect(frame.board.x+frame.board.w).toBeLessThanOrEqual(frame.trunk.x+frame.trunk.w);
   expect(frame.board.y+frame.board.h).toBeLessThanOrEqual(frame.trunk.y+frame.trunk.h);
   expect(frame.trunk.y).toBeGreaterThan(216);
+  expect(frame.trunk.y-35-216).toBeGreaterThanOrEqual(100);
   expect(frame.car.y+frame.car.h).toBeLessThan(frame.tray.y);
   expect(frame.tray.y+frame.tray.h).toBeLessThan(frame.buttonY);
   expect(frame.cell).toBeGreaterThanOrEqual(76);

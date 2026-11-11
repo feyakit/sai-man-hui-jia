@@ -54,7 +54,7 @@ export function computeStageLayout(level: Pick<Level,'width'|'height'|'mode'>, h
   const buttonY=height-bottom-24-buttonH;
   const trayH=Math.max(300,Math.min(420,height*.26));
   const trayY=buttonY-24-trayH;
-  const carTop=(level.mode === 'mom' ? 326 : 266)+top;
+  const carTop=(level.mode === 'mom' ? 326 : 286)+top;
   const carBottom=Math.max(carTop+430,trayY-46);
   const car={x:14,y:carTop,w:722,h:carBottom-carTop};
   const trunk={x:44,y:carTop+78,w:662,h:Math.max(250,car.h-78-144)};
