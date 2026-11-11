@@ -166,3 +166,14 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 本机 `npm test`：**58 通过、1 个既有性能测试默认跳过**；包含 typecheck，核心行覆盖率 98.76%（不是运行时 UI/音频覆盖率）。新增全部音频路径、缺失/解码失败/同步抛错、缓存、未就绪不补播、播放异常和销毁保护测试。
 - `npm run art:placeholders`：32 张 PNG 生成通过；`npm run art:check`：全部通过。第 1/2 项提交 `0d7150a`，第 3 项提交 `927f4f9`，均已推送；第 4 项独立提交推送。
 - PR #6 保持 draft，base `work/m1-core`；不修改 main、不合并、不运行 gh run watch、不宣称 CI 全绿。本轮没有重新打包 Web Mobile；没有真实 MP3 播放、Cocos 浏览器渲染、45/60fps 或 4G 首屏 ≤3 秒实测。车图/UI/彩纸已提供生成与校验，当前页面仍沿用原有静态 Graphics/UI；妈妈/手指/彩纸等后续流程图片未挂接，行李图片替换已接入。
+
+## 2026-11-11 · 任务 4：塞满结算与收尾交付
+
+- 基于任务 3 合并提交 f89dbdc，分支 codex/v1-4-finish；实现/测试提交依次为 0f304a4、8052b0c、38a88d8、6f1861a。Draft PR #7：https://github.com/feyakit/sai-man-hui-jia/pull/7，目标 work/m1-core。
+- 规格 4.9：通过——0–300ms 保留最后落位反馈；300–700ms 关盖（sedan_v1_lid 图片与 Graphics 兜底）；700–1000ms 下沉 12px、回弹到 6px；1000/1300ms 两次亮尾灯；1200–2500ms 彩纸与中央“塞满了！回家！”。纯函数 finishTimeline 与 FinishPlayback 控制时序，点击跳至末帧，不补播音效或震动、不穿透按钮。固定池不超过 120 粒子，结束/跳过/销毁全部停用回收。
+- 部分——700ms trunk_slam 与 navigator.vibrate(40)、1000/1300ms horn 两次的调用和容错单测通过，但正式 MP3 未交付，真实发声和设备震动未实测。
+- 通过——2500ms 出按钮，第 1 关“下一关”进入第 2 关，第 2 关“再来一次”重开当前关；“试试妈妈模式”保留 mom 动作接口，显示筹备中提示，点击提示重开第 2 关。未做——妈妈模式本体及完成后的“回第 1 关”等按钮，按任务范围留后续。
+- 收尾复跑 npm test：67 通过、1 个既有性能测试默认跳过，包含 typecheck；npm run art:check 通过；npm run levels:v1 通过（stage2 10 件、11 个完整解、首解 3022 节点），未产生关卡文件差异。新增测试覆盖时间点、跨帧一次性、跳帧、粒子上限/复用/回收、图片兜底、震动缺失/异常、冻结输入与 Bootstrap 路由。核心覆盖率不代表 UI 覆盖率。
+- 现有预览截图位于 /workspace/repo/tools/out/finish-preview（仓库相对路径 tools/out/finish-preview）：300.png、700.png、850.png、1000.png、1300.png、1800.png、2500.png。已查验 1800ms 截图，红金车盖、春节灯笼、夜路与彩纸体现满载年货归家。截图来自 Chromium + Canvas 适配器渲染 FinishView 源码，不是正式 Cocos/Web Mobile 或完整装车流程验收；300ms 独立预览没有原盘面。该目录被 git 忽略，截图仅保留本机，未上传 PR。
+- PR 描述已按 4.9 逐项标注通过/部分/未做；完整结论与截图路径写入仓库外 /workspace/task4-report.md。正式音效、设备震动、Cocos 渲染与真机性能仍待后续验证。
+- 不修改 main、不合并、不改交互规则、不重新打包 Web Mobile。Actions 额度阻塞，未运行 gh run watch，不宣称 CI 全绿。
