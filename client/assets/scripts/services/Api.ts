@@ -6,13 +6,22 @@ import { WebPlatform } from '../platform/WebPlatform';
 export class Api {
   constructor(private readonly platform: WebPlatform) {}
 
-  async loadChallenge(): Promise<Level> {
-    const name = this.platform.levelFilename();
+  private async load(path: string): Promise<Level> {
     const asset = await new Promise<JsonAsset>((resolve,reject) => {
-      resources.load(`dev-levels/${name}`,JsonAsset,(error,value) => error ? reject(error) : resolve(value));
+      resources.load(path,JsonAsset,(error,value) => error ? reject(error) : resolve(value));
     });
-    const level = parseLevel(asset.json);
+    return parseLevel(asset.json);
+  }
+
+  async loadChallenge(): Promise<Level> {
+    const level = await this.load(`dev-levels/${this.platform.levelFilename()}`);
     if (level.stage !== 2) throw new Error('挑战关数据无效');
+    return level;
+  }
+
+  async loadMom(): Promise<Level> {
+    const level = await this.load('levels/v1/mom');
+    if (level.stage !== 3 || level.mode !== 'mom') throw new Error('妈妈模式数据无效');
     return level;
   }
 }

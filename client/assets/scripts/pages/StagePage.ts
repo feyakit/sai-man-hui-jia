@@ -17,7 +17,9 @@ const gold = new Color(246,195,67), gray = new Color(160,151,136);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const colors = [new Color(174,64,53),new Color(157,99,36),new Color(65,115,97),new Color(95,87,140)];
 const shadow = new Color(40,20,10,70);
+const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
+interface MomSequence { started: number; appended: boolean }
 
 export class StagePage {
   readonly node: Node;
@@ -31,6 +33,7 @@ export class StagePage {
   private readonly notice: Label;
   private readonly overlay: Node;
   private readonly overlayText: Label;
+  private readonly allPieces: readonly PieceDef[];
   private readonly pieces = new Map<number,PieceView>();
   private readonly drag = new DragController();
   private readonly buttons: {rect: Rect; action: () => void; duringDrag: boolean}[] = [];
@@ -59,24 +62,35 @@ export class StagePage {
   private readonly touchWorld = new Vec3();
   private readonly touchLocal = new Vec3();
   private readonly touchPoint: Point = {x:0,y:0};
+  private readonly momIntro: Label;
+  private readonly momLayer: Node;
+  private readonly momAvatar: Node;
+  private readonly momBubbleNode: Node;
+  private readonly momBubble: Label;
   private previewPlacement?: Placement;
   private modal: 'restart' | 'timeout' | undefined;
   private landscape = false;
+  private mom?: MomSequence;
+  private momIntroUntil = 0;
   private rotateTitle: Label;
   private readonly onHide = () => this.cancelDrag();
 
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: (action: FinishAction) => void) {
     this.node = uiNode('StagePage',parent,750,1334);
+    this.allPieces = [...level.pieces,...(level.mode === 'mom' ? (level.extras ?? []).flat() : [])];
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.packed = label(this.node,'Packed','',26,0,0);
     this.notice = label(this.node,'Notice','',24,0,0);
+    this.momIntro = label(this.node,'MomIntro','妈妈说：再带点东西！',28,0,0);
+    this.momIntro.color = red; this.momIntro.node.active = false;
+    this.momIntroUntil = level.mode === 'mom' ? now()+MOM_INTRO_MS : 0;
     label(this.node,'Title',GAME_TITLE,42,0,0);
     label(this.node,'Vehicle',`第 ${level.stage} 关 · 拖年货进后备箱`,27,0,0);
     this.preview = uiNode('DropPreview',this.node,750,1334).addComponent(Graphics);
-    for (const piece of level.pieces) {
+    for (const piece of this.allPieces) {
       const node = uiNode(`Piece${piece.id}`,this.node,1,1);
       const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
       const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
@@ -88,6 +102,25 @@ export class StagePage {
     this.rotateTitle = this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
     this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync(); });
     this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
+    this.momLayer = uiNode('MomAppear',this.node,750,1334);
+    this.momLayer.active = false;
+    const bubble = uiNode('MomBubble',this.momLayer,430,104);
+    this.momBubbleNode = bubble;
+    fill(bubble.addComponent(Graphics),cream,-215,-52,430,104,26);
+    this.momBubble = label(bubble,'MomBubbleText','等等！还有这个！',30,0,0);
+    this.momBubble.color = ink;
+    this.momAvatar = uiNode('MomAvatar',this.momLayer,180,180);
+    const momFallback = this.momAvatar.addComponent(Graphics);
+    fill(momFallback,red,-78,-78,156,156,78);
+    const momFallbackText = label(this.momAvatar,'MomFallbackText','妈',72,0,0);
+    momFallbackText.color = cream;
+    const momImage = uiNode('MomImage',this.momAvatar,170,170).addComponent(Sprite);
+    momImage.sizeMode = Sprite.SizeMode.CUSTOM; momImage.trim = false; momImage.enabled = false;
+    if (level.mode === 'mom') void loadArt('ui/mom').then(frame => {
+      if (!frame || !this.node.isValid) return;
+      momImage.spriteFrame = frame; momImage.enabled = true;
+      momFallback.enabled = false; momFallbackText.node.active = false;
+    });
     this.overlay = uiNode('InteractionOverlay',this.node,750,1334);
     this.overlay.addComponent(Graphics);
     this.overlayText = label(this.overlay,'Prompt','',38,0,50);
@@ -105,7 +138,7 @@ export class StagePage {
       game.off(Game.EVENT_HIDE,this.onHide); this.safeProbe?.remove();
     });
     this.tick();
-    for (const piece of level.pieces) {
+    for (const piece of this.allPieces) {
       void loadArt(`items/${ITEMS[piece.shape].key}`).then(frame => {
         if (!frame || !this.node.isValid) return;
         const v=this.pieces.get(piece.id)!;
@@ -143,6 +176,9 @@ export class StagePage {
       this.finishView!.render(this.finish.advance(this.now()-this.finishStarted));
       return;
     }
+    this.momIntro.node.active = this.level.mode === 'mom' && !this.mom && this.now() < this.momIntroUntil;
+    if (this.mom) this.updateMomSequence();
+    else if (this.session.readyForNextBatch && !this.cleared) this.startMomSequence();
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
       if (this.displayedSeconds >= 0 && seconds > 0 && seconds <= 10) this.sounds.play('tick');
@@ -157,17 +193,20 @@ export class StagePage {
 
   private layout(top: number, bottom: number): void {
     const extra = this.height-1334;
-    const boardTop = 205+top;
+    const boardTop = (this.level.mode === 'mom' ? 230 : 205)+top;
     const boardBottom = 850+extra-bottom;
     this.cell = Math.floor(Math.min(110,640/this.level.width,(boardBottom-boardTop-35)/this.level.height));
     this.board = {x:(750-this.cell*this.level.width)/2,y:boardTop+(boardBottom-boardTop-this.cell*this.level.height)/2,
       w:this.cell*this.level.width,h:this.cell*this.level.height};
     this.tray = {x:24,y:880+extra-bottom,w:702,h:270};
-    const tray = trayLayout(this.level.pieces,this.tray);
-    this.slots = tray.slots; this.trayCell = tray.cell;
-    this.placeLabel('Title',65+top); this.placeLabel('Vehicle',122+top);
-    this.placeLabel('Clock',172+top,190); this.placeLabel('Packed',172+top,-180);
+    this.layoutTray();
+    this.placeLabel('Title',65+top); this.placeLabel('Vehicle',this.level.mode === 'mom' ? 100+top : 122+top);
+    this.placeLabel('MomIntro',150+top);
+    this.placeLabel('Clock',(this.level.mode === 'mom' ? 190 : 172)+top,190);
+    this.placeLabel('Packed',(this.level.mode === 'mom' ? 190 : 172)+top,-180);
     this.placeLabel('Notice',860+extra-bottom);
+    this.momBubbleNode.setPosition(-75,this.height/2-735);
+    this.momAvatar.setPosition(300,this.height/2-795);
     for (const [i,button] of this.buttons.entries()) {
       button.rect.y = 1170+extra-bottom;
       this.placeLabel(`Button${i}`,button.rect.y+60,button.rect.x+button.rect.w/2-375);
@@ -208,7 +247,8 @@ export class StagePage {
     for (const [i,b] of this.buttons.entries()) this.rect(this.controls,b.rect,i === 0 ? (this.selected ? gold : gray) : red);
     this.rotateTitle.color = this.selected ? ink : cream;
     this.notice.string = this.selected ? `已选中 · ${ITEMS[this.selected.shape].name}` : '轻点选中 · 拖动装车 · 按按钮旋转';
-    this.packed.string = `已装车 ${this.session.placements.length} / ${this.level.pieces.length} 件`;
+    const total = this.level.mode === 'mom' ? this.session.totalPieces : this.session.pieces.length;
+    this.packed.string = `已装车 ${this.session.placements.length} / ${total} 件`;
   }
   private updateOverlay(): void {
     this.overlay.active = this.landscape || !!this.modal;
@@ -228,8 +268,21 @@ export class StagePage {
   private confirmRect(): Rect { return {x:225,y:this.height/2+20,w:300,h:120}; }
 
   private sync(): void {
-    for (const piece of this.level.pieces) this.renderPiece(piece);
+    if (this.level.mode === 'mom') this.layoutTray();
+    const active = new Set(this.session.pieces.map(piece => piece.id));
+    for (const piece of this.allPieces) {
+      const visible = active.has(piece.id), view = this.pieces.get(piece.id)!;
+      view.node.active = visible;
+      if (visible) this.renderPiece(piece);
+    }
     this.clearPreview(); this.updateControls();
+  }
+  private layoutTray(): void {
+    const unplaced = this.level.mode === 'mom'
+      ? this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id))
+      : this.session.pieces;
+    const tray = trayLayout(unplaced,this.tray);
+    this.slots = tray.slots; this.trayCell = tray.cell;
   }
   private renderPiece(piece: PieceDef): void {
     const view = this.pieces.get(piece.id)!;
@@ -238,7 +291,7 @@ export class StagePage {
     const rotation = this.session.rotationFor(piece.id);
     const size = placement ? this.cell : this.trayCell;
     const box = dimensions(piece,rotation);
-    const slot = this.slots.find(s => s.piece.id === piece.id)!.rect;
+    const slot = this.slots.find(s => s.piece.id === piece.id)?.rect ?? this.tray;
     const rect = placement ? {x:this.board.x+placement.x*size,y:this.board.y+placement.y*size,w:box.w*size,h:box.h*size} :
       {x:slot.x+(slot.w-box.w*size)/2,y:slot.y+(slot.h-box.h*size)/2,w:box.w*size,h:box.h*size};
     view.rect=rect; view.rotation=rotation; view.size=size;
@@ -285,9 +338,10 @@ export class StagePage {
       return;
     }
     if (this.landscape) return;
+    if (this.mom) return;
     if (this.modal) {
       if (inRect(p,this.confirmRect())) {
-        this.modal=undefined; this.session.restart(); this.selected=undefined; this.cleared=false; this.sync(); this.updateOverlay();
+        this.modal=undefined; this.restartStage();
       } else if (this.modal === 'restart' && p.y > this.confirmRect().y+130) { this.modal=undefined; this.updateOverlay(); }
       return;
     }
@@ -296,7 +350,7 @@ export class StagePage {
     if (button) { if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action(); return; }
     if (this.drag.active) return;
     // The entire grid bounding region includes the gaps between occupied cells.
-    const piece=this.level.pieces.slice().reverse().find(piece => inRect(p,this.pieces.get(piece.id)!.rect));
+    const piece=this.session.pieces.slice().reverse().find(piece => inRect(p,this.pieces.get(piece.id)!.rect));
     if (piece && this.selected && piece.id !== this.selected.id) {
       const old=this.selected; this.selected=undefined; this.renderPiece(old); this.updateControls();
     }
@@ -392,10 +446,12 @@ export class StagePage {
       tween(v.node).to(.18,{position:destination,scale:new Vec3(1,1,1)},{easing:'quadOut'}).start();
     }
     this.clearPreview(); this.updateControls();
-    if (this.session.solved && !this.cleared) this.beginFinish();
+    if (this.session.readyForNextBatch) this.startMomSequence();
+    else if (this.session.solved && !this.cleared) this.beginFinish();
   }
   private beginFinish(): void {
     this.cleared=true; this.selected=undefined;
+    this.momIntro.node.active=false; this.momLayer.active=false;
     this.finishStarted=this.now();
     this.finish=new FinishPlayback(cue => {
       this.sounds.play(cue.sound);
@@ -406,6 +462,55 @@ export class StagePage {
     this.finishView=new FinishView(this.node,this.level.stage,this.onClear);
     this.finishView.layout(this.height,this.board);
     this.finishView.render(this.finish.state);
+  }
+
+  private startMomSequence(): void {
+    if (this.mom || this.cleared || !this.session.readyForNextBatch) return;
+    this.cancelDrag();
+    this.selected=undefined;
+    this.momIntro.node.active=false;
+    this.momIntroUntil=0;
+    this.mom={started:this.now(),appended:false};
+    this.momLayer.active=true;
+    this.momBubble.string='等等！还有这个！';
+    this.momAvatar.setPosition(520,this.height/2-795);
+    tween(this.momAvatar).to(.24,{position:new Vec3(300,this.height/2-795,0)},{easing:'quadOut'}).start();
+    this.updateControls();
+  }
+
+  private updateMomSequence(): void {
+    if (!this.mom) return;
+    const elapsed=this.now()-this.mom.started;
+    if (!this.mom.appended && elapsed >= MOM_APPEAR_MS) {
+      const previous=new Set(this.session.pieces.map(piece => piece.id));
+      if (this.session.appendNextBatch()) {
+        const added=this.session.pieces.filter(piece => !previous.has(piece.id));
+        this.sync();
+        for (const piece of added) {
+          const view=this.pieces.get(piece.id)!;
+          const destination=view.node.position.clone();
+          view.node.setPosition(destination.x,destination.y+280,destination.z);
+          Tween.stopAllByTarget(view.node);
+          tween(view.node).to(.3,{position:destination},{easing:'bounceOut'}).start();
+        }
+        this.sounds.play('mom');
+        this.updateControls();
+      }
+      this.mom.appended=true;
+    }
+    if (this.mom.appended && elapsed >= MOM_APPEAR_MS+MOM_STAY_MS) {
+      this.mom=undefined;
+      this.momLayer.active=false;
+      this.sync();
+    }
+  }
+
+  private restartStage(): void {
+    this.session.restart();
+    this.selected=undefined; this.cleared=false; this.modal=undefined;
+    this.mom=undefined; this.momLayer.active=false;
+    this.momIntroUntil=this.level.mode === 'mom' ? this.now()+MOM_INTRO_MS : 0;
+    this.sync(); this.updateOverlay();
   }
   private cancelDrag(): void { if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }

@@ -119,7 +119,14 @@ export class StageSession {
   undo(): void {
     if (this.expired) return;
     const previous = this.history.pop();
-    if (previous) this.state = previous;
+    if (previous) {
+      for (const piece of this.pieces) {
+        if (!previous.rotations.has(piece.id)) {
+          previous.rotations.set(piece.id,this.state.rotations.get(piece.id) ?? piece.initialRotation);
+        }
+      }
+      this.state = previous;
+    }
   }
 
   private remember(): void {
