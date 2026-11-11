@@ -13,7 +13,7 @@ M1 核心规则和 M2 关卡工具已通过云端验收。Node.js 24 环境执�
 
 [官方构建与浏览器验收](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950) 提供 `trunk-home-web-mobile`。同一导出包在桌面鼠标与 Pixel 7 模拟触屏各通关两关，旋转、非法落点、拖回托盘、URL 直达及后台计时通过。实体手机仍待复测。
 
-仓库带有已验解的试玩关卡 `client/assets/resources/dev-levels/demo.json`。使用其他关卡时，在仓库根目录生成并复制开发关卡。通过 HTTP 打开构建目录的 `index.html`，或用 `node --import tsx tools/cocos/smoke-web-mobile.mjs <构建目录> <截图目录>` 复跑验收。也可用 `?level=demo` 直达挑战关。
+正式挑战关默认读取 `client/assets/resources/levels/v1/stage2.json`。仓库另带已验解的开发关卡 `client/assets/resources/dev-levels/demo.json`；只有 URL 带 `?level=demo` 等覆盖参数时才读取 `dev-levels/<名>`。使用其他关卡时，在仓库根目录生成并复制开发关卡。通过 HTTP 打开构建目录的 `index.html`，或用 `node --import tsx tools/cocos/smoke-web-mobile.mjs <构建目录> <截图目录>` 复跑验收。
 
 ## 尚未开发的里程碑
 

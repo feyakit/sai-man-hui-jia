@@ -121,6 +121,35 @@ test('missing vibration API and a throwing device never prevent finishing',() =>
   }
 });
 
+test('stage 1 opens with a looping guide from the first tray item to a legal drop',() => {
+  let now=0; const page=new StagePage(new Node(),stage1(fixture.date),() => now,vi.fn());
+  const p=page as any;
+  expect(p.guideNode.active).toBe(true);
+  expect(p.guidePlacement.pieceId).toBe(1);
+  expect(p.session.canDrop(p.guidePlacement)).toBe(true);
+  const start=p.guideHand.position.clone();
+  now=560; page.tick();
+  expect(p.guideHand.position.x).not.toBeCloseTo(start.x,3);
+  expect(p.guideHand.position.y).not.toBeCloseTo(start.y,3);
+});
+
+test('first touch hides stage 1 guide for the rest of the round',() => {
+  const page=new StagePage(new Node(),stage1(fixture.date),() => 0,vi.fn());
+  const p=page as any;
+  expect(p.guideNode.active).toBe(true);
+  p.start({getID:() => 1,getUILocation:() => ({x:100,y:100})});
+  expect(p.guideNode.active).toBe(false);
+  p.restartStage(); page.tick();
+  expect(p.guideNode.active).toBe(false);
+});
+
+test('stage 2 and mom mode never show the first-level guide',() => {
+  for (const level of [parseLevel(stage2),parseLevel(momLevel)]) {
+    const page=new StagePage(new Node(),level,() => 0,vi.fn());
+    expect((page as any).guideNode.active).toBe(false);
+  }
+});
+
 
 test('Bootstrap routes next, replay, mom, and back to stage 1 without stale pages',async () => {
   const app=new Bootstrap(), root=new Node();
