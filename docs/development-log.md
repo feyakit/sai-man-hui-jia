@@ -236,3 +236,13 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 通过——腊肠/莲藕比例：`items.ts` 增加仅影响显示的 `scale` 提示，腊肠 I3 纵向 1.6（约占格高 80%），莲藕 N5 纵向 1.12；占格、碰撞和旋转规则未变。`9138655`。
 - 验证——`npm test` 84 通过、1 个既有性能测试默认跳过；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点，无文件差异）；`/workspace/build-play.sh origin/codex/v1-8-real --no-publish` 成功，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误。未运行 `art:placeholders`，未修改 main、未合并、未运行 `gh run watch`。
 - 截图（390×844 视口、DPR 2）——`/workspace/play-check/task8/stage1.png`、`stage1-two-packed.png`、`stage2-start.png`、`stage2-five-packed.png`、`mom.png`；第 2 关五件取自 demo 的合法完整解（含腊肠、春联、冻品箱、莲藕、腊鸭）。完整结论见 `/workspace/task8-report.md`。
+
+## 2026-11-12 · 任务 10：正式 V1 第 2 关与第 1 关手指引导
+
+- 从 `origin/work/m1-core`（`9a9a685`）创建 `codex/v1-10-stage2-guide`；Draft PR #17：https://github.com/feyakit/sai-man-hui-jia/pull/17，目标 `work/m1-core`。实现提交 `359abfd`、`20a9e5a`，不修改 main、不合并、不运行 `gh run watch`。
+- 通过——第 2 关默认路径：`Api.loadChallenge()` 无 `?level=` 时读取 `levels/v1/stage2`；仅 URL 带 `?level=<名>` 时读取 `dev-levels/<名>`，保留开发覆盖。新增默认路径与覆盖路径单测。正式数据为 `sedan_v1`、10 件、150 秒，10 个 item key 均不同且均为实物年货。
+- 通过——托盘 10 件布局：实际数据在 390×844 下保持 56px 单格与横向滑动，每件使用完整宽高、位于托盘边界内且互不重叠；新增断言覆盖整件尺寸、边界和不重叠。
+- 通过——第 1 关手指引导：开局在托盘第一件甘蔗中心显示代码绘制的红金手指，循环移动到当前会话 `canDrop` 验证过的后备箱合法落点；落点仅用细金角标和红金圆点提示，不填充色块、不加粗格线。玩家第一次触摸即隐藏，本局重开也不再出现；无教学弹窗。第 2 关和妈妈模式不显示。
+- 验证——`npm test`：97 通过、1 个既有性能测试默认跳过（含 typecheck，核心行覆盖率 98.81%）；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点），无关卡文件差异；`/workspace/build-play.sh origin/codex/v1-10-stage2-guide --no-publish` 成功，源码 `20a9e5a`，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误。未运行 `art:placeholders`。
+- 截图（390×844 视口、DPR 2）——`/workspace/play-check/task10/stage1-start.png`（首件上的手指与合法落点）、`stage1-after-touch.png`（首次触摸后消失）、`stage2-start.png`（10 件、149 秒）、`stage2-five-packed.png`（5/10）、`mom.png`（`?mode=mom`，无引导）。
+- 部分/限制——截图来自 Web Mobile 正式构建 + Chromium，不是实体手机；“装五件”截图通过合法测试夹具写入运行时会话取得，未逐件执行五次真实拖拽；手指为代码绘制的小型红金掌形，未使用独立 PNG；未实测真机触感、帧率或音频。完整验收结论写入仓库外 `/workspace/task10-report.md`。
