@@ -1,4 +1,4 @@
-import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
+import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import type { Point } from '../core/input';
 import { ITEMS } from '../core/items';
@@ -11,13 +11,18 @@ import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
-import { computeStageLayout, controlContentLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { computeStageLayout, controlContentLayout, drawCarRear, drawTrunkGrid, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
 import { drawItemFeature, itemTone } from '../ui/ItemArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const shadow = new Color(40,20,10,70);
+// Measured on art/vehicles/sedan_v1_body.png (1024×640).
+const BODY_SIZE = {w:1024,h:640};
+const BODY_HOLE = {left:159,right:878,top:104,bottom:425};
+const BODY_SLICE = {top:150,bottom:380};
+const BODY_PLATE_Y = 498, BODY_SEAL_Y = 72;
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
@@ -31,6 +36,13 @@ export class StagePage {
   private readonly trayEmptyArt: Graphics;
   private readonly trayEmptyTitle: Label;
   private readonly trayEmptyHint: Label;
+  private readonly backdrop: Graphics;
+  private readonly floorMarks: Graphics;
+  private readonly bgImage: Sprite;
+  private readonly bodyImage: Sprite;
+  private readonly trunkImage: Sprite;
+  private readonly sceneFrames: {bg?: SpriteFrame; body?: SpriteFrame; trunk?: SpriteFrame} = {};
+  private readonly itemFrames = new Map<string,SpriteFrame | undefined>();
   private readonly preview: Graphics;
   private readonly controls: Graphics;
   private readonly clock: Label;
@@ -93,6 +105,9 @@ export class StagePage {
     this.allPieces = [...level.pieces,...(level.mode === 'mom' ? (level.extras ?? []).flat() : [])];
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
+    this.backdrop = uiNode('Backdrop',this.node,750,1334).addComponent(Graphics);
+    this.bgImage = this.imageNode('BackdropImage');
+    this.bodyImage = this.imageNode('CarBodyImage');
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
     this.trayEmpty = uiNode('TrayEmptyState',this.node,750,1334);
     this.trayEmptyArt = this.trayEmpty.addComponent(Graphics);
@@ -101,6 +116,14 @@ export class StagePage {
     this.trayEmptyHint = label(this.trayEmpty,'TrayEmptyHint','福气满箱 · 准备出发',21,0,0);
     this.trayEmptyHint.color = gold;
     this.trayEmpty.active = false;
+    this.trunkImage = this.imageNode('TrunkFloorImage');
+    this.floorMarks = uiNode('TrunkFloorMarks',this.node,750,1334).addComponent(Graphics);
+    for (const [file,slot] of [['ui/bg_night','bg'],['vehicles/sedan_v1_body','body'],['vehicles/sedan_v1_trunk','trunk']] as const)
+      void loadArt(file).then(frame => {
+        if (!frame || !this.node.isValid) return;
+        this.sceneFrames[slot]=frame;
+        if (this.height) this.drawBackground();
+      });
     const look=vehicleLook(level.vehicle);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.clock.color = gold;
@@ -245,13 +268,48 @@ export class StagePage {
 
   private placeLabel(name: string, y: number, x = 0): void { this.node.getChildByName(name)!.setPosition(x,this.height/2-y); }
   private rect(g: Graphics,r: Rect,color: Color): void { fill(g,color,r.x-375,this.height/2-r.y-r.h,r.w,r.h,6); }
+  private imageNode(name: string): Sprite {
+    const sprite=uiNode(name,this.node,1,1).addComponent(Sprite);
+    sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
+    return sprite;
+  }
   private drawBackground(): void {
-    const g = this.background; g.clear();
+    const g = this.background; g.clear(); this.backdrop.clear(); this.floorMarks.clear();
     const look=vehicleLook(this.level.vehicle);
-    drawStageBackdrop(g,750,this.height,0,look);
-    drawCarRear(g,750,this.height,0,this.car,this.trunk,look);
-    drawTrunkFloor(g,750,this.height,0,this.trunk,this.board,this.level,this.cell);
+    const {bg,body,trunk}=this.sceneFrames;
+    // Painted backdrop covers the screen (cropping the sides on tall phones); code art is the fallback.
+    if (bg) {
+      const scale=Math.max(1,this.height/1334);
+      this.showImage(this.bgImage,bg,375,this.height/2,750*scale,1334*scale);
+    } else drawStageBackdrop(this.backdrop,750,this.height,0,look);
+    if (body) this.drawCarBody(body); else drawCarRear(g,750,this.height,0,this.car,this.trunk,look);
+    if (trunk) {
+      this.rect(g,this.trunk,new Color(28,22,24));
+      this.showImage(this.trunkImage,trunk,this.trunk.x+this.trunk.w/2,this.trunk.y+this.trunk.h/2,this.trunk.w,this.trunk.h);
+      drawTrunkGrid(this.floorMarks,750,this.height,0,this.board,this.level,this.cell);
+    } else drawTrunkFloor(g,750,this.height,0,this.trunk,this.board,this.level,this.cell);
     drawStageChrome(g,750,this.height,0,this.board,this.tray,this.tray.y-20,look);
+  }
+  private showImage(sprite: Sprite,frame: SpriteFrame,cx: number,cy: number,w: number,h: number): void {
+    sprite.spriteFrame=frame; sprite.enabled=true;
+    sprite.node.getComponent(UITransform)!.setContentSize(w,h);
+    sprite.node.setPosition(cx-375,this.height/2-cy);
+  }
+  // The car-rear painting has a transparent trunk opening (BODY_HOLE). It is scaled so the opening
+  // matches the trunk rect; only the plain pillar band between the slanted top and the tail lights stretches.
+  private drawCarBody(frame: SpriteFrame): void {
+    const s=this.trunk.w/(BODY_HOLE.right-BODY_HOLE.left);
+    frame.insetTop=BODY_SLICE.top; frame.insetBottom=BODY_SLICE.bottom; frame.insetLeft=0; frame.insetRight=0;
+    const sprite=this.bodyImage;
+    sprite.type=Sprite.Type.SLICED;
+    const h=this.trunk.h/s+BODY_HOLE.top+(BODY_SIZE.h-BODY_HOLE.bottom);
+    const left=this.trunk.x-BODY_HOLE.left*s, top=this.trunk.y-BODY_HOLE.top*s;
+    this.showImage(sprite,frame,left+BODY_SIZE.w*s/2,top+h*s/2,BODY_SIZE.w,h);
+    sprite.node.setScale(s,s,1);
+    this.placeLabel('Plate',this.trunk.y+this.trunk.h+(BODY_PLATE_Y-BODY_HOLE.bottom)*s);
+    this.placeLabel('TrunkLidSeal',this.trunk.y-(BODY_HOLE.top-BODY_SEAL_Y)*s);
+    this.lidSeal.color=new Color(150,28,32);
+    this.plate.color=new Color(150,28,32);
   }
 
   private drawMomIntroBubble(g: Graphics): void {
@@ -388,8 +446,10 @@ export class StagePage {
     const g=view.graphics; g.clear();
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
+    const chosen=this.selected?.id === piece.id;
+    if (this.drawPieceArt(piece,view,rotation,size,w,h,held,failed,chosen)) return;
     view.sprite.enabled=false; view.title.node.active=true;
-    const chosen=this.selected?.id === piece.id, tone=itemTone(piece);
+    const tone=itemTone(piece);
     const bodyColor=failed ? new Color(172,35,37) : tone.base;
     const outline=failed ? new Color(92,20,22) : tone.edge;
     const cells=pieceCells(piece,rotation);
@@ -437,6 +497,43 @@ export class StagePage {
     fill(g,new Color(30,24,28,228),-labelW/2,labelY-labelH/2,labelW,labelH,Math.min(10,labelH/2));
     fill(g,new Color(255,214,145,210),-labelW/2,labelY-labelH/2,labelW,2,1);
     view.title.node.setPosition(0,labelY);
+  }
+
+  // Real item art: one Sprite per piece, rotated as a whole (art is drawn for rotation 0).
+  // Until the frame is available the coloured-cell fallback is drawn instead.
+  private drawPieceArt(piece: PieceDef,view: PieceView,rotation: Rotation,size: number,w: number,h: number,held: boolean,failed: boolean,chosen: boolean): boolean {
+    const key=ITEMS[piece.shape].key;
+    const frame=this.itemFrames.get(key);
+    if (!frame) {
+      if (!this.itemFrames.has(key)) {
+        this.itemFrames.set(key,undefined);
+        void loadArt(`items/${key}`).then(loaded => {
+          if (!loaded || !this.node.isValid) return;
+          this.itemFrames.set(key,loaded);
+          for (const other of this.allPieces) if (ITEMS[other.shape].key === key) {
+            const pv=this.pieces.get(other.id)!;
+            if (pv.size) this.drawPiece(other,pv.rotation,pv.size,pv.held,pv.failed);
+          }
+        });
+      }
+      return false;
+    }
+    const g=view.graphics;
+    const base=dimensions(piece,0);
+    // Soft glow under the occupied cells shows selection / pickup without hiding the art.
+    for (const [x,y] of pieceCells(piece,rotation)) {
+      const cx=x*size-w/2, cy=h/2-(y+1)*size;
+      if (held) fill(g,shadow,cx+8,cy-9,size-3,size-3,Math.max(6,size*.18));
+      if (chosen || held) fill(g,new Color(255,214,120,held ? 70 : 95),cx+1,cy+1,size-2,size-2,Math.max(6,size*.18));
+      if (failed) fill(g,new Color(220,40,40,90),cx+1,cy+1,size-2,size-2,Math.max(6,size*.18));
+    }
+    const sn=view.sprite.node;
+    sn.getComponent(UITransform)!.setContentSize(base.w*size,base.h*size);
+    sn.angle=90*rotation; sn.setPosition(0,0);
+    view.sprite.spriteFrame=frame; view.sprite.enabled=true;
+    view.sprite.color=failed ? new Color(255,150,150) : Color.WHITE;
+    view.title.node.active=false;
+    return true;
   }
 
   private point(event: EventTouch): Point {
