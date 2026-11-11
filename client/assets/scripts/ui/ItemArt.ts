@@ -65,19 +65,22 @@ function dot(g: Graphics,color: Color,x: number,y: number,r: number): void {
 /** A compact, upright cargo emblem that stays legible at tray and board sizes. */
 export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: number,height: number,labelHeight: number,tone: ItemTone): void {
   const key=ITEMS[piece.shape].key;
-  const top=height/2-4, bottom=-height/2+labelHeight+4;
-  const room=Math.max(12,top-bottom), s=Math.max(12,Math.min(size*.72,room));
-  const y=bottom+room/2, lw=Math.max(1,Math.min(3,s*.07));
+  const room=Math.max(12,height-labelHeight-8), s=Math.max(12,Math.min(size*.95,room));
+  const long=Math.max(20,Math.min(width*.7,size*2.45));
+  const y=0, lw=Math.max(1,Math.min(3,s*.07));
   const edge=tone.edge, accent=tone.accent, light=tone.light;
 
   switch (key) {
     case 'liquor': {
       const bw=Math.max(13,s*.48), bh=Math.max(18,s*.9);
       block(g,light,-bw/2,y-bh*.43,bw,bh*.74,Math.max(2,bw*.16));
-      block(g,accent,-bw*.16,y+bh*.32,bw*.32,bh*.15,1);
+      shape(g,light,[[-bw*.23,y+bh*.3],[-bw*.23,y+bh*.18],[bw*.23,y+bh*.18],[bw*.23,y+bh*.3]]);
+      block(g,accent,-bw*.17,y+bh*.35,bw*.34,bh*.13,1);
       block(g,accent,-bw/2+2,y-bh*.17,bw-4,bh*.3,1);
-      line(g,edge,lw,[[-bw/2,y-bh*.43],[-bw/2,y+bh*.43]]);
-      line(g,edge,lw,[[bw/2,y-bh*.43],[bw/2,y+bh*.43]]);
+      g.strokeColor=edge; g.lineWidth=Math.max(1.5,lw);
+      g.roundRect(-bw/2,y-bh*.43,bw,bh*.77,Math.max(2,bw*.16)); g.stroke();
+      g.moveTo(-bw*.23,y+bh*.29); g.lineTo(-bw*.23,y+bh*.18);
+      g.lineTo(bw*.23,y+bh*.18); g.lineTo(bw*.23,y+bh*.29); g.stroke();
       dot(g,light,-bw*.14,y+bh*.02,Math.max(1.5,s*.045));
       dot(g,light,bw*.1,y-bh*.08,Math.max(1.5,s*.045));
       break;
@@ -87,19 +90,24 @@ export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: 
       block(g,light,-bw/2,y-bh*.45,bw,bodyH,2);
       shape(g,accent,[[-bw/2,y+bh*.23],[0,y+bh*.45],[bw/2,y+bh*.23],[bw/2,y+bh*.13],[-bw/2,y+bh*.13]]);
       block(g,accent,-bw/2+3,y-bh*.2,bw-6,Math.max(3,bh*.15),1);
-      line(g,edge,lw,[[-bw/2,y-bh*.45],[-bw/2,y+bh*.24]]);
-      line(g,edge,lw,[[bw/2,y-bh*.45],[bw/2,y+bh*.24]]);
+      g.strokeColor=edge; g.lineWidth=Math.max(1.5,lw);
+      g.moveTo(-bw/2,y+bh*.23); g.lineTo(-bw/2,y-bh*.45); g.lineTo(bw/2,y-bh*.45);
+      g.lineTo(bw/2,y+bh*.23); g.stroke();
       shape(g,accent,[[bw*.02,y+bh*.07],[bw*.24,y+bh*.22],[bw*.34,y+bh*.03],[bw*.12,y-bh*.03]]);
+      dot(g,accent,bw*.3,y-bh*.06,Math.max(2,s*.05));
       break;
     }
     case 'sugarcane': {
-      const half=Math.max(16,s*.46);
-      line(g,accent,Math.max(3,s*.13),[[-half*.65,y-half*.42],[-half*.18,y+half*.4]]);
-      line(g,tone.base,Math.max(3,s*.13),[[-half*.3,y-half*.46],[half*.25,y+half*.44]]);
-      line(g,light,Math.max(1,s*.035),[[-half*.55,y-half*.24],[-half*.31,y+half*.22]]);
-      line(g,edge,lw,[[-half*.9,y],[-half*.18,y+half*.12],[half*.42,y+half*.03],[half*.72,y+half*.28]]);
-      line(g,edge,lw,[[-half*.9,y],[-half*.18,y-half*.08],[half*.42,y-half*.15],[half*.72,y+half*.05]]);
-      dot(g,accent,-half*.72,y+half*.1,Math.max(2,s*.055));
+      const half=long/2, stalk=Math.max(3.5,s*.16);
+      line(g,accent,stalk,[[-half,y-s*.16],[-half*.42,y+s*.22],[half*.24,y+s*.12],[half*.9,y+s*.26]]);
+      line(g,tone.base,stalk,[[-half*.82,y-s*.32],[-half*.2,y-s*.02],[half*.48,y-s*.08],[half,y+s*.02]]);
+      line(g,edge,Math.max(2,s*.08),[[-half*.92,y+s*.3],[-half*.28,y+s*.38],[half*.4,y+s*.3],[half*.94,y+s*.4]]);
+      line(g,edge,Math.max(2,s*.08),[[-half*.86,y-s*.36],[-half*.2,y-s*.42],[half*.5,y-s*.37],[half*.94,y-s*.22]]);
+      for (const at of [-.38,.22,.65]) {
+        line(g,light,Math.max(1,s*.035),[[half*at,y-s*.26],[half*at+s*.06,y+s*.18]]);
+      }
+      line(g,edge,Math.max(2,s*.065),[[0,y-s*.36],[0,y+s*.35]]);
+      dot(g,accent,0,y+s*.02,Math.max(2.5,s*.08));
       break;
     }
     case 'nutbox': {
@@ -123,7 +131,7 @@ export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: 
       break;
     }
     case 'tv': {
-      const bw=Math.max(25,s*.8), bh=Math.max(16,s*.48);
+      const bw=Math.min(width*.68,size*1.9), bh=Math.max(16,s*.48);
       block(g,edge,-bw/2,y-bh*.28,bw,bh*.62,3);
       block(g,accent,-bw/2+3,y-bh*.21,bw-6,bh*.47,2);
       shape(g,new Color(235,252,250,150),[[-bw*.34,y+bh*.2],[-bw*.14,y+bh*.2],[-bw*.32,y-bh*.14]]);
@@ -153,16 +161,16 @@ export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: 
       break;
     }
     case 'sausage': {
-      const bw=Math.max(23,s*.75), bh=Math.max(16,s*.45);
-      for (const [ox,oy] of [[-bw*.25,bh*.18],[0,-bh*.02],[bw*.25,bh*.16]]) {
+      const bw=Math.min(width*.72,size*2.1), bh=Math.max(16,s*.45);
+      for (const [ox,oy] of [[-bw*.3,bh*.18],[0,-bh*.02],[bw*.3,bh*.16]]) {
         block(g,tone.light,ox-bw*.19,oy-bh*.24,bw*.38,bh*.48,bh*.24);
         line(g,accent,Math.max(1,s*.035),[[ox-bw*.06,oy-bh*.22],[ox+bw*.06,oy+bh*.22]]);
       }
-      line(g,edge,lw,[[-bw*.4,y+bh*.3],[0,y+bh*.42],[bw*.4,y+bh*.28]]);
+      line(g,edge,lw,[[-bw*.48,y+bh*.32],[0,y+bh*.45],[bw*.48,y+bh*.3]]);
       break;
     }
     case 'fish': {
-      const bw=Math.max(26,s*.82), bh=Math.max(16,s*.46);
+      const bw=Math.min(width*.68,size*1.9), bh=Math.max(16,s*.46);
       block(g,tone.light,-bw*.34,y-bh*.32,bw*.66,bh*.64,bh*.3);
       shape(g,accent,[[bw*.27,y],[bw*.5,y+bh*.3],[bw*.47,y-bh*.3]]);
       shape(g,light,[[-bw*.1,y+bh*.05],[-bw*.24,y+bh*.3],[bw*.02,y+bh*.18]]);
@@ -220,7 +228,7 @@ export function drawItemFeature(g: Graphics,piece: PieceDef,size: number,width: 
       break;
     }
     case 'lotusroot': {
-      const bw=Math.max(26,s*.82), bh=Math.max(15,s*.42);
+      const bw=Math.min(width*.72,size*2.1), bh=Math.max(15,s*.42);
       block(g,tone.light,-bw/2,y-bh*.28,bw*.55,bh*.56,bh*.26);
       block(g,tone.light,bw*.01,y-bh*.18,bw*.43,bh*.42,bh*.2);
       dot(g,edge,-bw*.28,y,Math.max(1.4,s*.035));
