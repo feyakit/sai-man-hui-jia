@@ -21,11 +21,14 @@ vi.mock('cc',() => {
     Tween:{stopAllByTarget:vi.fn()},Game:{EVENT_HIDE:'hide'},game:{on:vi.fn(),off:vi.fn()},
     sys:{getSafeAreaRect:() => ({x:0,y:0,width:750,height:1334})},view:{getVisibleSize:() => ({width:750,height:1334})}};
 });
-import { Label, Node, Sprite, UITransform } from 'cc';
+import { Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
+import fixture from './fixtures/v1/stage1.solution.json';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
-import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
+import { computeStageLayout, controlContentLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
+import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
+import { ITEMS } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
 test('one code-drawn card per item with a clear short label',() => {
   const level=stage1('2027-01-15');
@@ -55,8 +58,46 @@ test('phone layout reserves separate header, open trunk and tray bands',() => {
   expect(frame.board.x+frame.board.w).toBeLessThanOrEqual(frame.trunk.x+frame.trunk.w);
   expect(frame.board.y+frame.board.h).toBeLessThanOrEqual(frame.trunk.y+frame.trunk.h);
   expect(frame.trunk.y).toBeGreaterThan(216);
+  expect(frame.trunk.y-35-216).toBeGreaterThanOrEqual(100);
   expect(frame.car.y+frame.car.h).toBeLessThan(frame.tray.y);
   expect(frame.tray.y+frame.tray.h).toBeLessThan(frame.buttonY);
   expect(frame.cell).toBeGreaterThanOrEqual(76);
   expect(vehicleLook('sedan_v1').body).not.toBe(vehicleLook('train').body);
+});
+
+test('every cargo category has a distinct cool-to-warm palette and deep outline',() => {
+  const entries=Object.entries(ITEMS).map(([shape,meta]) => itemTone({id:1,shape:shape as any,item:meta.key,initialRotation:0}));
+  expect(new Set(entries.map(tone => tone.hex)).size).toBe(entries.length);
+  expect(entries.every(tone => tone.hex.startsWith('#'))).toBe(true);
+});
+
+test('draws a representative emblem for every cargo item',() => {
+  const g=new Graphics();
+  for (const [shape,meta] of Object.entries(ITEMS)) {
+    const piece={id:1,shape:shape as any,item:meta.key,initialRotation:0 as const} as PieceDef;
+    drawItemFeature(g,piece,60,120,60,22,itemTone(piece));
+  }
+  const graphics=g as unknown as {fill:{mock:{calls:unknown[]}};stroke:{mock:{calls:unknown[]}}};
+  expect(graphics.fill.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length*2);
+  expect(graphics.stroke.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length);
+});
+
+test('keeps each control icon in its own left column away from the text',() => {
+  for (const rect of [{x:45,y:1400,w:180,h:112},{x:295,y:1400,w:160,h:112},{x:515,y:1400,w:160,h:112}]) {
+    const content=controlContentLayout(rect);
+    expect(content.iconX-rect.x).toBe(34);
+    expect(content.textX-content.iconX).toBeGreaterThanOrEqual(66);
+  }
+});
+
+test('turns an emptied stage-one tray into a loaded-state departure plaque',() => {
+  const page=new StagePage(new Node(),stage1(fixture.date),() => 0,vi.fn());
+  const p=page as any;
+  for (const placement of fixture.placements) p.session.drop(placement);
+  p.sync();
+  expect(p.trayEmpty.active).toBe(true);
+  expect(p.trayEmptyTitle.string).toBe('已全部装车');
+  expect(p.trayEmptyHint.string).toContain('准备出发');
+  p.session.undo(); p.sync();
+  expect(p.trayEmpty.active).toBe(false);
 });
