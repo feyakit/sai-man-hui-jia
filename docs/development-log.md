@@ -189,3 +189,17 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 通过——`ui/mom.png` 为任务 3 美术管线生成的 512×512 透明 PNG，本任务按 `ui/mom` 文件名接入可选加载与 Graphics 兜底；重跑占位管线未改变该文件，仅恢复任务 4 已定制的车盖/彩纸，避免无关美术回退。`npm run art:check` 通过。
 - 终验——`npm test`：74 通过、1 个既有性能测试默认跳过（含 typecheck，核心行覆盖率 98.76%，不代表 UI/音频运行时覆盖率）；`npm run art:check` 通过；`npm run levels:v1` 通过且无文件差异（stage2 10 件、11 个完整解、首解 3022 节点）。测试覆盖追加/可解性、撤销边界、重开、入口路由、普通关隔离、三批显示与最终落位结算。
 - 部分/未做——组件与 mock 测试通过，但没有运行正式 Cocos/Web Mobile 产物，未实测真实 `mom.mp3`、头像动画观感、浏览器真机或设备音频。未重新打包 Web Mobile；Actions 额度受限，未运行 `gh run watch`，不宣称 CI 全绿。完整结论写入仓库外 `/workspace/task5-report.md`。
+
+## 2026-11-11 · 任务 6：界面颜值与春节主题
+
+- 基于最新 `work/m1-core`（`fbbe7e0`）创建 `codex/v1-6-look`；实现提交 `ea0cdd7`、`3f2d2a8`。Draft PR #9：https://github.com/feyakit/sai-man-hui-jia/pull/9，目标 `work/m1-core`；不修改 main、不合并、不运行 `gh run watch`。
+- 通过——场景：`client/assets/scripts/ui/StageArt.ts` 用 Cocos `Graphics` 纯代码绘制夜色归家路，含分层远山、村屋、窗灯、灯笼、月亮、道路与暖色地平线；不依赖新增外部美术。
+- 通过——后备箱：从车尾视角绘制车身、掀起的后盖（金色“福”）、双侧尾灯、保险杠、排气管与“回家”车牌；网格嵌入箱体，格线为低透明度金色，阻塞格显示叉号；按 `vehicles` 配置用 `vehicleLook` 映射小轿车/五菱/SUV/皮卡/电动三轮/摩托/火车等车身色，第 1/2/3 关沿用各关车型。
+- 通过——年货：托盘由 `trayLayout` 计算两行排布并居中；第 2 关 10 件约 44 设计像素/格，第 3 关联动更大；年货改为红金卡片（选中金色高亮），件上显示 2–3 字简称，选中时底部提示显示全名；放入后备箱后沿用同一绘制与字号。
+- 通过——HUD：顶部“塞满回家”春联式红底金框、关卡名独立一行；已装车件数与倒计时分列两个金色边框；妈妈模式“妈妈说：再带点东西！”使用带指向尾巴的气泡，不与标题/棋盘重叠。
+- 通过——按钮：旋转 90°、撤销、重开改为红金圆角按钮并绘制图标（旋转箭头/撤销箭头/重开时针）。
+- 通过/未改——玩法规则、关卡数据、计分/计时/撤销/妈妈追加逻辑均未修改；`tools/config/v1-levels.json` 与 `levels` 数据无差异。
+- 验证——`npm test`：75 通过、1 个既有性能测试默认跳过，含 typecheck；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点），未产生关卡文件差异；`/workspace/build-play.sh origin/codex/v1-6-look --no-publish` 成功，产物目录 `/workspace/play-check/20261111-2229-local/`，`result.json` 为 `ok: true`、`dragPlaced: true`，无页面/控制台错误。
+- 截图（390×844，DPR 2）——`/workspace/play-check/task6/stage1.png`（第 1 关初始）、`/workspace/play-check/task6/stage2.png`（第 2 关两行托盘）、`/workspace/play-check/task6/mom.png`（`?mode=mom` 妈妈说气泡）；另附 `/workspace/play-check/task6/stage1-loaded.png`（第 1 关 4/4 装车后）。
+- 部分/限制——截图来自 Web Mobile 正式构建产物 + Chromium 390×844 视口（DPR 2），不是实体手机；车型差异为代码配色映射，未替换既有的年货/背景/车尾等占位 PNG，主视觉全部由 `Graphics` 绘制；未实测真机帧率、触感或音频。Actions 未运行 `gh run watch`，不宣称 CI 全绿。
+- 完整验收结论写入仓库外 `/workspace/task6-report.md`；PR 描述已逐项标注通过/部分/未做。

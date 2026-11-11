@@ -31,6 +31,17 @@ it('fits the 12-piece tray in two rows with stable disjoint slots and >=20px cel
   expect(trayLayout(rotated,tray).slots.map(s => s.rect)).toEqual(layout.slots.map(s => s.rect));
 });
 
+it('gives every ten-piece stage-two cargo at least 44 design pixels per cell', () => {
+  const phoneTray={x:5,y:1043,w:740,h:420};
+  const layout=trayLayout(level.pieces,phoneTray);
+  expect(layout.cell).toBeGreaterThanOrEqual(44);
+  for (const {rect} of layout.slots) {
+    expect(rect.x).toBeGreaterThanOrEqual(phoneTray.x);
+    expect(rect.x+rect.w).toBeLessThanOrEqual(phoneTray.x+phoneTray.w);
+    expect(rect.y+rect.h).toBeLessThanOrEqual(phoneTray.y+phoneTray.h);
+  }
+});
+
 it('keeps the full piece center at least 120px above the finger through all rotations', () => {
   for (const piece of level.pieces) for (const r of [0,1,2,3] as Rotation[]) for (const cell of [50,100,110]) {
     const offset = heldOffset(piece,r,cell), box=dimensions(piece,r);
