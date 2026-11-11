@@ -75,10 +75,18 @@ it('gives every ten-piece stage-two cargo at least 56 design pixels and scrolls 
   const layout=trayLayout(level.pieces,phoneTray);
   expect(layout.cell).toBe(MIN_TRAY_CELL);
   expect(layout.maxScroll).toBeGreaterThan(0);
-  for (const {rect} of layout.slots) {
+  for (const {piece,rect} of layout.slots) {
+    const box=dimensions(piece,piece.initialRotation);
+    expect(rect.w).toBe(box.w*MIN_TRAY_CELL);
+    expect(rect.h).toBe(box.h*MIN_TRAY_CELL);
     expect(rect.x).toBeGreaterThanOrEqual(phoneTray.x);
     expect(rect.x+rect.w).toBeLessThanOrEqual(phoneTray.x+layout.contentWidth);
+    expect(rect.y).toBeGreaterThanOrEqual(phoneTray.y);
     expect(rect.y+rect.h).toBeLessThanOrEqual(phoneTray.y+phoneTray.h);
+    for (const other of layout.slots.filter(slot => slot.piece.id !== piece.id)) {
+      const b=other.rect;
+      expect(rect.x+rect.w <= b.x || b.x+b.w <= rect.x || rect.y+rect.h <= b.y || b.y+b.h <= rect.y).toBe(true);
+    }
   }
 });
 
