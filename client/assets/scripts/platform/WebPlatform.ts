@@ -1,6 +1,8 @@
 export class WebPlatform {
   now(): number { return Date.now(); }
 
+  isMomMode(): boolean { return new URLSearchParams(window.location.search).get('mode') === 'mom'; }
+
   hasLevelOverride(): boolean { return new URLSearchParams(window.location.search).has('level'); }
 
   levelFilename(): string {

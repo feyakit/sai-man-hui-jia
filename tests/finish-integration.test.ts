@@ -33,12 +33,15 @@ vi.mock('cc',() => {
 });
 import { Node, Sprite, Graphics } from 'cc';
 import { Bootstrap } from '../client/assets/scripts/Bootstrap';
+import { parseLevel } from '../client/assets/scripts/core/level';
 import stage2 from '../client/assets/resources/levels/v1/stage2.json';
+import momLevel from '../client/assets/resources/levels/v1/mom.json';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { FinishView } from '../client/assets/scripts/ui/FinishView';
 import { finishTimeline } from '../client/assets/scripts/game/FinishTimeline';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import fixture from './fixtures/v1/stage1.solution.json';
+import momSolution from './fixtures/v1/mom.solution.json';
 
 beforeEach(() => { effects.play.mockReset(); effects.load.mockReset().mockResolvedValue(undefined); vi.unstubAllGlobals(); });
 
@@ -119,11 +122,12 @@ test('missing vibration API and a throwing device never prevent finishing',() =>
 });
 
 
-test('Bootstrap routes next to stage 2, replay to the same level, and mom to a safe placeholder',async () => {
+test('Bootstrap routes next, replay, mom, and back to stage 1 without stale pages',async () => {
   const app=new Bootstrap(), root=new Node();
   app.node=root;
   const bootstrap=app as any;
   const load=vi.spyOn(bootstrap.api,'loadChallenge').mockResolvedValue(stage2);
+  const loadMom=vi.spyOn(bootstrap.api,'loadMom').mockResolvedValue(parseLevel(momLevel));
   bootstrap.show(stage1(fixture.date));
   const first=bootstrap.stage;
   first.beginFinish(); first.start({getUILocation:() => ({x:0,y:-337})});
@@ -140,12 +144,107 @@ test('Bootstrap routes next to stage 2, replay to the same level, and mom to a s
   expect(replay.level).toBe(stage2); expect(replay.cleared).toBe(false);
   replay.beginFinish(); replay.start({getUILocation:() => ({x:0,y:-445})});
   replay.start({getUILocation:() => ({x:0,y:-445})});
-  expect(bootstrap.stage).toBeUndefined();
-  const message=root.getChildByName('Message')!;
-  expect((message.getChildByName('Message')!.getComponent((await import('cc')).Label) as any).string)
-    .toContain('妈妈模式筹备中');
-  (message as any).events.get('end')();
-  expect(bootstrap.stage.level).toBe(stage2);
-  expect(bootstrap.stage.cleared).toBe(false);
+  await Promise.resolve(); await Promise.resolve();
+  expect(loadMom).toHaveBeenCalledTimes(1);
+  expect(bootstrap.stage.level).toBeTruthy();
+  expect(bootstrap.stage.level.mode).toBe('mom');
+  const momPage=bootstrap.stage;
+  momPage.beginFinish(); momPage.start({getUILocation:() => ({x:0,y:-337})});
+  momPage.start({getUILocation:() => ({x:0,y:-337})});
+  momPage.finishView.press(375,1112);
+  expect(bootstrap.stage.level.stage).toBe(1);
+  expect(bootstrap.stage.level.mode).toBeUndefined();
+  expect(replay.node.isValid).toBe(false);
   expect(load).toHaveBeenCalledTimes(1);
+});
+
+test('?mode=mom enters mom mode directly and normal stage completion never auto-appends',async () => {
+  vi.stubGlobal('window',{location:{search:'?mode=mom'}});
+  const app=new Bootstrap(), root=new Node(); app.node=root;
+  const bootstrap=app as any;
+  const loadMom=vi.spyOn(bootstrap.api,'loadMom').mockResolvedValue(parseLevel(momLevel));
+  app.start(); await Promise.resolve();
+  expect(loadMom).toHaveBeenCalledTimes(1);
+  expect(bootstrap.stage.level.mode).toBe('mom');
+
+  const normal=new StagePage(new Node(),{...parseLevel(momLevel),mode:'normal'},() => 0,vi.fn());
+  const page=normal as any;
+  for (const placement of momSolution.placements.filter(entry => entry.pieceId <= 7)) page.session.drop(placement);
+  page.tick();
+  expect(page.session.pendingBatches).toBe(0);
+  expect(page.mom).toBeUndefined();
+});
+
+test('mom reveals every batch, appends only after a cleared tray, and finishes after the last drop',() => {
+  let now=0; const route=vi.fn();
+  const page=new StagePage(new Node(),parseLevel(momLevel),() => now,route);
+  const p=page as any;
+  expect(effects.load.mock.calls.some((call: any[]) => call[0] === 'ui/mom')).toBe(true);
+  expect(p.momIntro.string).toBe('妈妈说：再带点东西！');
+  expect(p.momIntro.node.active).toBe(true);
+  const baseIds=new Set(p.level.pieces.map((piece: any) => piece.id));
+  for (const placement of (momSolution.placements as any[])
+    .filter(entry => baseIds.has(entry.pieceId))) expect(p.session.drop(placement)).toBe(true);
+  page.tick();
+  expect(p.momLayer.active).toBe(true);
+  expect(p.momBubble.string).toBe('等等！还有这个！');
+  expect(p.cleared).toBe(false);
+  now=700; page.tick();
+  expect(p.session.pieces).toHaveLength(p.level.pieces.length+1);
+  expect(effects.play).toHaveBeenCalledWith('mom');
+  expect(p.cleared).toBe(false);
+  now=2000; page.tick();
+  expect(p.momLayer.active).toBe(false);
+  const basePlacement=p.session.placements[0];
+  const basePiece=p.level.pieces.find((piece: any) => piece.id === basePlacement.pieceId);
+  p.drag.release=() => ({tap:false,gesture:{mode:'drag',piece:basePiece,rotation:basePlacement.rotation,
+    current:{x:p.tray.x+8,y:p.tray.y+8},fromTray:false}});
+  p.updateHeld=() => {};
+  p.end({getID:() => 2,getUILocation:() => ({x:0,y:0})});
+  expect(p.session.placements.some((placed: any) => placed.pieceId === basePlacement.pieceId)).toBe(false);
+  const returned=p.slots.find((slot: any) => slot.piece.id === basePlacement.pieceId);
+  expect(returned).toBeDefined();
+  expect(returned.rect.x).toBeGreaterThanOrEqual(p.tray.x);
+  p.session.drop(basePlacement); p.sync();
+  for (let batch=0;batch<momLevel.extras.length;batch++) {
+    const placements=momSolution.placements.filter(placement =>
+      momLevel.extras[batch].some(entry => entry.id === placement.pieceId));
+    const beforeLast=batch < momLevel.extras.length-1 ? placements : placements.slice(0,-1);
+    for (const placement of beforeLast) expect(p.session.drop(placement)).toBe(true);
+    if (batch < momLevel.extras.length-1) {
+      page.tick();
+      expect(p.momLayer.active).toBe(true);
+      now+=700; page.tick();
+      now+=1300; page.tick();
+      expect(p.momLayer.active).toBe(false);
+    }
+  }
+  const last=momSolution.placements.at(-1)!;
+  const piece=p.level.extras.flat().find((entry: any) => entry.id === last.pieceId);
+  p.drag.release=() => ({tap:false,gesture:{mode:'drag',piece,rotation:last.rotation,current:{x:0,y:0}}});
+  p.updateHeld=() => { p.previewPlacement=last; };
+  p.end({getID:() => 1,getUILocation:() => ({x:0,y:0})});
+  expect(p.session.solved).toBe(true);
+  expect(p.cleared).toBe(true);
+  expect(effects.play.mock.calls.filter((call: any[]) => call[0] === 'mom')).toHaveLength(3);
+  now+=2500; page.tick();
+  const finish=p.finishView as FinishView;
+  expect(finish.node.getChildByName('FinishActions')!.active).toBe(true);
+  finish.press(375,1004); expect(route).toHaveBeenCalledWith('replay');
+  finish.press(375,1112); expect(route).toHaveBeenCalledWith('first');
+});
+
+test('restarting mom returns to the first batch and forgets the append sequence',() => {
+  let now=0; const page=new StagePage(new Node(),parseLevel(momLevel),() => now,vi.fn());
+  const p=page as any;
+  for (const placement of momSolution.placements.filter(entry => entry.pieceId <= 7)) p.session.drop(placement);
+  page.tick(); now=700; page.tick();
+  expect(p.session.pieces).toHaveLength(8);
+  expect(p.session.placements).toHaveLength(7);
+  p.restartStage(); page.tick();
+  expect(p.session.pieces).toHaveLength(7);
+  expect(p.session.pendingBatches).toBe(3);
+  expect(p.session.placements).toHaveLength(0);
+  expect(p.mom).toBeUndefined();
+  expect(p.momIntro.node.active).toBe(true);
 });

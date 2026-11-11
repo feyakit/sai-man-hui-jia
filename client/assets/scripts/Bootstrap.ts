@@ -19,7 +19,8 @@ export class Bootstrap extends Component {
   private readonly api = new Api(this.platform);
 
   start(): void {
-    if (this.platform.hasLevelOverride()) void this.challenge();
+    if (this.platform.isMomMode()) void this.startMomMode();
+    else if (this.platform.hasLevelOverride()) void this.challenge();
     else this.show(stage1(shanghaiDate()));
   }
 
@@ -29,14 +30,19 @@ export class Bootstrap extends Component {
     this.node.destroyAllChildren();
     this.stage = new StagePage(this.node,level,() => this.platform.now(),action => {
       if (action === 'next') void this.challenge();
-      else if (action === 'mom') this.startMomMode(level);
+      else if (action === 'mom') void this.startMomMode();
+      else if (action === 'first') this.show(stage1(shanghaiDate()));
       else this.show(level);
     });
   }
 
-  /** Task 4 placeholder: replace this entry point when mom mode is implemented. */
-  private startMomMode(level: Level): void {
-    this.message('妈妈模式筹备中 · 轻点再装一次第 2 关',() => this.show(level));
+  private async startMomMode(): Promise<void> {
+    try {
+      const level = await this.api.loadMom();
+      if (this.node.isValid) this.show(level);
+    } catch {
+      if (this.node.isValid) this.message('妈妈模式读取失败，点屏幕重试',() => void this.startMomMode());
+    }
   }
 
   private async challenge(): Promise<void> {

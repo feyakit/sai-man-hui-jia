@@ -177,3 +177,15 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 现有预览截图位于 /workspace/repo/tools/out/finish-preview（仓库相对路径 tools/out/finish-preview）：300.png、700.png、850.png、1000.png、1300.png、1800.png、2500.png。已查验 1800ms 截图，红金车盖、春节灯笼、夜路与彩纸体现满载年货归家。截图来自 Chromium + Canvas 适配器渲染 FinishView 源码，不是正式 Cocos/Web Mobile 或完整装车流程验收；300ms 独立预览没有原盘面。该目录被 git 忽略，截图仅保留本机，未上传 PR。
 - PR 描述已按 4.9 逐项标注通过/部分/未做；完整结论与截图路径写入仓库外 /workspace/task4-report.md。正式音效、设备震动、Cocos 渲染与真机性能仍待后续验证。
 - 不修改 main、不合并、不改交互规则、不重新打包 Web Mobile。Actions 额度阻塞，未运行 gh run watch，不宣称 CI 全绿。
+
+## 2026-11-11 · 任务 5：妈妈又塞了一件（独立模式）
+
+- 基于最新 `work/m1-core`（任务 4 合并 `4e3f91d`）创建 `codex/v1-5-mom`。Draft PR #8：https://github.com/feyakit/sai-man-hui-jia/pull/8，目标仍为 `work/m1-core`，不修改 main、不合并。实现/测试提交为 `d716308`、`a751e1b`、`ec4adff`、`5e5059c`、`45e655d`。
+- 通过——`Level` 的 `mode`、`extras`、`stage: 3` 与 `timeLimitSec: 0` 已在任务 1 基础提交 `4876ae4` 进入类型和 `parseLevel`；本任务复核旧关卡兼容、非法/重复 extras、base + 全部 extras 面积恰好等于可用格数，以及 `sedan_v1` 不改动既有六车型数据。`tools/config/v1-levels.json` 的 mom 配置为 7 件 base、追加形状 `P5 / S4 / I3`、种子 `v1-mom-a`、`timeLimitSec: 0`；提交的 `mom.json` 共 10 件、46 格。
+- 通过——`StageSession` 按批次维护当前可用行李，托盘清空后只允许 `appendNextBatch()` 推进；追加不在撤销快照中，跨批次撤销保留已追加件及初始朝向；重开回到 base 第一批。mom 完整解和每个追加前缀由测试与 DLX 结果交叉校验，完整关卡仍按 `dlx.solve` 证明有解。
+- 通过——第 2 关结算“试试妈妈模式”和 `?mode=mom` 均加载 `levels/v1/mom`；普通关卡即使数据带 extras 也不会进入追加。阶段 3 复用任务 4 结算，按钮改为“再来一次”“回第 1 关”。
+- 通过——开场显示“妈妈说：再带点东西！”；托盘清空后冻结输入，妈妈头像探出、气泡“等等！还有这个！”，约 700ms 后下一件行李落入托盘并调用 `mom`，缺失音效静默；共 3 批，最后一件合法落位才启动 4.9 结算。
+- 修复——`5e5059c` 在追加时保留已放件朝向；`45e655d` 在妈妈模式返盘时即时重排托盘，并补 UI 回归验证返盘件获得有效托盘槽位，避免追加后与新件重叠。
+- 通过——`ui/mom.png` 为任务 3 美术管线生成的 512×512 透明 PNG，本任务按 `ui/mom` 文件名接入可选加载与 Graphics 兜底；重跑占位管线未改变该文件，仅恢复任务 4 已定制的车盖/彩纸，避免无关美术回退。`npm run art:check` 通过。
+- 终验——`npm test`：74 通过、1 个既有性能测试默认跳过（含 typecheck，核心行覆盖率 98.76%，不代表 UI/音频运行时覆盖率）；`npm run art:check` 通过；`npm run levels:v1` 通过且无文件差异（stage2 10 件、11 个完整解、首解 3022 节点）。测试覆盖追加/可解性、撤销边界、重开、入口路由、普通关隔离、三批显示与最终落位结算。
+- 部分/未做——组件与 mock 测试通过，但没有运行正式 Cocos/Web Mobile 产物，未实测真实 `mom.mp3`、头像动画观感、浏览器真机或设备音频。未重新打包 Web Mobile；Actions 额度受限，未运行 `gh run watch`，不宣称 CI 全绿。完整结论写入仓库外 `/workspace/task5-report.md`。
