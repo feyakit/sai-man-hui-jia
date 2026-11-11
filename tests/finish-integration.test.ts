@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 const effects=vi.hoisted(() => ({play:vi.fn(),load:vi.fn()}));
+const animation=vi.hoisted(() => ({tweens:[] as {target:unknown;duration:number;props:any}[]}));
 vi.mock('../client/assets/scripts/services/OptionalResources',() => ({loadArt:effects.load}));
 vi.mock('../client/assets/scripts/services/SoundEffects',() => ({SoundEffects:class { play=effects.play; }}));
 vi.mock('cc/env',() => ({EDITOR:true}));
@@ -25,7 +26,11 @@ vi.mock('cc',() => {
   }
   class Graphics { enabled=true; clear=vi.fn(); roundRect=vi.fn(); rect=vi.fn(); fill=vi.fn(); moveTo=vi.fn(); lineTo=vi.fn(); stroke=vi.fn(); circle=vi.fn(); close=vi.fn(); }
   class Sprite { static SizeMode={CUSTOM:0}; spriteFrame?: unknown; enabled=false; }
-  const tween=() => { const t={to:() => t,start:vi.fn()}; return t; };
+  const tween=(target: unknown) => {
+    const chain: any={to:(duration: number,props: any) => { animation.tweens.push({target,duration,props}); return chain; },
+      set:() => chain,by:() => chain,call:() => chain,start:() => chain};
+    return chain;
+  };
   return {_decorator:{ccclass:() => (Type: unknown) => Type},Component:class {},
     Director:{},ResolutionPolicy:{},director:{},profiler:{},JsonAsset:class {},resources:{},
     Color,UITransform,Node,Graphics,Sprite,Label:class {},Vec3,Layers:{Enum:{UI_2D:1}},tween,
@@ -44,7 +49,7 @@ import { stage1 } from '../client/assets/scripts/core/stage1';
 import fixture from './fixtures/v1/stage1.solution.json';
 import momSolution from './fixtures/v1/mom.solution.json';
 
-beforeEach(() => { effects.play.mockReset(); effects.load.mockReset().mockResolvedValue(undefined); vi.unstubAllGlobals(); });
+beforeEach(() => { effects.play.mockReset(); effects.load.mockReset().mockResolvedValue(undefined); animation.tweens.length=0; vi.unstubAllGlobals(); });
 
 test('legal last drop keeps stage, freezes controls, plays cues once, and exposes next only after finish',() => {
   let now=0; const route=vi.fn(), vibrate=vi.fn(); vi.stubGlobal('navigator',{vibrate});
@@ -368,4 +373,36 @@ test('pickup and legal drop vibrate when enabled and stay silent when disabled',
   };
   expect(run(true).mock.calls).toEqual([[10],[20]]);
   expect(run(false)).not.toHaveBeenCalled();
+});
+
+test('legal drop squashes to 0.85, rebounds to 1.05, and settles in 220ms',() => {
+  const placement=fixture.placements[0];
+  const page=new StagePage(new Node(),stage1(fixture.date),() => 0,vi.fn());
+  const p=page as any;
+  const piece=p.level.pieces.find((item: any) => item.id === placement.pieceId);
+  const view=p.pieces.get(piece.id)!;
+  p.drag.release=() => ({tap:false,gesture:{mode:'drag',piece,rotation:placement.rotation,current:{x:0,y:0},fromTray:true}});
+  p.updateHeld=() => { p.previewPlacement=placement; };
+  animation.tweens.length=0;
+  p.end({getID:() => 1,getUILocation:() => ({x:0,y:0})});
+  const scales=animation.tweens.filter(call => call.target === view.node && call.props.scale)
+    .map(call => ({duration:call.duration,y:call.props.scale.y}));
+  expect(scales).toEqual([{duration:.06,y:.85},{duration:.06,y:1.05},{duration:.1,y:1}]);
+});
+
+test('undo and restart fly changed pieces back over 180ms',() => {
+  const placement=fixture.placements[0];
+  const page=new StagePage(new Node(),stage1(fixture.date),() => 0,vi.fn());
+  const p=page as any;
+  const piece=p.level.pieces.find((item: any) => item.id === placement.pieceId);
+  const view=p.pieces.get(piece.id)!;
+  expect(p.session.drop(placement)).toBe(true); p.sync();
+  animation.tweens.length=0;
+  p.buttons[1].action();
+  expect(animation.tweens.some(call => call.target === view.node && call.duration === .18)).toBe(true);
+  expect(p.session.placements).toEqual([]);
+  expect(p.session.drop(placement)).toBe(true); p.sync();
+  animation.tweens.length=0;
+  p.restartStage();
+  expect(animation.tweens.some(call => call.target === view.node && call.duration === .18)).toBe(true);
 });
