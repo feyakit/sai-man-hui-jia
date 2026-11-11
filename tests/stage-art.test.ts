@@ -62,7 +62,11 @@ test('loaded item art replaces the card and rotates the whole picture',async () 
   const root=page.node.getChildByName(`Piece${piece.id}`)!;
   const image=root.getChildByName(`Sprite${piece.id}`)!;
   const title=root.getChildByName(`Item${piece.id}`)!;
+  const feature=root.getChildByName(`Feature${piece.id}`)!.getComponent(Graphics) as unknown as {clear: ReturnType<typeof vi.fn>};
+  feature.clear.mockClear();
   (page as unknown as TestPage).drawPiece(piece,1,40,false);
+  // The card emblem drawn before the art arrived must not stay painted over the picture.
+  expect(feature.clear).toHaveBeenCalled();
   expect(image.getComponent(Sprite)!.enabled).toBe(true);
   expect(image.getComponent(Sprite)!.spriteFrame).toBe(frame);
   expect(title.active).toBe(false);
