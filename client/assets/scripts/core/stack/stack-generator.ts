@@ -1,8 +1,8 @@
 import { createRng, shuffle } from '../rng';
-import { stackItemByName, stackItems } from './catalog';
-import { freeCards } from './rules';
-import { solveStackLevel } from './solver';
-import type { StackCard, StackItemDef, StackLevel, StackPoint } from './types';
+import { stackItemByName, stackItems } from './stack-catalog';
+import { freeCards } from './stack-rules';
+import { solveStackLevel } from './stack-solver';
+import type { StackCard, StackItemDef, StackLevel, StackPoint } from './stack-types';
 
 export const STACK_SEEDS = ['trunk-stack-stage1-v1', 'trunk-stack-stage2-v1'] as const;
 export const STAGE1_CARDS = 18;

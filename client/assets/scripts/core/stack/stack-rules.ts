@@ -1,7 +1,7 @@
 import { shuffle } from '../rng';
 import type {
   StackCard, StackLevel, StackPoint, StackProps, StackStatus, StackTapResult,
-} from './types';
+} from './stack-types';
 
 export const SLOT_CAPACITY = 7;
 export const PACK_SIZE = 3;

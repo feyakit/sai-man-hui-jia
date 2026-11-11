@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { STAGE1_ITEMS, STAGE2_ITEMS, stackItemByName, stackItems } from '../client/assets/scripts/core/stack/catalog';
-import { generateStackLevel, STACK_SEEDS } from '../client/assets/scripts/core/stack/generator';
+import { STAGE1_ITEMS, STAGE2_ITEMS, stackItemByName, stackItems } from '../client/assets/scripts/core/stack/stack-catalog';
+import { generateStackLevel, STACK_SEEDS } from '../client/assets/scripts/core/stack/stack-generator';
 import {
   freeCards, isBlocked, rectsOverlap, SLOT_CAPACITY, slotInsertIndex, StackGame, topCardAt,
-} from '../client/assets/scripts/core/stack/rules';
-import { simulateStackPicks, solveStackLevel } from '../client/assets/scripts/core/stack/solver';
-import type { StackCard, StackLevel } from '../client/assets/scripts/core/stack/types';
+} from '../client/assets/scripts/core/stack/stack-rules';
+import { simulateStackPicks, solveStackLevel } from '../client/assets/scripts/core/stack/stack-solver';
+import type { StackCard, StackLevel } from '../client/assets/scripts/core/stack/stack-types';
 import { createRng } from '../client/assets/scripts/core/rng';
 
 function card(id: number, kind: string, x: number, y: number, layer = 0, w = 80, h = 80): StackCard {

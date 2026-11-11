@@ -2,9 +2,9 @@ import {
   Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, UITransform, Vec3,
   game, sys, tween, view,
 } from 'cc';
-import { STACK_SEEDS, generateStackLevel } from '../core/stack/generator';
-import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/rules';
-import type { StackCard, StackLevel, StackTapResult } from '../core/stack/types';
+import { STACK_SEEDS, generateStackLevel } from '../core/stack/stack-generator';
+import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
+import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import { createRng } from '../core/rng';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
