@@ -22,13 +22,13 @@ test('loaded frame is shared by filename; failed or thrown load resolves fallbac
   expect(await loadArt('items/duck')).toBeUndefined();
 });
 
-test('all ten MP3 names are optional, cached, and failures remain silent',async () => {
+test('all eleven MP3 names are optional, cached, and failures remain silent',async () => {
   const {AUDIO_NAMES,loadAudio}=await import('../client/assets/scripts/services/OptionalResources');
-  expect(AUDIO_NAMES).toEqual(['pickup','drop','invalid','rotate','undo','tick','trunk_slam','horn','cheer','mom']);
+  expect(AUDIO_NAMES).toEqual(['pickup','drop','invalid','rotate','undo','tick','trunk_slam','horn','cheer','mom','pack']);
   for (const name of AUDIO_NAMES) expect(await loadAudio(name)).toBeUndefined();
   expect(engine.info.mock.calls.map(call => call[0])).toEqual(AUDIO_NAMES.map(name => `audio/${name}`));
   expect(engine.load).not.toHaveBeenCalled();
-  await loadAudio('pickup'); expect(engine.info).toHaveBeenCalledTimes(10);
+  await loadAudio('pickup'); expect(engine.info).toHaveBeenCalledTimes(11);
 });
 test('audio success, callback failure, and synchronous loader failure all resolve',async () => {
   const {loadAudio}=await import('../client/assets/scripts/services/OptionalResources');
