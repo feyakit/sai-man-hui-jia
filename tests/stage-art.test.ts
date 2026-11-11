@@ -120,8 +120,14 @@ test('phone layout reserves separate header, open trunk and tray bands',() => {
   expect(frame.trunk.y-35-216).toBeGreaterThanOrEqual(100);
   expect(frame.car.y+frame.car.h).toBeLessThan(frame.tray.y);
   expect(frame.tray.y+frame.tray.h).toBeLessThan(frame.buttonY);
+  expect(frame.buttonH).toBeGreaterThanOrEqual(120);
   expect(frame.cell).toBeGreaterThanOrEqual(76);
   expect(vehicleLook('sedan_v1').body).not.toBe(vehicleLook('train').body);
+});
+
+test('grid cell caps at 110 design pixels',() => {
+  const frame=computeStageLayout({width:1,height:1,mode:'normal'},1334,0,0);
+  expect(frame.cell).toBe(110);
 });
 
 test('every cargo category has a distinct cool-to-warm palette and deep outline',() => {

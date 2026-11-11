@@ -246,3 +246,16 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 验证——`npm test`：97 通过、1 个既有性能测试默认跳过（含 typecheck，核心行覆盖率 98.81%）；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点），无关卡文件差异；`/workspace/build-play.sh origin/codex/v1-10-stage2-guide --no-publish` 成功，源码 `20a9e5a`，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误。未运行 `art:placeholders`。
 - 截图（390×844 视口、DPR 2）——`/workspace/play-check/task10/stage1-start.png`（首件上的手指与合法落点）、`stage1-after-touch.png`（首次触摸后消失）、`stage2-start.png`（10 件、149 秒）、`stage2-five-packed.png`（5/10）、`mom.png`（`?mode=mom`，无引导）。
 - 部分/限制——截图来自 Web Mobile 正式构建 + Chromium，不是实体手机；“装五件”截图通过合法测试夹具写入运行时会话取得，未逐件执行五次真实拖拽；手指为代码绘制的小型红金掌形，未使用独立 PNG；未实测真机触感、帧率或音频。完整验收结论写入仓库外 `/workspace/task10-report.md`。
+
+## 2026-11-12 · 任务 11：V1 收尾对照 + 补缺
+
+- 从 `origin/work/m1-core`（`01eccb9`）创建 `codex/v1-11-checklist`；Draft PR #18：https://github.com/feyakit/sai-man-hui-jia/pull/18，目标 `work/m1-core`。本轮未操作 `main`、未合并、未运行 `gh run watch`、未运行 `art:placeholders`。
+- 新增 `docs/v1-checklist.md`，逐条对照 `docs/spec-v1.2.md` 第 4.2–4.12 节，标记已实现/部分/缺失，并把需要重做托盘架构、补正式音频和真机性能实测的项目列入“遗留”。
+- 通过——4.7 设置：`76312ac` 新增 `GameSettings`，音效/震动默认开，键 `smhj.game-settings.v1`，容错读取/写入；`f7e0251` 在 `StagePage` 增加右上角红金齿轮按钮和 330×136 小面板，面板位于后备箱上方，两个开关可即时生效并持久化。`tests/game-settings.test.ts`、`tests/sound-effects.test.ts`、`tests/finish-integration.test.ts` 覆盖默认值、损坏存储、静音恢复、齿轮/面板和双开关持久化。
+- 通过——4.7 倒计时：`aff5d3f` 新增 `CountdownFeedback`，≤10 秒数字变红、每秒 tick、轻微跳动；`StagePage.tick()` 只在秒数变化时触发。`tests/countdown-feedback.test.ts` 和 `tests/finish-integration.test.ts` 覆盖 10→1 秒和 0 秒边界。
+- 通过——4.8：重开二次确认“重新装车？”，取消不清空盘面；时间到后 `StageSession` 拒绝变更，`StagePage` 冻结盘面并弹“时间到 · 再装一次”，按钮重开当前关。`tests/stage-session.test.ts`、`tests/finish-integration.test.ts` 覆盖确认/取消、冻结、重置计时和朝向。
+- 通过——4.9：保留既有 `FinishTimeline`/`FinishView` 的 2.5 秒结算、点击跳过到末帧、按钮延迟出现、彩纸固定池 ≤120 和结束回收；新增回归断言确保跳过不补播旧音效/震动、不穿透按钮。
+- 通过——小偏差修正：`796d42a` 把后备箱格长上限从 112 校正为规格的 110；`d56fe70` 把合法落下改为纵向 0.85→1.05→1.0、约 220ms，并为撤销/重开增加 180ms 飞回；`53ee7d1` 把操作按钮高度补到规格最低 120px。`tests/stage-art.test.ts`、`tests/finish-integration.test.ts` 新增对应单测。
+- 验证——`npm test`：109 通过、1 个既有性能测试默认跳过（含 typecheck，核心行覆盖率 98.81%）；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、`nodesToFirst=3022`，无关卡文件差异）；`npm run test:performance` 1 通过（最终复跑 460ms）；`git diff --check` 通过。
+- 构建/截图——`/workspace/build-play.sh origin/codex/v1-11-checklist --no-publish` 成功，最终源码 `8f820d0`，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误；`/workspace/play-dist/build-info.json` 记录同一提交，产物在 `/workspace/play-dist`。截图（390×844 视口、DPR 2）在 `/workspace/play-check/task11/`：`stage1-start.png`（齿轮按钮可见）、`settings-panel.png`（面板打开且不遮挡后备箱）、`countdown-10s.png`（红色 10 秒）、`restart-confirm.png`（重新装车？）、`timeout.png`（时间到 · 再装一次）。截图来自正式 Web Mobile 构建 + Chromium。
+- 部分/遗留——4.3 托盘仍会在第 2 关 10 件的窄屏横向滚动，最小格长 56px 而非 20px，放置后剩余件会重排；4.11 正式 MP3 尚未提供（目录只有 README，加载/开关/静默回退已就绪）；4.12 低端机 45/60fps、4G ≤3 秒启动和真机安全区/触感未实测。完整结论见仓库外 `/workspace/task11-report.md`。

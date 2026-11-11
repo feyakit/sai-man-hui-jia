@@ -57,7 +57,7 @@ export function controlContentLayout(rect: Rect): {iconX: number; textX: number}
 }
 
 export function computeStageLayout(level: Pick<Level,'width'|'height'|'mode'>, height: number, top: number, bottom: number): StageLayout {
-  const buttonH=112;
+  const buttonH=120;
   const buttonY=height-bottom-24-buttonH;
   const trayH=Math.max(300,Math.min(420,height*.26));
   const trayY=buttonY-24-trayH;
@@ -65,7 +65,7 @@ export function computeStageLayout(level: Pick<Level,'width'|'height'|'mode'>, h
   const carBottom=Math.max(carTop+430,trayY-46);
   const car={x:14,y:carTop,w:722,h:carBottom-carTop};
   const trunk={x:44,y:carTop+78,w:662,h:Math.max(250,car.h-78-144)};
-  const cell=Math.floor(Math.min(112,(trunk.w-20)/level.width,(trunk.h-20)/level.height));
+  const cell=Math.floor(Math.min(110,(trunk.w-20)/level.width,(trunk.h-20)/level.height));
   const board={x:(750-level.width*cell)/2,y:trunk.y+(trunk.h-level.height*cell)/2,
     w:level.width*cell,h:level.height*cell};
   return {cell,car,trunk,board,tray:{x:5,y:trayY,w:740,h:trayH},buttonY,buttonH,noticeY:trayY-20};
