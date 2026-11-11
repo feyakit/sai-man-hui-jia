@@ -99,11 +99,19 @@ export class StagePage {
   private readonly momAvatar: Node;
   private readonly momBubbleNode: Node;
   private readonly momBubble: Label;
+  private readonly guideNode: Node;
+  private readonly guideHand: Node;
+  private readonly guideArt: Graphics;
   private previewPlacement?: Placement;
   private modal: 'restart' | 'timeout' | undefined;
   private landscape = false;
   private mom?: MomSequence;
   private momIntroUntil = 0;
+  private guidePlacement?: Placement;
+  private guideFrom?: Point;
+  private guideTo?: Point;
+  private guideStarted = 0;
+  private guideDismissed = false;
   private readonly onHide = () => this.cancelDrag();
 
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: (action: FinishAction) => void) {
@@ -190,6 +198,11 @@ export class StagePage {
     this.overlay = uiNode('InteractionOverlay',this.node,750,1334);
     this.overlay.addComponent(Graphics);
     this.overlayText = label(this.overlay,'Prompt','',38,0,50);
+    this.guideNode = uiNode('FirstLevelGuide',this.node,750,1334);
+    this.guideNode.active = false;
+    this.guideArt = this.guideNode.addComponent(Graphics);
+    this.guideHand = uiNode('GuideHand',this.guideNode,96,112);
+    this.drawGuideHand(this.guideHand.addComponent(Graphics));
     this.node.on(Node.EventType.TOUCH_START,this.start,this);
     this.node.on(Node.EventType.TOUCH_MOVE,this.move,this);
     this.node.on(Node.EventType.TOUCH_END,this.end,this);
@@ -234,6 +247,12 @@ export class StagePage {
       this.finishView!.render(this.finish.advance(this.now()-this.finishStarted));
       return;
     }
+    if (this.canShowGuide()) {
+      if (!this.guidePlacement) this.prepareGuideRoute();
+      this.updateGuide();
+    } else {
+      this.guideNode.active = false;
+    }
     const showIntro=this.level.mode === 'mom' && !this.mom && this.now() < this.momIntroUntil;
     this.momIntro.node.active = showIntro;
     this.momIntroBubble.active = showIntro;
@@ -271,6 +290,8 @@ export class StagePage {
       this.placeLabel(`Button${i}`,button.rect.y+58,button.rect.x+button.rect.w/2-375);
     }
     this.drawBackground(); this.sync(); this.updateOverlay();
+    this.guidePlacement=undefined; this.guideFrom=undefined; this.guideTo=undefined;
+    if (this.guideNode) this.prepareGuideRoute();
     this.finishView?.layout(this.height,this.board);
   }
 
@@ -326,6 +347,109 @@ export class StagePage {
     fill(g,new Color(255,226,190),-189,-23,378,54,14);
     g.fillColor=new Color(255,246,229);
     g.moveTo(-12,-39); g.lineTo(20,-39); g.lineTo(2,-62); g.close(); g.fill();
+  }
+
+  private canShowGuide(): boolean {
+    return this.level.stage === 1 && this.level.mode !== 'mom' && !this.guideDismissed &&
+      !this.cleared && !this.finish && !this.modal;
+  }
+
+  private prepareGuideRoute(): void {
+    this.guideNode.active = false;
+    if (!this.canShowGuide()) return;
+    const piece=this.remainingPieces()[0];
+    if (!piece) return;
+    const view=this.pieces.get(piece.id)!;
+    if (!view.node.active || !view.rect.w || !view.rect.h) return;
+    const placement=this.findGuidePlacement(piece);
+    if (!placement) return;
+    const box=dimensions(piece,placement.rotation);
+    this.guidePlacement=placement;
+    this.guideFrom={x:view.rect.x+view.rect.w/2,y:view.rect.y+view.rect.h/2};
+    this.guideTo={x:this.board.x+(placement.x+box.w/2)*this.cell,
+      y:this.board.y+(placement.y+box.h/2)*this.cell};
+    this.guideStarted=this.now();
+    this.guideNode.active=true;
+    this.drawGuideMarker(piece,placement);
+    this.updateGuide();
+  }
+
+  private findGuidePlacement(piece: PieceDef): Placement | undefined {
+    const preferred=this.session.rotationFor(piece.id);
+    const rotations:[Rotation,Rotation,Rotation,Rotation]=[preferred,0,1,2];
+    const seen=new Set<Rotation>();
+    let best: Placement | undefined, bestScore=Infinity;
+    for (const rotation of rotations) {
+      if (seen.has(rotation)) continue;
+      seen.add(rotation);
+      const box=dimensions(piece,rotation);
+      for (let y=0;y<=this.level.height-box.h;y++) for (let x=0;x<=this.level.width-box.w;x++) {
+        const placement:Placement={pieceId:piece.id,x,y,rotation};
+        if (!this.session.canDrop(placement)) continue;
+        const score=(rotation === preferred ? 0 : 1000)+Math.abs(x+box.w/2-this.level.width/2)+y*2;
+        if (score < bestScore) { best=placement; bestScore=score; }
+      }
+    }
+    return best;
+  }
+
+  private updateGuide(): void {
+    if (!this.guideNode.active || !this.guideFrom || !this.guideTo) return;
+    const travel=1100,dwell=320,total=(travel+dwell)*2;
+    const elapsed=Math.max(0,this.now()-this.guideStarted)%total;
+    let progress=0;
+    if (elapsed < travel) progress=elapsed/travel;
+    else if (elapsed < travel+dwell) progress=1;
+    else if (elapsed < travel*2+dwell) progress=1-(elapsed-travel-dwell)/travel;
+    const eased=progress*progress*(3-2*progress);
+    const x=this.guideFrom.x+(this.guideTo.x-this.guideFrom.x)*eased;
+    const y=this.guideFrom.y+(this.guideTo.y-this.guideFrom.y)*eased;
+    const bob=Math.sin(elapsed/total*Math.PI*4)*2.5;
+    this.guideHand.setPosition(x-375,this.height/2-y+bob);
+  }
+
+  private drawGuideMarker(piece: PieceDef,placement: Placement): void {
+    const g=this.guideArt; g.clear();
+    const box=dimensions(piece,placement.rotation);
+    const left=this.board.x+placement.x*this.cell-375;
+    const right=left+box.w*this.cell;
+    const top=this.height/2-(this.board.y+placement.y*this.cell);
+    const bottom=top-box.h*this.cell;
+    const corner=Math.min(22,this.cell*.34);
+    g.strokeColor=new Color(246,195,67,220); g.lineWidth=3;
+    g.moveTo(left,top-corner); g.lineTo(left,top); g.lineTo(left+corner,top);
+    g.moveTo(right-corner,top); g.lineTo(right,top); g.lineTo(right,top-corner);
+    g.moveTo(left,bottom+corner); g.lineTo(left,bottom); g.lineTo(left+corner,bottom);
+    g.moveTo(right-corner,bottom); g.lineTo(right,bottom); g.lineTo(right,bottom+corner);
+    g.stroke();
+    const cx=(left+right)/2,cy=(top+bottom)/2;
+    g.fillColor=new Color(255,246,229,190); g.circle(cx,cy,8); g.fill();
+    g.strokeColor=new Color(215,51,43,170); g.lineWidth=2; g.circle(cx,cy,12); g.stroke();
+  }
+
+  private drawGuideHand(g: Graphics): void {
+    const outline=new Color(112,28,31,235), fingertip=new Color(255,243,214);
+    fill(g,new Color(40,20,10,65),-9,-94,57,80,23);
+    fill(g,outline,-11,-49,22,52,11);
+    fill(g,fingertip,-7,-45,14,45,7);
+    fill(g,outline,0,-75,48,51,22);
+    fill(g,cream,4,-71,40,43,19);
+    fill(g,outline,-4,-56,23,24,12);
+    fill(g,cream,-1,-53,17,18,9);
+    fill(g,outline,7,-94,40,24,10);
+    fill(g,new Color(184,40,42),10,-91,34,18,7);
+    fill(g,gold,12,-81,30,3,2);
+    fill(g,new Color(255,255,255,90),-4,-40,7,26,4);
+    fill(g,new Color(246,195,67,205),-18,-71,5,5,3);
+    fill(g,new Color(246,195,67,175),35,-51,4,4,2);
+    fill(g,new Color(215,51,43,175),28,-99,4,4,2);
+  }
+
+  private dismissGuide(): void {
+    if (this.guideDismissed) return;
+    this.guideDismissed=true;
+    this.guideNode.active=false;
+    this.guidePlacement=undefined; this.guideFrom=undefined; this.guideTo=undefined;
   }
 
   private button(text: string,x: number,w: number,action: () => void,duringDrag = false): Label {
@@ -577,6 +701,7 @@ export class StagePage {
     return this.touchPoint;
   }
   private start(event: EventTouch): void {
+    this.dismissGuide();
     const p=this.point(event);
     if (this.finish) {
       if (!this.finish.state.buttons) this.finishView!.render(this.finish.skip());
@@ -721,6 +846,7 @@ export class StagePage {
   }
   private beginFinish(): void {
     this.cleared=true; this.selected=undefined;
+    this.dismissGuide();
     this.momIntro.node.active=false; this.momLayer.active=false;
     this.momIntroBubble.active=false;
     this.finishStarted=this.now();
@@ -783,6 +909,8 @@ export class StagePage {
     this.mom=undefined; this.momLayer.active=false;
     this.momIntroUntil=this.level.mode === 'mom' ? this.now()+MOM_INTRO_MS : 0;
     this.sync(); this.updateOverlay();
+    this.guidePlacement=undefined; this.guideFrom=undefined; this.guideTo=undefined;
+    if (this.canShowGuide()) this.prepareGuideRoute();
   }
   private cancelDrag(): void { this.trayPan=undefined; if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { this.trayPan=undefined; if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
