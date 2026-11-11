@@ -1,5 +1,5 @@
 import { Color, Graphics } from 'cc';
-import { itemKey } from '../core/items';
+import { ITEMS, itemKey } from '../core/items';
 import type { PieceDef } from '../core/types';
 
 export interface ItemTone {
@@ -35,7 +35,7 @@ const tones: Record<string,ItemTone> = {
 const fallback: ItemTone = {hex:'#4E7D78',base:new Color(78,125,120),edge:new Color(30,55,52),accent:new Color(238,196,105),light:new Color(128,170,161)};
 
 export function itemTone(piece: PieceDef): ItemTone {
-  return tones[itemKey(piece)] ?? fallback;
+  return tones[itemKey(piece)] ?? tones[ITEMS[piece.shape]?.key] ?? fallback;
 }
 
 function block(g: Graphics,color: Color,x: number,y: number,w: number,h: number,r = 0): void {

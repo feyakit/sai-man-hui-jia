@@ -41,6 +41,10 @@ const shorts: Record<string,string> = {
   suitcase_s:'登机箱', duffel:'拉杆包', nutbox:'坚果', fish:'鱼', duck:'腊鸭',
   quilt:'被子', frozenbox:'冻品', tv:'电视', coop:'鸡鸭笼', crab:'闸蟹',
   painting:'年画', lotusroot:'莲藕', couplets:'春联', suitcase_l:'行李箱',
+  winebox:'红酒', ricecake:'年糕', hairtail:'带鱼', oil:'食用油', mandarin:'砂糖橘', toycar:'玩具车',
+  ricebag:'大米', drinks:'饮料', teabox:'茶叶', eggs:'鸡蛋', candy:'糖果', snacks:'零食',
+  ham:'火腿', kumquat:'金桔', fruitbasket:'果篮', apples:'苹果', fudeco:'窗花', larou:'腊肉',
+  lanterns:'灯笼', woven:'编织袋',
 };
 export function itemName(piece: PieceDef): string { return itemMeta(piece).name; }
 export function itemShortName(piece: PieceDef): string { return shorts[itemMeta(piece).key] ?? itemName(piece); }
