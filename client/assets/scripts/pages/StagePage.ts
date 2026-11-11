@@ -11,7 +11,7 @@ import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
-import { computeStageLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { computeStageLayout, controlContentLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
 import { drawItemFeature, itemTone } from '../ui/ItemArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
@@ -252,7 +252,7 @@ export class StagePage {
   private button(text: string,x: number,w: number,action: () => void,duringDrag = false): Label {
     const index = this.buttons.length;
     this.buttons.push({rect:{x,y:this.buttonY,w,h:this.buttonH},action,duringDrag});
-    return label(this.node,`Button${index}`,text,30,0,0);
+    return label(this.node,`Button${index}`,text,28,0,0);
   }
   private updateControls(): void {
     this.controls.clear();
@@ -262,10 +262,10 @@ export class StagePage {
       this.rect(this.controls,b.rect,gold);
       this.rect(this.controls,{x:b.rect.x+4,y:b.rect.y+4,w:b.rect.w-8,h:b.rect.h-8},
         active ? new Color(239,181,62) : new Color(184,40,42));
-      const cx=b.rect.x+35-375,cy=this.height/2-(b.rect.y+b.rect.h/2);
-      this.drawControlIcon(this.controls,i,cx,cy,active ? ink : gold);
+      const content=controlContentLayout(b.rect),cy=this.height/2-(b.rect.y+b.rect.h/2);
+      this.drawControlIcon(this.controls,i,content.iconX-375,cy,active ? ink : gold);
       const text=this.node.getChildByName(`Button${i}`);
-      text?.setPosition(b.rect.x+b.rect.w/2+17-375,this.height/2-(b.rect.y+b.rect.h/2));
+      text?.setPosition(content.textX-375,cy);
     }
     const rotateTitle=this.node.getChildByName('Button0')?.getComponent(Label);
     if (rotateTitle) rotateTitle.color=this.selected ? ink : gold;

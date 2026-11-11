@@ -25,7 +25,7 @@ import { Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
-import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
+import { computeStageLayout, controlContentLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
 import { ITEMS } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
@@ -75,6 +75,15 @@ test('draws a representative emblem for every cargo item',() => {
     const piece={id:1,shape:shape as any,item:meta.key,initialRotation:0 as const} as PieceDef;
     drawItemFeature(g,piece,60,120,60,22,itemTone(piece));
   }
-  expect(g.fill.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length*2);
-  expect(g.stroke.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length);
+  const graphics=g as unknown as {fill:{mock:{calls:unknown[]}};stroke:{mock:{calls:unknown[]}}};
+  expect(graphics.fill.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length*2);
+  expect(graphics.stroke.mock.calls.length).toBeGreaterThan(Object.keys(ITEMS).length);
+});
+
+test('keeps each control icon in its own left column away from the text',() => {
+  for (const rect of [{x:45,y:1400,w:180,h:112},{x:295,y:1400,w:160,h:112},{x:515,y:1400,w:160,h:112}]) {
+    const content=controlContentLayout(rect);
+    expect(content.iconX-rect.x).toBe(34);
+    expect(content.textX-content.iconX).toBeGreaterThanOrEqual(66);
+  }
 });
