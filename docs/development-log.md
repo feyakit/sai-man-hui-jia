@@ -217,3 +217,22 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 截图（390×844，DPR 1）——`/workspace/play-check/task7/stage1.png`（第 1 关初始）、`/workspace/play-check/task7/stage1-loaded.png`（第 1 关 4/4 装车、空托盘提示）、`/workspace/play-check/task7/stage2.png`（第 2 关 10 件托盘）、`/workspace/play-check/task7/mom.png`（`?mode=mom` 妈妈说气泡）。
 - 部分/限制——截图来自 Web Mobile 正式产物 + Chromium 390×844 视口，不是实体手机；第 2 关 10 件托盘单格约 44 设计像素，图形特征配合分类色和 2–3 字名称识别，未实测真机小屏触控手感、帧率或音频；第 1 关装满图通过把测试夹具落位写入运行时会话后截图，以保留空托盘提示画面，未改变正式结算规则。
 - 完整验收结论写入仓库外 `/workspace/task7-report.md`。
+## 2026-11-11 · 美术：实物年货与写实车尾（art/v1-real）
+
+- 基于 `work/m1-core`（`d4cf05f`）创建 `art/v1-real`，draft PR 指向 `work/m1-core`。
+- 通过——19 张 `art/items/<key>.png` 换成 AI 生成的手绘实物年货图：按 4.11 尺寸（朝向 0 包围盒 × 128px）、透明底，物品轮廓贴合占格形状，按占格形状内缩 6px 做蒙版，非占用格 alpha = 0；图上没有必须正向的文字（冻品箱/坚果盒上的“福”贴纸是装饰，倒着也成立）。
+- 通过——`vehicles/sedan_v1_body.png`（车尾，后备箱开口透明）、`sedan_v1_lid.png`、`sedan_v1_trunk.png`（深色地毯）、`ui/bg_night.png`（除夕夜归家街道）。PNG 用 sharp 调色板压缩，art 目录约 1.5MB。
+- 代码——`StagePage.drawPiece`：行李图加载后每件一个 Sprite、整图按 `90°×rotation` 旋转，选中/拿起只在占用格下画柔光，图未加载或缺失时回到原色块+名称卡片；背景、车尾、箱底三张图加载后替换对应 Graphics 画法，车尾图用 SLICED 只拉伸尾灯以上的立柱段，开口对齐 `trunk` 矩形；格线改为代码画的极淡线，阻塞格照旧画叉。
+- 测试——`tests/stage-art.test.ts` 原用例断言“不加载 items/ 图”，这是任务 6 在占位图阶段的约束，现改为：未加载时显示卡片；加载后 Sprite 启用、标题隐藏、整图旋转且保持朝向 0 尺寸（新增用例）。`npm test` 76 通过 / 1 跳过；`npm run art:check` 通过。未运行 `art:placeholders`（会覆盖正式图）。
+- 打包——`/workspace/build-play.sh origin/art/v1-real --no-publish`，本地 390×844 截图在 `/workspace/play-check/real-art/`；未发布线上。
+- 未做——托盘仍是代码画的木托盘；第 2 关挑战关是五菱等车型时也共用小轿车车尾图；手指引导、按钮图标、妈妈头像未换图。
+
+## 2026-11-11 · 任务 8：实物年货并入主线与可读性修复
+
+- 从 `origin/work/m1-core`（`3fd4b4d`）创建 `codex/v1-8-real`；合并 `origin/art/v1-real` 到 `bd124f5`，保留实物年货 Sprite、夜景、车尾、箱底和极淡格线，同时保留任务 7 的按钮图标/文字分离、HUD 间距、空托盘庆祝；图未加载时仍显示配色、徽记和名称卡片。`e9a0eae` 修正每件按自己的 `item` 选图，未知 key 才回退 shape 默认图。
+- 通过——托盘最小单格 56px：`trayLayout` 按当前朝向尝试 1–3 行，放不下时保持整件并允许横向滑动；`StagePage` 增加托盘横向拖拽、滚动条和“托盘左右滑动”提示，完全移出视口的件隐藏而不是裁半截。12 件、10 件和旧 demo 20 件布局均有单测。相关提交 `b5854e8`。
+- 通过——后备箱铺满与投影：`ITEM_OVERSCAN=1.025` 让实物略大于占格包围盒，减少素材透明边造成的空洞；已放置件增加同图轮廓的轻投影（`Shadow*` Sprite，偏移 4/-6、低透明度），不改变碰撞。相关提交 `9264e0e`。
+- 通过——同屏多样性：根因之一是旧代码按 shape 默认 key 取图，已由 `e9a0eae` 修复；`demo.json` 只换 item key、不动形状/朝向/障碍，20 件从原 6 类提升到 10 类（最高重复 3 次），仍可完整解出。`f1fc214`。
+- 通过——腊肠/莲藕比例：`items.ts` 增加仅影响显示的 `scale` 提示，腊肠 I3 纵向 1.6（约占格高 80%），莲藕 N5 纵向 1.12；占格、碰撞和旋转规则未变。`9138655`。
+- 验证——`npm test` 84 通过、1 个既有性能测试默认跳过；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点，无文件差异）；`/workspace/build-play.sh origin/codex/v1-8-real --no-publish` 成功，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误。未运行 `art:placeholders`，未修改 main、未合并、未运行 `gh run watch`。
+- 截图（390×844 视口、DPR 2）——`/workspace/play-check/task8/stage1.png`、`stage1-two-packed.png`、`stage2-start.png`、`stage2-five-packed.png`、`mom.png`；第 2 关五件取自 demo 的合法完整解（含腊肠、春联、冻品箱、莲藕、腊鸭）。完整结论见 `/workspace/task8-report.md`。
