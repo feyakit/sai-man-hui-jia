@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-const assets=vi.hoisted(() => ({load:vi.fn()}));
+const assets=vi.hoisted(() => ({load:vi.fn(async (_file: string): Promise<unknown> => undefined)}));
 vi.mock('../client/assets/scripts/services/OptionalResources',() => ({loadArt:assets.load}));
 vi.mock('../client/assets/scripts/services/SoundEffects',() => ({SoundEffects:class { play=vi.fn(); }}));
 vi.mock('cc',() => {
@@ -16,7 +16,7 @@ vi.mock('cc',() => {
     getChildByName(name: string) { return this.children.find(n => n.name===name); }
   }
   class Graphics { clear=vi.fn(); roundRect=vi.fn(); rect=vi.fn(); fill=vi.fn(); moveTo=vi.fn(); lineTo=vi.fn(); close=vi.fn(); circle=vi.fn(); stroke=vi.fn(); }
-  class Sprite { static SizeMode={CUSTOM:0}; spriteFrame?: unknown; enabled=false; }
+  class Sprite { static SizeMode={CUSTOM:0}; static Type={SLICED:1}; spriteFrame?: unknown; enabled=false; color?: unknown; node: any; }
   return {Color,UITransform,Node,Graphics,Sprite,Label:class {},Vec3:class {},Layers:{Enum:{UI_2D:1}},
     Tween:{stopAllByTarget:vi.fn()},Game:{EVENT_HIDE:'hide'},game:{on:vi.fn(),off:vi.fn()},
     sys:{getSafeAreaRect:() => ({x:0,y:0,width:750,height:1334})},view:{getVisibleSize:() => ({width:750,height:1334})}};
@@ -27,7 +27,7 @@ import { stage1 } from '../client/assets/scripts/core/stage1';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
-test('one code-drawn card per item with a clear short label',() => {
+test('each item shows a code-drawn card with its short label until its art arrives',() => {
   const level=stage1('2027-01-15');
   const page=new StagePage(new Node(),level,() => 0,vi.fn());
   const piece=level.pieces.at(-1)!;
@@ -37,7 +37,6 @@ test('one code-drawn card per item with a clear short label',() => {
   expect(image.getComponent(Sprite)!.enabled).toBe(false);
   expect(title.active).toBe(true);
   expect(title.getComponent(Label)!.string).toBe('白酒');
-  expect(assets.load.mock.calls.some(([name]: any[]) => String(name).startsWith('items/'))).toBe(false);
   for (const rotation of [0,1,2,3] as const) {
     (page as unknown as TestPage).drawPiece(piece,rotation,40,false);
     expect(image.getComponent(Sprite)!.enabled).toBe(false);
@@ -45,6 +44,28 @@ test('one code-drawn card per item with a clear short label',() => {
   }
   expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenCalled();
   expect(page.node.children.filter(n => n.name.startsWith('Piece'))).toHaveLength(level.pieces.length);
+});
+
+test('loaded item art replaces the card and rotates the whole picture',async () => {
+  const frame={name:'liquor-art'};
+  assets.load.mockImplementation(async (file: string) => file === 'items/liquor' ? frame : undefined);
+  const level=stage1('2027-01-15');
+  const page=new StagePage(new Node(),level,() => 0,vi.fn());
+  const piece=level.pieces.find(p => p.shape === 'I2')!;
+  (page as unknown as TestPage).drawPiece(piece,0,40,false);
+  await new Promise(resolve => setTimeout(resolve,0));
+  expect(assets.load.mock.calls.some(([name]) => name === 'items/liquor')).toBe(true);
+  const root=page.node.getChildByName(`Piece${piece.id}`)!;
+  const image=root.getChildByName(`Sprite${piece.id}`)!;
+  const title=root.getChildByName(`Item${piece.id}`)!;
+  (page as unknown as TestPage).drawPiece(piece,1,40,false);
+  expect(image.getComponent(Sprite)!.enabled).toBe(true);
+  expect(image.getComponent(Sprite)!.spriteFrame).toBe(frame);
+  expect(title.active).toBe(false);
+  expect(image.angle).toBe(90);
+  // The art is authored for rotation 0, so the sprite keeps the unrotated 2×1 box.
+  expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenLastCalledWith(80,40);
+  assets.load.mockImplementation(async () => undefined);
 });
 
 test('phone layout reserves separate header, open trunk and tray bands',() => {
