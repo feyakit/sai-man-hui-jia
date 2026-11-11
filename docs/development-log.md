@@ -232,7 +232,7 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 - 从 `origin/work/m1-core`（`3fd4b4d`）创建 `codex/v1-8-real`；合并 `origin/art/v1-real` 到 `bd124f5`，保留实物年货 Sprite、夜景、车尾、箱底和极淡格线，同时保留任务 7 的按钮图标/文字分离、HUD 间距、空托盘庆祝；图未加载时仍显示配色、徽记和名称卡片。`e9a0eae` 修正每件按自己的 `item` 选图，未知 key 才回退 shape 默认图。
 - 通过——托盘最小单格 56px：`trayLayout` 按当前朝向尝试 1–3 行，放不下时保持整件并允许横向滑动；`StagePage` 增加托盘横向拖拽、滚动条和“托盘左右滑动”提示，完全移出视口的件隐藏而不是裁半截。12 件、10 件和旧 demo 20 件布局均有单测。相关提交 `b5854e8`。
 - 通过——后备箱铺满与投影：`ITEM_OVERSCAN=1.025` 让实物略大于占格包围盒，减少素材透明边造成的空洞；已放置件增加同图轮廓的轻投影（`Shadow*` Sprite，偏移 4/-6、低透明度），不改变碰撞。相关提交 `9264e0e`。
-- 通过——同屏多样性：根因之一是旧代码按 shape 默认 key 取图，已由 `e9a0eae` 修复；`demo.json` 只换 item key、不动形状/朝向/障碍，20 件从 4 类提升到 10 类（最高重复 3 次），仍可完整解出。`f1fc214`。
+- 通过——同屏多样性：根因之一是旧代码按 shape 默认 key 取图，已由 `e9a0eae` 修复；`demo.json` 只换 item key、不动形状/朝向/障碍，20 件从原 6 类提升到 10 类（最高重复 3 次），仍可完整解出。`f1fc214`。
 - 通过——腊肠/莲藕比例：`items.ts` 增加仅影响显示的 `scale` 提示，腊肠 I3 纵向 1.6（约占格高 80%），莲藕 N5 纵向 1.12；占格、碰撞和旋转规则未变。`9138655`。
 - 验证——`npm test` 84 通过、1 个既有性能测试默认跳过；`npm run art:check` 通过；`npm run levels:v1` 通过（stage2 10 件、11 个完整解、首解 3022 节点，无文件差异）；`/workspace/build-play.sh origin/codex/v1-8-real --no-publish` 成功，本地验收 `ok:true`、`dragPlaced:true`、无页面/控制台错误。未运行 `art:placeholders`，未修改 main、未合并、未运行 `gh run watch`。
 - 截图（390×844 视口、DPR 2）——`/workspace/play-check/task8/stage1.png`、`stage1-two-packed.png`、`stage2-start.png`、`stage2-five-packed.png`、`mom.png`；第 2 关五件取自 demo 的合法完整解（含腊肠、春联、冻品箱、莲藕、腊鸭）。完整结论见 `/workspace/task8-report.md`。
