@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-const mocks=vi.hoisted(() => ({load:vi.fn(),play:vi.fn()}));
-vi.mock('cc',() => ({AudioClip:class {},AudioSource:class {playOneShot=mocks.play;}}));
+const mocks=vi.hoisted(() => ({load:vi.fn(),play:vi.fn(),stop:vi.fn()}));
+vi.mock('cc',() => ({AudioClip:class {},AudioSource:class {playOneShot=mocks.play;stop=mocks.stop;}}));
 vi.mock('../client/assets/scripts/services/OptionalResources',() => ({
   AUDIO_NAMES:['pickup','drop','invalid','rotate','undo','tick','trunk_slam','horn','cheer','mom'],loadAudio:mocks.load,
 }));
@@ -9,7 +9,7 @@ import type { Node } from 'cc';
 function owner() {
   return {isValid:true,getComponent:vi.fn(),addComponent:vi.fn((Type: new () => unknown) => new Type())};
 }
-beforeEach(() => { mocks.load.mockReset(); mocks.play.mockReset(); });
+beforeEach(() => { mocks.load.mockReset(); mocks.play.mockReset(); mocks.stop.mockReset(); });
 test('preloads all names, silent before ready, never replays an old action',async () => {
   let resolve!: (clip: unknown) => void;
   mocks.load.mockImplementation(() => new Promise(done => { resolve=done; }));
@@ -31,4 +31,13 @@ test('missing and playback failures are silent; destroyed owners are ignored',as
   expect(() => sounds.play('pickup')).not.toThrow();
   mocks.play.mockClear(); node.isValid=false;
   sounds.play('pickup'); expect(mocks.play).not.toHaveBeenCalled();
+});
+test('sound settings mute playback without discarding loaded clips',async () => {
+  mocks.load.mockResolvedValue({});
+  const sounds=new SoundEffects(owner() as unknown as Node);
+  await Promise.resolve(); await Promise.resolve();
+  sounds.play('drop'); expect(mocks.play).toHaveBeenCalledTimes(1);
+  sounds.setEnabled(false); expect(mocks.stop).toHaveBeenCalledTimes(1);
+  mocks.play.mockClear(); sounds.play('drop'); expect(mocks.play).not.toHaveBeenCalled();
+  sounds.setEnabled(true); sounds.play('drop'); expect(mocks.play).toHaveBeenCalledTimes(1);
 });
