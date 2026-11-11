@@ -1,4 +1,4 @@
-import { ITEMS } from '../client/assets/scripts/core/items';
+import { EXTRA_ITEMS, ITEMS } from '../client/assets/scripts/core/items';
 import { SHAPES } from '../client/assets/scripts/core/shapes';
 import type { Cell, ShapeId } from '../client/assets/scripts/core/types';
 
@@ -10,7 +10,9 @@ export function shapeSize(cells: readonly Cell[]) {
 }
 export const ITEM_ART: ArtEntry[] = (Object.keys(ITEMS) as ShapeId[]).map(shape => ({
   file:`items/${ITEMS[shape].key}.png`, name:ITEMS[shape].name, cells:SHAPES[shape], ...shapeSize(SHAPES[shape]),
-}));
+})).concat(EXTRA_ITEMS.map(item => ({
+  file:`items/${item.key}.png`, name:item.name, cells:SHAPES[item.shape], ...shapeSize(SHAPES[item.shape]),
+})));
 export const ART: ArtEntry[] = [...ITEM_ART,...[
   ['vehicles/sedan_v1_body',1024,640,'车尾'],['vehicles/sedan_v1_lid',1024,360,'后备箱盖'],
   ['vehicles/sedan_v1_trunk',1024,768,'箱内底'],['ui/btn_rotate',240,240,'旋转'],

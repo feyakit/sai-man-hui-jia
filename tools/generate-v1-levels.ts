@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { solve } from '../client/assets/scripts/core/dlx';
 import { generateLevel } from '../client/assets/scripts/core/generator';
-import { ITEMS } from '../client/assets/scripts/core/items';
+import { ITEMS, diversifySkins } from '../client/assets/scripts/core/items';
 import { parseLevel } from '../client/assets/scripts/core/level';
 import { createRng } from '../client/assets/scripts/core/rng';
 import { SHAPES } from '../client/assets/scripts/core/shapes';
@@ -24,6 +24,8 @@ function check(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Unsatisfied constraint: ${message}`);
 }
 const integer = (value: number, min: number, max = 1000000) => Number.isSafeInteger(value) && value >= min && value <= max;
+
+const SKIN_OFFSET = {stage2:1,mom:1};
 
 export function generateV1Stage2(cfg: StageConfig) {
   check(cfg && typeof cfg.seed === 'string' && typeof cfg.randomInitialRotation === 'boolean','stage2 seed / randomInitialRotation');
@@ -59,12 +61,14 @@ export function generateV1Stage2(cfg: StageConfig) {
     if (!result.firstSolution) { failures.noSolution++; continue; }
     if (result.solutionCountCapped || result.solutionCount < cfg.solutionCount[0] || result.solutionCount > cfg.solutionCount[1]) { failures.solutionCount++; continue; }
     if (result.nodesToFirst < cfg.minNodesToFirst) { failures.minNodesToFirst++; continue; }
-    return generateLevel({...template,preferredInventories:[shapes]}, {
+    const out = generateLevel({...template,preferredInventories:[shapes]}, {
       date:level.date,stage:2,timeLimitSec:cfg.timeLimitSec,minPieces:cfg.pieceCount[0],maxPieces:cfg.pieceCount[1],
       maxSameShape:cfg.maxSameShape,minLargeFraction:0,minSix:0,maxSix:cfg.maxSixCells,maxSmall:cfg.pieceCount[1],
       minSolutions:cfg.solutionCount[0],maxSolutions:cfg.solutionCount[1],minNodesToFirst:cfg.minNodesToFirst,
       maxNodes:500000,maxPartitionTries:10000,maxAttempts:1,randomInitialRotation:cfg.randomInitialRotation,
     },cfg.seed);
+    // Only item keys change: shapes, rotations, ids and the solution stay exactly as generated.
+    return {...out,level:{...out.level,pieces:diversifySkins(out.level.pieces,SKIN_OFFSET.stage2)}};
   }
   throw new Error(`Unsatisfied stage2 constraints ${JSON.stringify(cfg)}; rejection counts ${JSON.stringify(failures)}`);
 }
@@ -83,7 +87,8 @@ export function generateV1Mom(cfg: MomConfig) {
     const full: Level = {date:'2026-11-09',stage:3,mode:'mom',vehicle:template.id,width:template.width,height:template.height,blocked:template.blocked,timeLimitSec:cfg.timeLimitSec,pieces};
     const result = solve(full,{maxSolutions:1,maxNodes:500000});
     if (!result.firstSolution) continue;
-    const level = parseLevel({...full,pieces:pieces.slice(0,cfg.base),extras:pieces.slice(cfg.base).map(piece => [piece])});
+    const skinned = diversifySkins(pieces,SKIN_OFFSET.mom);
+    const level = parseLevel({...full,pieces:skinned.slice(0,cfg.base),extras:skinned.slice(cfg.base).map(piece => [piece])});
     return {level,solution:{date:level.date,stage:level.stage,placements:result.firstSolution}};
   }
   throw new Error(`Unsatisfied mom constraints: base=${cfg.base}, extras=${cfg.extras.join(',')}, total area=${area}, solvable; seed=${cfg.seed}`);
