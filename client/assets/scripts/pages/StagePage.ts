@@ -13,6 +13,8 @@ import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
 import { computeStageLayout, controlContentLayout, drawCarRear, drawTrunkGrid, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
 import { drawItemFeature, itemTone } from '../ui/ItemArt';
+import { browserSettingsStorage, loadGameSettings, saveGameSettings, type GameSettingsData } from '../game/GameSettings';
+import { countdownFrame } from '../game/CountdownFeedback';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
@@ -33,6 +35,17 @@ export class StagePage {
   readonly node: Node;
   private readonly session: StageSession;
   private readonly sounds: SoundEffects;
+  private readonly settings: GameSettingsData;
+  private readonly settingsStorage = browserSettingsStorage();
+  private readonly settingsButton: Node;
+  private readonly settingsButtonArt: Graphics;
+  private readonly settingsPanel: Node;
+  private readonly settingsArt: Graphics;
+  private readonly settingsTitle: Label;
+  private readonly soundLabel: Label;
+  private readonly vibrationLabel: Label;
+  private readonly soundState: Label;
+  private readonly vibrationState: Label;
   private readonly background: Graphics;
   private readonly trayEmpty: Node;
   private readonly trayEmptyArt: Graphics;
@@ -112,6 +125,7 @@ export class StagePage {
   private guideTo?: Point;
   private guideStarted = 0;
   private guideDismissed = false;
+  private settingsOpen = false;
   private readonly onHide = () => this.cancelDrag();
 
   constructor(parent: Node, private readonly level: Level, private readonly now: () => number, private readonly onClear: (action: FinishAction) => void) {
@@ -119,6 +133,8 @@ export class StagePage {
     this.allPieces = [...level.pieces,...(level.mode === 'mom' ? (level.extras ?? []).flat() : [])];
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
+    this.settings = loadGameSettings(this.settingsStorage);
+    this.sounds.setEnabled?.(this.settings.sound);
     this.backdrop = uiNode('Backdrop',this.node,750,1334).addComponent(Graphics);
     this.bgImage = this.imageNode('BackdropImage');
     this.bodyImage = this.imageNode('CarBodyImage');
@@ -176,6 +192,21 @@ export class StagePage {
     this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
     this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync(); });
     this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
+    this.settingsButton = uiNode('SettingsButton',this.node,750,1334);
+    this.settingsButtonArt = this.settingsButton.addComponent(Graphics);
+    this.settingsPanel = uiNode('SettingsPanel',this.node,750,1334);
+    this.settingsPanel.active = false;
+    this.settingsArt = this.settingsPanel.addComponent(Graphics);
+    this.settingsTitle = label(this.settingsPanel,'SettingsTitle','设置',23,0,0);
+    this.settingsTitle.color = gold;
+    this.soundLabel = label(this.settingsPanel,'SoundLabel','音效',25,0,0);
+    this.soundLabel.color = cream;
+    this.vibrationLabel = label(this.settingsPanel,'VibrationLabel','震动',25,0,0);
+    this.vibrationLabel.color = cream;
+    this.soundState = label(this.settingsPanel,'SoundState','开',21,0,0);
+    this.soundState.color = ink;
+    this.vibrationState = label(this.settingsPanel,'VibrationState','开',21,0,0);
+    this.vibrationState.color = ink;
     this.momLayer = uiNode('MomAppear',this.node,750,1334);
     this.momLayer.active = false;
     const bubble = uiNode('MomBubble',this.momLayer,430,104);
@@ -260,10 +291,11 @@ export class StagePage {
     else if (this.session.readyForNextBatch && !this.cleared) this.startMomSequence();
     const seconds = this.session.remainingSeconds;
     if (seconds !== this.displayedSeconds) {
-      if (this.displayedSeconds >= 0 && seconds > 0 && seconds <= 10) this.sounds.play('tick');
+      const frame=countdownFrame(seconds,this.displayedSeconds);
+      if (frame.tick) { this.sounds.play('tick'); this.bounceCountdown(); }
       this.displayedSeconds = seconds;
-      this.clock.string = Number.isFinite(seconds) ? `距出发 ${seconds} 秒` : '慢慢装，不限时';
-      this.clock.color = seconds <= 10 ? new Color(255,224,158) : gold;
+      this.clock.string = frame.label;
+      this.clock.color = frame.warning ? new Color(255,92,76) : gold;
     }
     if (this.session.expired && !this.cleared && this.modal !== 'timeout') {
       this.cancelDrag(); this.modal='timeout'; this.updateOverlay();
@@ -290,6 +322,7 @@ export class StagePage {
       this.placeLabel(`Button${i}`,button.rect.y+58,button.rect.x+button.rect.w/2-375);
     }
     this.drawBackground(); this.sync(); this.updateOverlay();
+    this.layoutSettings();
     this.guidePlacement=undefined; this.guideFrom=undefined; this.guideTo=undefined;
     if (this.guideNode) this.prepareGuideRoute();
     this.finishView?.layout(this.height,this.board);
@@ -506,6 +539,91 @@ export class StagePage {
       g.fillColor=color; g.moveTo(cx-10,cy+15); g.lineTo(cx+7,cy+15); g.lineTo(cx,cy+5); g.close(); g.fill();
     }
   }
+  private settingsGearRect(): Rect { return {x:634,y:52,w:68,h:68}; }
+  private settingsPanelRect(): Rect { return {x:384,y:146,w:330,h:136}; }
+  private soundSettingRect(): Rect { return {x:396,y:180,w:306,h:44}; }
+  private vibrationSettingRect(): Rect { return {x:396,y:224,w:306,h:44}; }
+
+  private drawSettingsButton(): void {
+    const g=this.settingsButtonArt; g.clear();
+    const r=this.settingsGearRect(),radius=28;
+    const x=r.x+r.w/2-375,y=this.height/2-(r.y+r.h/2);
+    fill(g,new Color(34,15,21,155),x-radius+2,y-radius-4,radius*2,radius*2,radius);
+    g.fillColor=gold; g.circle(x,y,radius); g.fill();
+    g.fillColor=red; g.circle(x,y,radius-5); g.fill();
+    g.strokeColor=gold; g.lineWidth=5;
+    for (let i=0;i<8;i++) {
+      const a=i*Math.PI/4;
+      g.moveTo(x+Math.cos(a)*11,y+Math.sin(a)*11);
+      g.lineTo(x+Math.cos(a)*(radius-2),y+Math.sin(a)*(radius-2));
+    }
+    g.stroke();
+    g.fillColor=gold; g.circle(x,y,10); g.fill();
+    g.fillColor=new Color(184,40,42); g.circle(x,y,4); g.fill();
+  }
+
+  private drawSettingToggle(g: Graphics,row: Rect,on: boolean): void {
+    const pill={x:row.x+row.w-90,y:row.y+7,w:70,h:30};
+    this.rect(g,pill,gold);
+    this.rect(g,{x:pill.x+3,y:pill.y+3,w:pill.w-6,h:pill.h-6},
+      on ? new Color(246,195,67) : new Color(91,31,38));
+  }
+
+  private updateSettingsPanel(): void {
+    this.settingsPanel.active=this.settingsOpen;
+    const g=this.settingsArt; g.clear();
+    const r=this.settingsPanelRect();
+    this.rect(g,{x:r.x+4,y:r.y+6,w:r.w,h:r.h},new Color(34,15,21,165));
+    this.rect(g,r,gold);
+    this.rect(g,{x:r.x+4,y:r.y+4,w:r.w-8,h:r.h-8},new Color(150,34,40));
+    this.rect(g,{x:r.x+10,y:r.y+36,w:r.w-20,h:2},new Color(255,224,158,95));
+    this.drawSettingToggle(g,this.soundSettingRect(),this.settings.sound);
+    this.drawSettingToggle(g,this.vibrationSettingRect(),this.settings.vibration);
+    this.settingsTitle.node.setPosition(r.x+r.w/2-375,this.height/2-(r.y+19));
+    this.soundLabel.node.setPosition(r.x+24-375,this.height/2-202);
+    this.vibrationLabel.node.setPosition(r.x+24-375,this.height/2-246);
+    const stateX=this.soundSettingRect().x+this.soundSettingRect().w-55-375;
+    this.soundState.node.setPosition(stateX,this.height/2-202);
+    this.vibrationState.node.setPosition(stateX,this.height/2-246);
+    this.soundState.string=this.settings.sound ? '开' : '关';
+    this.vibrationState.string=this.settings.vibration ? '开' : '关';
+    this.soundState.color=this.settings.sound ? ink : gold;
+    this.vibrationState.color=this.settings.vibration ? ink : gold;
+  }
+
+  private applySettings(): void {
+    this.sounds.setEnabled?.(this.settings.sound);
+    saveGameSettings(this.settings,this.settingsStorage);
+    this.updateSettingsPanel();
+  }
+
+  private setSettingsOpen(open: boolean): void {
+    this.settingsOpen=open;
+    this.updateSettingsPanel();
+  }
+
+  private handleSettingsTap(p: Point): boolean {
+    if (this.settingsOpen) {
+      if (inRect(p,this.soundSettingRect())) {
+        this.settings.sound=!this.settings.sound; this.applySettings(); return true;
+      }
+      if (inRect(p,this.vibrationSettingRect())) {
+        this.settings.vibration=!this.settings.vibration; this.applySettings(); return true;
+      }
+      if (inRect(p,this.settingsGearRect())) { this.setSettingsOpen(false); return true; }
+      if (!inRect(p,this.settingsPanelRect())) this.setSettingsOpen(false);
+      return true;
+    }
+    if (inRect(p,this.settingsGearRect())) { this.setSettingsOpen(true); return true; }
+    return false;
+  }
+
+  private layoutSettings(): void {
+    this.settingsButton.active=!this.finish;
+    this.drawSettingsButton();
+    this.updateSettingsPanel();
+  }
+
   private updateOverlay(): void {
     this.overlay.active = this.landscape || !!this.modal;
     if (!this.overlay.active) return;
@@ -517,7 +635,7 @@ export class StagePage {
     for (const child of this.overlay.children.slice(1)) child.destroy();
     if (!this.landscape) {
       const r = this.confirmRect(); this.rect(g,r,red);
-      label(this.overlay,'Confirm','重新装车',32,0,this.height/2-r.y-r.h/2).color=cream;
+      label(this.overlay,'Confirm',this.modal === 'timeout' ? '再装一次' : '重新装车',32,0,this.height/2-r.y-r.h/2).color=cream;
       if (this.modal === 'restart') label(this.overlay,'Cancel','取消',28,0,this.height/2-r.y-160).color=cream;
     }
   }
@@ -584,6 +702,17 @@ export class StagePage {
       (rect.x >= this.tray.x-0.5 && rect.x+rect.w <= this.tray.x+this.tray.w+0.5);
   }
   private position(view: PieceView,x: number,y: number): void { view.node.setPosition(x-375,this.height/2-y); }
+  private bounceCountdown(): void {
+    Tween.stopAllByTarget(this.clock.node);
+    this.clock.node.setScale(1,1,1);
+    tween(this.clock.node).to(.07,{scale:new Vec3(1.14,1.14,1)})
+      .to(.13,{scale:new Vec3(1,1,1)}).start();
+  }
+  private vibrate(ms: number): void {
+    if (!this.settings.vibration || !ms) return;
+    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+    try { navigator.vibrate(ms); } catch { /* Unsupported device: silent. */ }
+  }
   private drawPiece(piece: PieceDef,rotation: Rotation,size: number,held: boolean,failed = false): void {
     const view = this.pieces.get(piece.id)!;
     view.rotation=rotation; view.size=size; view.held=held; view.failed=failed;
@@ -720,6 +849,7 @@ export class StagePage {
     const button=this.buttons.find(b => inRect(p,b.rect));
     if (button) { if (!this.drag.active || (button.duringDrag && this.drag.active.mode === 'drag')) button.action(); return; }
     if (this.drag.active) return;
+    if (this.handleSettingsTap(p)) return;
     // The entire grid bounding region includes the gaps between occupied cells.
     const piece=this.session.pieces.slice().reverse().find(piece => {
       const view=this.pieces.get(piece.id)!;
@@ -754,6 +884,7 @@ export class StagePage {
     if (!gesture || gesture.mode !== 'drag' || !gesture.piece) return;
     if (previous !== 'drag') {
       this.sounds.play('pickup');
+      this.vibrate(10);
       this.selected=gesture.piece;
       const v=this.pieces.get(gesture.piece.id)!; Tween.stopAllByTarget(v.node);
       v.node.angle=0; v.node.setSiblingIndex(this.controls.node.getSiblingIndex()-1);
@@ -820,14 +951,15 @@ export class StagePage {
     if (g.mode !== 'drag' || !g.piece) return;
     // release() also handles quick gestures without an intermediate move event.
     const v=this.pieces.get(g.piece.id)!;
-    if (!v.held) this.sounds.play('pickup');
+    if (!v.held) { this.sounds.play('pickup'); this.vibrate(10); }
     this.selected=g.piece; this.drawPiece(g.piece,g.rotation,this.cell,true); v.node.setScale(1.05,1.05,1);
     this.updateHeld(g);
-    let accepted=false;
+    let accepted=false,placed=false;
     if (inRect(g.current,this.tray)) {
       if (!g.fromTray) { this.session.returnToTray(g.piece.id,g.rotation); accepted=true; }
-    } else if (this.previewPlacement) accepted=this.session.drop(this.previewPlacement);
+    } else if (this.previewPlacement) { accepted=this.session.drop(this.previewPlacement); placed=accepted; }
     this.sounds.play(accepted ? 'drop' : 'invalid');
+    if (placed) this.vibrate(20);
     if (accepted && this.level.mode === 'mom') this.layoutTray();
     const from=v.node.position.clone();
     this.renderPiece(g.piece);
@@ -847,14 +979,13 @@ export class StagePage {
   private beginFinish(): void {
     this.cleared=true; this.selected=undefined;
     this.dismissGuide();
+    this.setSettingsOpen(false); this.settingsButton.active=false;
     this.momIntro.node.active=false; this.momLayer.active=false;
     this.momIntroBubble.active=false;
     this.finishStarted=this.now();
     this.finish=new FinishPlayback(cue => {
       this.sounds.play(cue.sound);
-      if (cue.vibration && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-        try { navigator.vibrate(cue.vibration); } catch { /* Unsupported device: silent. */ }
-      }
+      this.vibrate(cue.vibration);
     });
     this.finishView=new FinishView(this.node,this.level.stage,this.onClear);
     this.finishView.layout(this.height,this.board);
@@ -906,6 +1037,11 @@ export class StagePage {
   private restartStage(): void {
     this.session.restart();
     this.selected=undefined; this.cleared=false; this.modal=undefined;
+    this.setSettingsOpen(false); this.settingsButton.active=true;
+    Tween.stopAllByTarget(this.clock.node); this.clock.node.setScale(1,1,1);
+    this.displayedSeconds=-1;
+    const frame=countdownFrame(this.session.remainingSeconds,-1);
+    this.clock.string=frame.label; this.clock.color=frame.warning ? new Color(255,92,76) : gold;
     this.mom=undefined; this.momLayer.active=false;
     this.momIntroUntil=this.level.mode === 'mom' ? this.now()+MOM_INTRO_MS : 0;
     this.sync(); this.updateOverlay();
