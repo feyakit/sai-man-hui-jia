@@ -156,6 +156,6 @@
 | `npm test` | 109 通过，1 个既有性能测试默认跳过；类型检查通过；核心行覆盖率 98.81%。 |
 | `npm run art:check` | 通过：必需 PNG、尺寸、占用格外 alpha=0、3–6 张彩纸。 |
 | `npm run levels:v1` | 通过：stage2 10 件、11 个完整解、`nodesToFirst=3022`，关卡文件无差异。 |
-| `npm run test:performance` | 1 通过（本轮 630ms）。 |
+| `npm run test:performance` | 1 通过（最终复跑 460ms）。 |
 
 未修改 `core/dlx.ts`、车型数据、关卡形状数据；未操作 `main`；未合并 PR；未运行 `art:placeholders`。
