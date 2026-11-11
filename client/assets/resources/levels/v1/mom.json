@@ -25,7 +25,7 @@
     {
       "id": 2,
       "shape": "S4",
-      "item": "fish",
+      "item": "eggs",
       "initialRotation": 2
     },
     {
@@ -37,7 +37,7 @@
     {
       "id": 4,
       "shape": "R6",
-      "item": "suitcase_l",
+      "item": "woven",
       "initialRotation": 0
     },
     {
@@ -55,7 +55,7 @@
     {
       "id": 7,
       "shape": "V5",
-      "item": "crab",
+      "item": "apples",
       "initialRotation": 3
     }
   ],
@@ -65,7 +65,7 @@
       {
         "id": 8,
         "shape": "P5",
-        "item": "quilt",
+        "item": "snacks",
         "initialRotation": 0
       }
     ],
@@ -73,7 +73,7 @@
       {
         "id": 9,
         "shape": "S4",
-        "item": "fish",
+        "item": "eggs",
         "initialRotation": 2
       }
     ],
