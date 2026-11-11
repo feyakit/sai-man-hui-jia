@@ -434,6 +434,7 @@ export class StagePage {
       if (!g.fromTray) { this.session.returnToTray(g.piece.id,g.rotation); accepted=true; }
     } else if (this.previewPlacement) accepted=this.session.drop(this.previewPlacement);
     this.sounds.play(accepted ? 'drop' : 'invalid');
+    if (accepted && this.level.mode === 'mom') this.layoutTray();
     const from=v.node.position.clone();
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();

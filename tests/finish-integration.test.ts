@@ -195,6 +195,17 @@ test('mom reveals every batch, appends only after a cleared tray, and finishes a
   expect(p.cleared).toBe(false);
   now=2000; page.tick();
   expect(p.momLayer.active).toBe(false);
+  const basePlacement=p.session.placements[0];
+  const basePiece=p.level.pieces.find((piece: any) => piece.id === basePlacement.pieceId);
+  p.drag.release=() => ({tap:false,gesture:{mode:'drag',piece:basePiece,rotation:basePlacement.rotation,
+    current:{x:p.tray.x+8,y:p.tray.y+8},fromTray:false}});
+  p.updateHeld=() => {};
+  p.end({getID:() => 2,getUILocation:() => ({x:0,y:0})});
+  expect(p.session.placements.some((placed: any) => placed.pieceId === basePlacement.pieceId)).toBe(false);
+  const returned=p.slots.find((slot: any) => slot.piece.id === basePlacement.pieceId);
+  expect(returned).toBeDefined();
+  expect(returned.rect.x).toBeGreaterThanOrEqual(p.tray.x);
+  p.session.drop(basePlacement); p.sync();
   for (let batch=0;batch<momLevel.extras.length;batch++) {
     const placements=momSolution.placements.filter(placement =>
       momLevel.extras[batch].some(entry => entry.id === placement.pieceId));
