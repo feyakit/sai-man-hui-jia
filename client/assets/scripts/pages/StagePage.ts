@@ -11,7 +11,7 @@ import { loadArt } from '../services/OptionalResources';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
-import { computeStageLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { computeStageLayout, drawBlockedCells, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
@@ -19,6 +19,11 @@ const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const itemColors = [new Color(183,45,42),new Color(200,79,38),new Color(166,35,49),new Color(151,91,42),
   new Color(206,56,43),new Color(128,79,49),new Color(177,54,34),new Color(194,94,31)];
 const shadow = new Color(40,20,10,70);
+// Measured on art/vehicles/sedan_v1_body.png (1024×640).
+const BODY_SIZE = {w:1024,h:640};
+const BODY_HOLE = {left:159,right:878,top:104,bottom:425};
+const BODY_SLICE = {top:150,bottom:380};
+const BODY_PLATE_Y = 498, BODY_SEAL_Y = 72;
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
@@ -28,6 +33,12 @@ export class StagePage {
   private readonly session: StageSession;
   private readonly sounds: SoundEffects;
   private readonly background: Graphics;
+  private readonly backdrop: Graphics;
+  private readonly floorMarks: Graphics;
+  private readonly bgImage: Sprite;
+  private readonly bodyImage: Sprite;
+  private readonly trunkImage: Sprite;
+  private readonly sceneFrames: {bg?: SpriteFrame; body?: SpriteFrame; trunk?: SpriteFrame} = {};
   private readonly itemFrames = new Map<string,SpriteFrame | undefined>();
   private readonly preview: Graphics;
   private readonly controls: Graphics;
@@ -91,7 +102,18 @@ export class StagePage {
     this.allPieces = [...level.pieces,...(level.mode === 'mom' ? (level.extras ?? []).flat() : [])];
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
+    this.backdrop = uiNode('Backdrop',this.node,750,1334).addComponent(Graphics);
+    this.bgImage = this.imageNode('BackdropImage');
+    this.bodyImage = this.imageNode('CarBodyImage');
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
+    this.trunkImage = this.imageNode('TrunkFloorImage');
+    this.floorMarks = uiNode('TrunkFloorMarks',this.node,750,1334).addComponent(Graphics);
+    for (const [file,slot] of [['ui/bg_night','bg'],['vehicles/sedan_v1_body','body'],['vehicles/sedan_v1_trunk','trunk']] as const)
+      void loadArt(file).then(frame => {
+        if (!frame || !this.node.isValid) return;
+        this.sceneFrames[slot]=frame;
+        if (this.height) this.drawBackground();
+      });
     const look=vehicleLook(level.vehicle);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.clock.color = gold;
@@ -234,13 +256,48 @@ export class StagePage {
 
   private placeLabel(name: string, y: number, x = 0): void { this.node.getChildByName(name)!.setPosition(x,this.height/2-y); }
   private rect(g: Graphics,r: Rect,color: Color): void { fill(g,color,r.x-375,this.height/2-r.y-r.h,r.w,r.h,6); }
+  private imageNode(name: string): Sprite {
+    const sprite=uiNode(name,this.node,1,1).addComponent(Sprite);
+    sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
+    return sprite;
+  }
   private drawBackground(): void {
-    const g = this.background; g.clear();
+    const g = this.background; g.clear(); this.backdrop.clear(); this.floorMarks.clear();
     const look=vehicleLook(this.level.vehicle);
-    drawStageBackdrop(g,750,this.height,0,look);
-    drawCarRear(g,750,this.height,0,this.car,this.trunk,look);
-    drawTrunkFloor(g,750,this.height,0,this.trunk,this.board,this.level,this.cell);
+    const {bg,body,trunk}=this.sceneFrames;
+    // Painted backdrop covers the screen (cropping the sides on tall phones); code art is the fallback.
+    if (bg) {
+      const scale=Math.max(1,this.height/1334);
+      this.showImage(this.bgImage,bg,375,this.height/2,750*scale,1334*scale);
+    } else drawStageBackdrop(this.backdrop,750,this.height,0,look);
+    if (body) this.drawCarBody(body); else drawCarRear(g,750,this.height,0,this.car,this.trunk,look);
+    if (trunk) {
+      this.rect(g,this.trunk,new Color(28,22,24));
+      this.rect(g,{x:this.board.x-5,y:this.board.y-5,w:this.board.w+10,h:this.board.h+10},new Color(18,14,16));
+      this.showImage(this.trunkImage,trunk,this.board.x+this.board.w/2,this.board.y+this.board.h/2,this.board.w,this.board.h);
+      drawBlockedCells(this.floorMarks,750,this.height,0,this.board,this.level,this.cell);
+    } else drawTrunkFloor(g,750,this.height,0,this.trunk,this.board,this.level,this.cell);
     drawStageChrome(g,750,this.height,0,this.board,this.tray,this.tray.y-20,look);
+  }
+  private showImage(sprite: Sprite,frame: SpriteFrame,cx: number,cy: number,w: number,h: number): void {
+    sprite.spriteFrame=frame; sprite.enabled=true;
+    sprite.node.getComponent(UITransform)!.setContentSize(w,h);
+    sprite.node.setPosition(cx-375,this.height/2-cy);
+  }
+  // The car-rear painting has a transparent trunk opening (BODY_HOLE). It is scaled so the opening
+  // matches the trunk rect; only the plain pillar band between the slanted top and the tail lights stretches.
+  private drawCarBody(frame: SpriteFrame): void {
+    const s=this.trunk.w/(BODY_HOLE.right-BODY_HOLE.left);
+    frame.insetTop=BODY_SLICE.top; frame.insetBottom=BODY_SLICE.bottom; frame.insetLeft=0; frame.insetRight=0;
+    const sprite=this.bodyImage;
+    sprite.type=Sprite.Type.SLICED;
+    const h=this.trunk.h/s+BODY_HOLE.top+(BODY_SIZE.h-BODY_HOLE.bottom);
+    const left=this.trunk.x-BODY_HOLE.left*s, top=this.trunk.y-BODY_HOLE.top*s;
+    this.showImage(sprite,frame,left+BODY_SIZE.w*s/2,top+h*s/2,BODY_SIZE.w,h);
+    sprite.node.setScale(s,s,1);
+    this.placeLabel('Plate',this.trunk.y+this.trunk.h+(BODY_PLATE_Y-BODY_HOLE.bottom)*s);
+    this.placeLabel('TrunkLidSeal',this.trunk.y-(BODY_HOLE.top-BODY_SEAL_Y)*s);
+    this.lidSeal.color=new Color(150,28,32);
   }
 
   private drawMomIntroBubble(g: Graphics): void {

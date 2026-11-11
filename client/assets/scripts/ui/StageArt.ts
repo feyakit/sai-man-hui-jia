@@ -267,3 +267,17 @@ export function drawTrunkFloor(graphics: Graphics, width: number, height: number
   rect(board.x,board.y,board.w,2,new Color(255,218,153,90));
   rect(board.x,board.y+board.h-2,board.w,2,new Color(255,218,153,90));
 }
+
+// Wheel-arch cells drawn over the painted trunk floor.
+export function drawBlockedCells(graphics: Graphics, width: number, height: number, top: number, board: Rect, level: Pick<Level,'blocked'>, cell: number): void {
+  const p=topDown(width,height,top);
+  for (const [x,y] of level.blocked) {
+    const rx=board.x+x*cell, ry=board.y+y*cell;
+    graphics.fillColor=new Color(14,11,13,235);
+    graphics.roundRect(p.x(rx+2),p.y(ry+cell-2),cell-4,cell-4,10); graphics.fill();
+    graphics.strokeColor=new Color(246,195,67,120); graphics.lineWidth=2;
+    graphics.moveTo(p.x(rx+16),p.y(ry+cell-16)); graphics.lineTo(p.x(rx+cell-16),p.y(ry+16));
+    graphics.moveTo(p.x(rx+16),p.y(ry+16)); graphics.lineTo(p.x(rx+cell-16),p.y(ry+cell-16));
+    graphics.stroke();
+  }
+}
