@@ -109,6 +109,7 @@ it('appends mom batches only after the active tray clears and never undoes an ap
   expect(session.appendNextBatch()).toBe(true);
   expect(session.appendNextBatch()).toBe(false);
   expect(session.pieces).toHaveLength(mom.pieces.length+1);
+  for (const placement of session.placements) expect(session.rotationFor(placement.pieceId)).toBe(placement.rotation);
   expect(session.rotationFor(extra.id)).toBe(extra.initialRotation);
 
   session.undo();
