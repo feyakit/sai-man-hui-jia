@@ -57,7 +57,7 @@ export function controlContentLayout(rect: Rect): {iconX: number; textX: number}
 }
 
 export function computeStageLayout(level: Pick<Level,'width'|'height'|'mode'>, height: number, top: number, bottom: number): StageLayout {
-  const buttonH=112;
+  const buttonH=120;
   const buttonY=height-bottom-24-buttonH;
   const trayH=Math.max(300,Math.min(420,height*.26));
   const trayY=buttonY-24-trayH;
