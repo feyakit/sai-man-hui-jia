@@ -30,37 +30,59 @@ export function previewVisible(piece: PieceDef, p: Placement, width: number, hei
   return inside*2 >= cells.length;
 }
 
-// Reserve every piece's largest orientation so drops/rotations never move another slot.
+// Reserve each piece's largest width and height across rotations so rotations never collide.
 export function trayLayout(pieces: readonly PieceDef[], tray: Rect): {cell: number; slots: {piece: PieceDef; rect: Rect}[]} {
-  const extents = pieces.map(piece => {
-    const box = dimensions(piece,0);
-    return Math.max(box.w,box.h);
+  if (!pieces.length) return {cell:44,slots:[]};
+  const metrics = pieces.map(piece => {
+    let maxW=1,maxH=1;
+    for (const rotation of [0,1,2,3] as Rotation[]) {
+      const box=dimensions(piece,rotation);
+      maxW=Math.max(maxW,box.w); maxH=Math.max(maxH,box.h);
+    }
+    return {piece,maxW,maxH};
   });
-  const gap = 6;
-  const fit = (rows: number) => {
-    const count = Math.ceil(pieces.length/rows);
-    let cell = 40;
-    for (let row=0; row<rows; row++) {
-      const values = extents.slice(row*count,(row+1)*count);
-      if (values.length) cell = Math.min(cell,(tray.w-gap*(values.length+1))/values.reduce((a,b) => a+b,0),
-        (tray.h/rows-2*gap)/Math.max(...values));
+  const gap=6;
+  let best={cell:0,counts:[] as number[]};
+
+  const consider=(counts: number[]) => {
+    let start=0;
+    let heightUnits=0;
+    let cell=Infinity;
+    for (const count of counts) {
+      const row=metrics.slice(start,start+count);
+      start+=count;
+      const widthUnits=row.reduce((sum,entry) => sum+entry.maxW,0);
+      heightUnits+=Math.max(...row.map(entry => entry.maxH));
+      cell=Math.min(cell,(tray.w-gap*(count+1))/widthUnits);
     }
-    return {cell,count};
+    cell=Math.min(cell,(tray.h-gap*(counts.length+1))/heightUnits);
+    if (cell > best.cell+0.001) best={cell,counts:[...counts]};
   };
-  let rows = 1;
-  let result = fit(rows);
-  if (result.cell < 28) { rows = 2; result = fit(rows); }
-  // Layout callers must provide enough room for the specified 20px minimum.
-  if (pieces.length <= 12 && result.cell < 20) throw new Error('Tray too small for 20px luggage cells');
-  const cell = Math.floor(result.cell);
+  const partition=(row: number,left: number,counts: number[]) => {
+    if (row === 0) { if (left) counts.push(left); if (left) consider(counts); if (left) counts.pop(); return; }
+    const max=left-row;
+    for (let count=1;count<=max;count++) { counts.push(count); partition(row-1,left-count,counts); counts.pop(); }
+  };
+  for (let rows=1;rows<=Math.min(3,pieces.length);rows++) partition(rows-1,pieces.length,[]);
+
+  // Layout callers must provide enough room for the established 20px minimum.
+  if (pieces.length <= 12 && best.cell < 20) throw new Error('Tray too small for 20px luggage cells');
+  const cell=Math.floor(best.cell);
   const slots: {piece: PieceDef; rect: Rect}[] = [];
-  for (let row=0; row<rows; row++) {
-    let x = tray.x+gap;
-    for (let i=row*result.count; i<Math.min((row+1)*result.count,pieces.length); i++) {
-      const size = extents[i]*cell;
-      slots.push({piece:pieces[i],rect:{x,y:tray.y+row*tray.h/rows+(tray.h/rows-size)/2,w:size,h:size}});
-      x += size+gap;
+  let start=0;
+  let y=tray.y+gap;
+  for (const count of best.counts) {
+    const row=metrics.slice(start,start+count);
+    start+=count;
+    const rowWidth=row.reduce((sum,entry) => sum+entry.maxW*cell,0)+gap*(count-1);
+    const rowHeight=Math.max(...row.map(entry => entry.maxH))*cell;
+    let x=tray.x+(tray.w-rowWidth)/2;
+    for (const entry of row) {
+      const w=entry.maxW*cell,h=entry.maxH*cell;
+      slots.push({piece:entry.piece,rect:{x,y:y+(rowHeight-h)/2,w,h}});
+      x+=w+gap;
     }
+    y+=rowHeight+gap;
   }
   return {cell,slots};
 }

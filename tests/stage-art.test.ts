@@ -15,20 +15,19 @@ vi.mock('cc',() => {
     setPosition=vi.fn(); setScale=vi.fn(); on=vi.fn(); once=vi.fn();
     getChildByName(name: string) { return this.children.find(n => n.name===name); }
   }
-  class Graphics { clear=vi.fn(); roundRect=vi.fn(); rect=vi.fn(); fill=vi.fn(); moveTo=vi.fn(); lineTo=vi.fn(); stroke=vi.fn(); }
-  class Sprite { static SizeMode={CUSTOM:0}; spriteFrame?: unknown; }
+  class Graphics { clear=vi.fn(); roundRect=vi.fn(); rect=vi.fn(); fill=vi.fn(); moveTo=vi.fn(); lineTo=vi.fn(); close=vi.fn(); circle=vi.fn(); stroke=vi.fn(); }
+  class Sprite { static SizeMode={CUSTOM:0}; spriteFrame?: unknown; enabled=false; }
   return {Color,UITransform,Node,Graphics,Sprite,Label:class {},Vec3:class {},Layers:{Enum:{UI_2D:1}},
     Tween:{stopAllByTarget:vi.fn()},Game:{EVENT_HIDE:'hide'},game:{on:vi.fn(),off:vi.fn()},
     sys:{getSafeAreaRect:() => ({x:0,y:0,width:750,height:1334})},view:{getVisibleSize:() => ({width:750,height:1334})}};
 });
-import { Node, Sprite, UITransform } from 'cc';
+import { Label, Node, Sprite, UITransform } from 'cc';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
+import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
-test('one Sprite per item, fallback remains until frame arrives; full image rotates and resizes',async () => {
-  let resolve!: (frame: any) => void;
-  assets.load.mockImplementation(() => new Promise(done => { resolve=done; }));
+test('one code-drawn card per item with a clear short label',() => {
   const level=stage1('2027-01-15');
   const page=new StagePage(new Node(),level,() => 0,vi.fn());
   const piece=level.pieces.at(-1)!;
@@ -37,20 +36,27 @@ test('one Sprite per item, fallback remains until frame arrives; full image rota
   const title=root.getChildByName(`Item${piece.id}`)!;
   expect(image.getComponent(Sprite)!.enabled).toBe(false);
   expect(title.active).toBe(true);
-  const frame={name:'file replacement'}; resolve(frame); await Promise.resolve();
-  expect(image.getComponent(Sprite)!.spriteFrame).toBe(frame);
-  expect(title.active).toBe(false);
+  expect(title.getComponent(Label)!.string).toBe('白酒');
+  expect(assets.load.mock.calls.some(([name]: any[]) => String(name).startsWith('items/'))).toBe(false);
   for (const rotation of [0,1,2,3] as const) {
     (page as unknown as TestPage).drawPiece(piece,rotation,40,false);
-    expect(image.angle).toBe(rotation*90);
+    expect(image.getComponent(Sprite)!.enabled).toBe(false);
+    expect(title.active).toBe(true);
   }
   expect(image.getComponent(UITransform)!.setContentSize).toHaveBeenCalled();
   expect(page.node.children.filter(n => n.name.startsWith('Piece'))).toHaveLength(level.pieces.length);
 });
-test('late image callback does not touch destroyed stage',async () => {
-  let resolve!: (frame: any) => void;
-  assets.load.mockImplementation(() => new Promise(done => { resolve=done; }));
-  const page=new StagePage(new Node(),stage1('2027-01-15'),() => 0,vi.fn());
-  Object.defineProperty(page.node,'isValid',{value:false});
-  resolve({}); await Promise.resolve();
+
+test('phone layout reserves separate header, open trunk and tray bands',() => {
+  const level={width:8,height:6,mode:'normal' as const};
+  const frame=computeStageLayout(level,1623,0,0);
+  expect(frame.board.x).toBeGreaterThanOrEqual(frame.trunk.x);
+  expect(frame.board.y).toBeGreaterThanOrEqual(frame.trunk.y);
+  expect(frame.board.x+frame.board.w).toBeLessThanOrEqual(frame.trunk.x+frame.trunk.w);
+  expect(frame.board.y+frame.board.h).toBeLessThanOrEqual(frame.trunk.y+frame.trunk.h);
+  expect(frame.trunk.y).toBeGreaterThan(216);
+  expect(frame.car.y+frame.car.h).toBeLessThan(frame.tray.y);
+  expect(frame.tray.y+frame.tray.h).toBeLessThan(frame.buttonY);
+  expect(frame.cell).toBeGreaterThanOrEqual(76);
+  expect(vehicleLook('sedan_v1').body).not.toBe(vehicleLook('train').body);
 });
