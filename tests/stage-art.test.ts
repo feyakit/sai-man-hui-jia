@@ -24,6 +24,7 @@ vi.mock('cc',() => {
 import { Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
+import fixture from './fixtures/v1/stage1.solution.json';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, controlContentLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
 import { drawItemFeature, itemTone } from '../client/assets/scripts/ui/ItemArt';
@@ -86,4 +87,16 @@ test('keeps each control icon in its own left column away from the text',() => {
     expect(content.iconX-rect.x).toBe(34);
     expect(content.textX-content.iconX).toBeGreaterThanOrEqual(66);
   }
+});
+
+test('turns an emptied stage-one tray into a loaded-state departure plaque',() => {
+  const page=new StagePage(new Node(),stage1(fixture.date),() => 0,vi.fn());
+  const p=page as any;
+  for (const placement of fixture.placements) p.session.drop(placement);
+  p.sync();
+  expect(p.trayEmpty.active).toBe(true);
+  expect(p.trayEmptyTitle.string).toBe('已全部装车');
+  expect(p.trayEmptyHint.string).toContain('准备出发');
+  p.session.undo(); p.sync();
+  expect(p.trayEmpty.active).toBe(false);
 });
