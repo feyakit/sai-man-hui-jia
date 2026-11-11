@@ -19,7 +19,7 @@ const gold = new Color(246,195,67);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
 const shadow = new Color(40,20,10,70);
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
-interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
+interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
 
 export class StagePage {
@@ -128,8 +128,10 @@ export class StagePage {
       const graphics = uiNode(`Fallback${piece.id}`,node,1,1).addComponent(Graphics);
       const sprite = uiNode(`Sprite${piece.id}`,node,1,1).addComponent(Sprite);
       sprite.sizeMode=Sprite.SizeMode.CUSTOM; sprite.trim=false; sprite.enabled=false;
+      const featureNode = uiNode(`Feature${piece.id}`,node,1,1);
+      const feature = featureNode.addComponent(Graphics);
       const title = label(node,`Item${piece.id}`,itemShortName(piece),18,0,0);
-      this.pieces.set(piece.id,{node,sprite,graphics,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
+      this.pieces.set(piece.id,{node,sprite,graphics,featureNode,feature,title,held:false,failed:false,rect:{x:0,y:0,w:0,h:0},rotation:0,size:0});
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
@@ -423,7 +425,15 @@ export class StagePage {
     view.title.lineHeight=view.title.fontSize+4;
     const labelW=Math.min(w-8,Math.max(32,view.title.string.length*(view.title.fontSize-1)+16));
     const labelH=view.title.fontSize+6, labelY=-h/2+labelH/2+3;
-    drawItemFeature(g,piece,size,w,h,labelH,tone);
+    const centers=cells.map(([x,y]) => ({x:x*size-w/2+size/2,y:h/2-(y+.5)*size}));
+    const anchorX=centers.reduce((sum,p) => sum+p.x,0)/centers.length;
+    const anchorY=centers.reduce((sum,p) => sum+p.y,0)/centers.length;
+    const roomTop=h/2-4, roomBottom=labelY+labelH/2+3;
+    const featureHalf=Math.min(size*.55,Math.max(6,(roomTop-roomBottom)*.48));
+    const featureY=Math.max(roomBottom+featureHalf,Math.min(roomTop-featureHalf,anchorY));
+    view.feature.clear();
+    view.featureNode.setPosition(anchorX,featureY);
+    drawItemFeature(view.feature,piece,size,w,h,labelH,tone);
     fill(g,new Color(30,24,28,228),-labelW/2,labelY-labelH/2,labelW,labelH,Math.min(10,labelH/2));
     fill(g,new Color(255,214,145,210),-labelW/2,labelY-labelH/2,labelW,2,1);
     view.title.node.setPosition(0,labelY);
