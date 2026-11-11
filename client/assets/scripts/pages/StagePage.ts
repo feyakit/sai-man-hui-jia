@@ -27,6 +27,10 @@ export class StagePage {
   private readonly session: StageSession;
   private readonly sounds: SoundEffects;
   private readonly background: Graphics;
+  private readonly trayEmpty: Node;
+  private readonly trayEmptyArt: Graphics;
+  private readonly trayEmptyTitle: Label;
+  private readonly trayEmptyHint: Label;
   private readonly preview: Graphics;
   private readonly controls: Graphics;
   private readonly clock: Label;
@@ -90,6 +94,13 @@ export class StagePage {
     this.session = new StageSession(level,now);
     this.sounds = new SoundEffects(parent);
     this.background = uiNode('GridBackground',this.node,750,1334).addComponent(Graphics);
+    this.trayEmpty = uiNode('TrayEmptyState',this.node,750,1334);
+    this.trayEmptyArt = this.trayEmpty.addComponent(Graphics);
+    this.trayEmptyTitle = label(this.trayEmpty,'TrayEmptyTitle','已全部装车',34,0,0);
+    this.trayEmptyTitle.color = cream;
+    this.trayEmptyHint = label(this.trayEmpty,'TrayEmptyHint','福气满箱 · 准备出发',21,0,0);
+    this.trayEmptyHint.color = gold;
+    this.trayEmpty.active = false;
     const look=vehicleLook(level.vehicle);
     this.clock = label(this.node,'Clock','',28,0,0);
     this.clock.color = gold;
@@ -320,14 +331,39 @@ export class StagePage {
       view.node.active = visible;
       if (visible) this.renderPiece(piece);
     }
-    this.clearPreview(); this.updateControls();
+    this.clearPreview(); this.updateTrayState(); this.updateControls();
+  }
+  private remainingPieces(): readonly PieceDef[] {
+    return this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id));
   }
   private layoutTray(): void {
-    const unplaced = this.level.mode === 'mom'
-      ? this.session.pieces.filter(piece => !this.session.placements.some(placement => placement.pieceId === piece.id))
-      : this.session.pieces;
+    const unplaced = this.level.mode === 'mom' ? this.remainingPieces() : this.session.pieces;
     const tray = trayLayout(unplaced,this.tray);
     this.slots = tray.slots; this.trayCell = tray.cell;
+  }
+  private updateTrayState(): void {
+    const show=this.remainingPieces().length === 0 && this.level.mode !== 'mom';
+    this.trayEmpty.active=show;
+    if (!show) return;
+    const g=this.trayEmptyArt; g.clear();
+    const cx=0,cy=this.tray.y+this.tray.h/2;
+    const left=-this.tray.w/2;
+    fill(g,new Color(255,241,205,20),left+30,this.height/2-(this.tray.y+this.tray.h-34),this.tray.w-60,this.tray.h-68,26);
+    for (const x of [left+66,left+this.tray.w-66]) {
+      fill(g,new Color(255,218,153,85),x-12,this.height/2-(cy+5),24,2,1);
+      fill(g,new Color(255,218,153,85),x-12,this.height/2-(cy-5),24,2,1);
+    }
+    g.fillColor=new Color(255,218,153,80); g.circle(cx,this.height/2-(cy-42),64); g.fill();
+    g.fillColor=gold; g.circle(cx,this.height/2-(cy-42),55); g.fill();
+    g.fillColor=new Color(173,38,43); g.circle(cx,this.height/2-(cy-42),47); g.fill();
+    g.strokeColor=cream; g.lineWidth=8;
+    g.moveTo(cx-21,this.height/2-(cy-42)); g.lineTo(cx-6,this.height/2-(cy-27));
+    g.lineTo(cx+24,this.height/2-(cy-63)); g.stroke();
+    fill(g,gold,left+42,this.height/2-(cy+78),80,3,1);
+    fill(g,gold,left+this.tray.w-122,this.height/2-(cy+78),80,3,1);
+    const titleY=cy+35,hintY=cy+77;
+    this.trayEmptyTitle.node.setPosition(0,this.height/2-titleY);
+    this.trayEmptyHint.node.setPosition(0,this.height/2-hintY);
   }
   private renderPiece(piece: PieceDef): void {
     const view = this.pieces.get(piece.id)!;
