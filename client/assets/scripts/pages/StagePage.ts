@@ -12,12 +12,11 @@ import { fill, label, uiNode } from '../ui/UIKit';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import { FinishView } from '../ui/FinishView';
 import { computeStageLayout, drawCarRear, drawStageBackdrop, drawStageChrome, drawTrunkFloor, itemShortName, vehicleLook } from '../ui/StageArt';
+import { itemTone } from '../ui/ItemArt';
 
 const ink = new Color(74,44,26), red = new Color(215,51,43), cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
 const green = new Color(76,175,80,128), invalid = new Color(229,57,53,128);
-const itemColors = [new Color(183,45,42),new Color(200,79,38),new Color(166,35,49),new Color(151,91,42),
-  new Color(206,56,43),new Color(128,79,49),new Color(177,54,34),new Color(194,94,31)];
 const shadow = new Color(40,20,10,70);
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 interface PieceView { node: Node; sprite: Sprite; graphics: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
@@ -352,16 +351,39 @@ export class StagePage {
     const box=dimensions(piece,rotation), w=box.w*size,h=box.h*size;
     view.node.getComponent(UITransform)!.setContentSize(w,h);
     view.sprite.enabled=false; view.title.node.active=true;
-    const chosen=this.selected?.id === piece.id;
-    const bodyColor=failed ? new Color(172,35,37) : itemColors[(piece.id-1)%itemColors.length];
-    for (const [x,y] of pieceCells(piece,rotation)) {
-      if (held) fill(g,shadow,x*size-w/2+8,h/2-(y+1)*size-9,size-3,size-3,5);
-      fill(g,chosen ? gold : new Color(255,211,124),x*size-w/2+1,h/2-(y+1)*size+1,size-2,size-2,5);
-      fill(g,bodyColor,x*size-w/2+4,h/2-(y+1)*size+4,size-8,size-8,4);
-      fill(g,new Color(255,235,181,48),x*size-w/2+8,h/2-y*size+Math.max(4,size*.62),Math.max(4,size-24),Math.max(3,size*.12),2);
+    const chosen=this.selected?.id === piece.id, tone=itemTone(piece);
+    const bodyColor=failed ? new Color(172,35,37) : tone.base;
+    const outline=failed ? new Color(92,20,22) : tone.edge;
+    const cells=pieceCells(piece,rotation);
+    const cellRect=([x,y]: readonly [number,number]) => ({
+      x:x*size-w/2,y:h/2-(y+1)*size,
+    });
+    for (const cell of cells) {
+      const r=cellRect(cell);
+      if (held) fill(g,shadow,r.x+8,r.y-9,size-3,size-3,5);
+      fill(g,bodyColor,r.x,r.y,size+1,size+1);
     }
+    g.strokeColor=chosen ? gold : outline;
+    g.lineWidth=Math.max(3,Math.min(6,size*.075));
+    const occupied=new Set(cells.map(([x,y]) => `${x},${y}`));
+    for (const [x,y] of cells) {
+      const r=cellRect([x,y]);
+      if (!occupied.has(`${x},${y-1}`)) { g.moveTo(r.x,r.y+size); g.lineTo(r.x+size,r.y+size); }
+      if (!occupied.has(`${x},${y+1}`)) { g.moveTo(r.x,r.y); g.lineTo(r.x+size,r.y); }
+      if (!occupied.has(`${x-1},${y}`)) { g.moveTo(r.x,r.y); g.lineTo(r.x,r.y+size); }
+      if (!occupied.has(`${x+1},${y}`)) { g.moveTo(r.x+size,r.y); g.lineTo(r.x+size,r.y+size); }
+    }
+    g.stroke();
+    g.strokeColor=chosen ? new Color(255,244,198,180) : tone.light;
+    g.lineWidth=Math.max(1,Math.min(2,size*.022));
+    for (const [x,y] of cells) {
+      if (occupied.has(`${x},${y-1}`)) continue;
+      const r=cellRect([x,y]);
+      g.moveTo(r.x+4,r.y+size-4); g.lineTo(r.x+size-4,r.y+size-4);
+    }
+    g.stroke();
     view.title.string=itemShortName(piece);
-    view.title.fontSize=Math.max(15,Math.min(26,size*.42)); view.title.color=cream;
+    view.title.fontSize=Math.max(15,Math.min(24,size*.4)); view.title.color=cream;
     view.title.lineHeight=view.title.fontSize+6;
     const labelW=Math.min(w-8,Math.max(34,view.title.string.length*(view.title.fontSize-1)+18));
     const labelH=view.title.fontSize+10;

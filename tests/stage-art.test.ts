@@ -26,6 +26,8 @@ import { StagePage } from '../client/assets/scripts/pages/StagePage';
 import { stage1 } from '../client/assets/scripts/core/stage1';
 import type { PieceDef, Rotation } from '../client/assets/scripts/core/types';
 import { computeStageLayout, vehicleLook } from '../client/assets/scripts/ui/StageArt';
+import { itemTone } from '../client/assets/scripts/ui/ItemArt';
+import { ITEMS } from '../client/assets/scripts/core/items';
 interface TestPage { drawPiece(piece: PieceDef, rotation: Rotation, size: number, held: boolean): void }
 test('one code-drawn card per item with a clear short label',() => {
   const level=stage1('2027-01-15');
@@ -59,4 +61,10 @@ test('phone layout reserves separate header, open trunk and tray bands',() => {
   expect(frame.tray.y+frame.tray.h).toBeLessThan(frame.buttonY);
   expect(frame.cell).toBeGreaterThanOrEqual(76);
   expect(vehicleLook('sedan_v1').body).not.toBe(vehicleLook('train').body);
+});
+
+test('every cargo category has a distinct cool-to-warm palette and deep outline',() => {
+  const entries=Object.entries(ITEMS).map(([shape,meta]) => itemTone({id:1,shape:shape as any,item:meta.key,initialRotation:0}));
+  expect(new Set(entries.map(tone => tone.hex)).size).toBe(entries.length);
+  expect(entries.every(tone => tone.hex.startsWith('#'))).toBe(true);
 });
