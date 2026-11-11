@@ -26,16 +26,19 @@ export class FinishView {
   private readonly actions: Node;
   private readonly particles: {node: Node; sprite: Sprite; fallback: Graphics}[]=[];
   private readonly buttonRects: {rect: Rect; action: FinishAction}[]=[];
-  private readonly choices;
   private height=1334;
   private carY=0;
   private lidHeight=0;
   private lightsOn=false;
   private state?: FinishState;
 
-  constructor(parent: Node, stage: number, private readonly onAction: (action: FinishAction) => void) {
+  constructor(
+    parent: Node,
+    stage: number,
+    private readonly onAction: (action: FinishAction) => void,
+    private readonly choices: readonly {title: string; action: FinishAction}[] = finishButtons(stage),
+  ) {
     this.node=uiNode('Finish',parent,750,1334);
-    this.choices=finishButtons(stage);
     this.backdrop=uiNode('HomewardNight',this.node,750,1334);
     this.backdrop.addComponent(Graphics);
     this.car=uiNode('LoadedCar',this.node,700,600);

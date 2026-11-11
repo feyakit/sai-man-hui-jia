@@ -18,7 +18,7 @@ export function loadArt(file: string): Promise<SpriteFrame | undefined> {
   return pending;
 }
 
-export const AUDIO_NAMES = ['pickup','drop','invalid','rotate','undo','tick','trunk_slam','horn','cheer','mom'] as const;
+export const AUDIO_NAMES = ['pickup','drop','invalid','rotate','undo','tick','trunk_slam','horn','cheer','mom','pack'] as const;
 export type AudioName = typeof AUDIO_NAMES[number];
 const audio = new Map<AudioName,Promise<AudioClip | undefined>>();
 export function loadAudio(name: AudioName): Promise<AudioClip | undefined> {
