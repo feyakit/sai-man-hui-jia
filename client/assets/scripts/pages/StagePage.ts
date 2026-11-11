@@ -27,6 +27,11 @@ const BODY_SLICE = {top:150,bottom:380};
 const BODY_PLATE_Y = 498, BODY_SEAL_Y = 72;
 const MOM_INTRO_MS = 3800, MOM_APPEAR_MS = 700, MOM_STAY_MS = 1300;
 const ITEM_OVERSCAN = 1.025;
+export const DROP_SQUASH_FRAMES = [
+  {duration:.06,scaleY:.85},
+  {duration:.06,scaleY:1.05},
+  {duration:.10,scaleY:1},
+] as const;
 interface PieceView { node: Node; sprite: Sprite; shadow: Sprite; graphics: Graphics; featureNode: Node; feature: Graphics; title: Label; held: boolean; failed: boolean; rect: Rect; rotation: Rotation; size: number }
 interface MomSequence { started: number; appended: boolean }
 interface TrayPan { id: number; startX: number; startY: number; startScroll: number; active: boolean }
@@ -190,7 +195,11 @@ export class StagePage {
     }
     this.controls = uiNode('Controls',this.node,750,1334).addComponent(Graphics);
     this.button('旋转 90°',45,180,() => this.rotateSelected(),true);
-    this.button('撤销',295,160,() => { this.cancelDrag(); this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync(); });
+    this.button('撤销',295,160,() => {
+      this.cancelDrag(); const previous=this.capturePositions();
+      this.session.undo(); this.sounds.play('undo'); this.selected=undefined; this.sync();
+      this.flyBack(previous);
+    });
     this.button('重开',515,160,() => { this.cancelDrag(); this.modal='restart'; this.updateOverlay(); });
     this.settingsButton = uiNode('SettingsButton',this.node,750,1334);
     this.settingsButtonArt = this.settingsButton.addComponent(Graphics);
@@ -965,7 +974,9 @@ export class StagePage {
     this.renderPiece(g.piece);
     const destination=v.node.position.clone();
     if (accepted) {
-      tween(v.node).to(.08,{scale:new Vec3(1.04,1.04,1)}).to(.16,{scale:new Vec3(1,1,1)}).start();
+      let squash=tween(v.node);
+      for (const frame of DROP_SQUASH_FRAMES) squash=squash.to(frame.duration,{scale:new Vec3(1,frame.scaleY,1)});
+      squash.start();
     } else {
       v.node.setPosition(from);
       const returnScale=this.cell/v.size*1.05;
@@ -1035,6 +1046,7 @@ export class StagePage {
   }
 
   private restartStage(): void {
+    const previous=this.capturePositions();
     this.session.restart();
     this.selected=undefined; this.cleared=false; this.modal=undefined;
     this.setSettingsOpen(false); this.settingsButton.active=true;
@@ -1045,8 +1057,27 @@ export class StagePage {
     this.mom=undefined; this.momLayer.active=false;
     this.momIntroUntil=this.level.mode === 'mom' ? this.now()+MOM_INTRO_MS : 0;
     this.sync(); this.updateOverlay();
+    this.flyBack(previous);
     this.guidePlacement=undefined; this.guideFrom=undefined; this.guideTo=undefined;
     if (this.canShowGuide()) this.prepareGuideRoute();
+  }
+  private capturePositions(): Map<number,Vec3> {
+    const positions=new Map<number,Vec3>();
+    for (const piece of this.session.pieces) {
+      const view=this.pieces.get(piece.id);
+      if (view) positions.set(piece.id,view.node.position.clone());
+    }
+    return positions;
+  }
+  private flyBack(previous: ReadonlyMap<number,Vec3>): void {
+    for (const [id,from] of previous) {
+      const view=this.pieces.get(id);
+      if (!view || !view.node.active) continue;
+      const to=view.node.position.clone();
+      if (Math.abs(from.x-to.x) < .5 && Math.abs(from.y-to.y) < .5) continue;
+      view.node.setPosition(from);
+      tween(view.node).to(.18,{position:to},{easing:'quadOut'}).start();
+    }
   }
   private cancelDrag(): void { this.trayPan=undefined; if (this.drag.cancel()) this.sync(); }
   private cancel(event: EventTouch): void { this.trayPan=undefined; if (this.drag.cancel(event.getID() ?? 0)) this.sync(); }
