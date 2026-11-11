@@ -564,6 +564,8 @@ export class StagePage {
     view.sprite.spriteFrame=frame; view.sprite.enabled=true;
     view.sprite.color=failed ? new Color(255,150,150) : Color.WHITE;
     view.title.node.active=false;
+    // The fallback card's emblem lives on its own Graphics; drop it once the real picture shows.
+    view.feature.clear();
     return true;
   }
 
