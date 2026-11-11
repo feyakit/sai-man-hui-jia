@@ -45,6 +45,9 @@ const shorts: Record<string,string> = {
   ricebag:'大米', drinks:'饮料', teabox:'茶叶', eggs:'鸡蛋', candy:'糖果', snacks:'零食',
   ham:'火腿', kumquat:'金桔', fruitbasket:'果篮', apples:'苹果', fudeco:'窗花', larou:'腊肉',
   lanterns:'灯笼', woven:'编织袋',
+  scallion:'大葱', dryfish:'腊鱼', giftstack:'礼盒', dates:'红枣', noodles:'方便面', milkflat:'牛奶',
+  firecracker:'鞭炮', guamian:'挂面', pomelo:'柚子', thermos:'保温壶', pastry:'糕点', driedgoods:'干货',
+  hongbao:'红包', oven:'烤箱',
 };
 export function itemName(piece: PieceDef): string { return itemMeta(piece).name; }
 export function itemShortName(piece: PieceDef): string { return shorts[itemMeta(piece).key] ?? itemName(piece); }
