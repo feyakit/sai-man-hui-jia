@@ -14,14 +14,14 @@ export const STAGE2_ITEMS: readonly StackItemDef[] = [
   {key: 'duck', name: '腊鸭'},
   {key: 'crab', name: '大闸蟹'},
   {key: 'milk', name: '牛奶箱'},
-  {key: 'kumquat', name: '金桔'},
   {key: 'lanterns', name: '红灯笼'},
-  {key: 'mandarin', name: '砂糖橘'},
   {key: 'sausage', name: '腊肠'},
   {key: 'ricecooker', name: '电饭煲'},
-  {key: 'pomelo', name: '柚子'},
   {key: 'teabox', name: '茶叶礼盒'},
   {key: 'tv', name: '电视'},
+  {key: 'firecracker', name: '鞭炮'},
+  {key: 'fruitbasket', name: '果篮'},
+  {key: 'eggs', name: '土鸡蛋'},
 ];
 
 export function stackItems(stage: number): readonly StackItemDef[] {
