@@ -245,23 +245,16 @@ function attemptEndless(n: number, baseSeed: string, attempt: number, tuning: En
   return solveStackLevel(level, {maxNodes: 240_000}).solvable ? level : undefined;
 }
 
-/** Calibrated boards that later levels are re-skinned from. */
+/** Calibrated boards that later levels loop over. */
 export const ENDLESS_REMIX_POOL = [13, 14, 15] as const;
 
 /**
- * Past the calibrated range a level reuses one of the late calibrated boards with a new item set.
- * Geometry, solution and kind count are untouched (mirroring was tried and measurably changed the
- * bot win rate), so the rate stays on the measured ~3% floor instead of drifting under 2%.
+ * Past the calibrated range a level replays one of the late calibrated boards (new title, ride and
+ * seed label). Mirroring or re-skinning the items was tried, but both changed the measured bot win
+ * rate by several points, so the board is reused as-is to keep every level at or above ~2.5%.
  */
 export function remixEndlessLevel(base: StackLevel, n: number): StackLevel {
-  const offset = (n * 7) % ENDLESS_ITEMS.length;
-  const items = base.items.map((_, index) => ENDLESS_ITEMS[(offset + index) % ENDLESS_ITEMS.length]);
-  const byKey = new Map(base.items.map((item, index) => [item.key, items[index]]));
-  const cards = base.cards.map(item => {
-    const next = byKey.get(item.kind)!;
-    return {...item, kind: next.key, name: next.name};
-  });
-  return {...base, stage: n, seed: `trunk-road-${n}`, items, cards};
+  return {...base, stage: n, seed: `trunk-road-${n}`};
 }
 
 export function generateEndlessLevel(n: number, maxAttempts = 8, tuning = endlessTuning(n)): StackLevel {
