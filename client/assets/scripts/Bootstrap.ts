@@ -5,6 +5,7 @@ import { shanghaiDate } from './core/date';
 import { stage1 } from './core/stage1';
 import type { Level } from './core/types';
 import { StagePage } from './pages/StagePage';
+import { StackPage, type StackPageAction } from './pages/StackPage';
 import { WebPlatform } from './platform/WebPlatform';
 import { Api } from './services/Api';
 import { fill, label, uiNode } from './ui/UIKit';
@@ -15,24 +16,37 @@ const {ccclass} = _decorator;
 @ccclass('Bootstrap')
 export class Bootstrap extends Component {
   private stage?: StagePage;
+  private stack?: StackPage;
   private readonly platform = new WebPlatform();
   private readonly api = new Api(this.platform);
 
   start(): void {
-    if (this.platform.isMomMode()) void this.startMomMode();
+    if (this.platform.isStackMode()) this.startStack(this.platform.stackStage());
+    else if (this.platform.isMomMode()) void this.startMomMode();
     else if (this.platform.hasLevelOverride()) void this.challenge();
     else this.show(stage1(shanghaiDate()));
   }
 
-  update(): void { this.stage?.tick(); }
+  update(): void { this.stage?.tick(); this.stack?.tick(); }
 
   private show(level: Level): void {
     this.node.destroyAllChildren();
+    this.stack = undefined;
     this.stage = new StagePage(this.node,level,() => this.platform.now(),action => {
       if (action === 'next') void this.challenge();
       else if (action === 'mom') void this.startMomMode();
       else if (action === 'first') this.show(stage1(shanghaiDate()));
       else this.show(level);
+    });
+  }
+
+  private startStack(stage: 1 | 2): void {
+    this.node.destroyAllChildren();
+    this.stage = undefined;
+    this.stack = new StackPage(this.node,stage,(action: StackPageAction) => {
+      if (action === 'next') this.startStack(2);
+      else if (action === 'first') this.startStack(1);
+      else this.startStack(stage);
     });
   }
 
@@ -57,6 +71,7 @@ export class Bootstrap extends Component {
 
   private message(text: string, onTap?: () => void): void {
     this.stage = undefined;
+    this.stack = undefined;
     this.node.destroyAllChildren();
     const size = view.getVisibleSize();
     const width = 750;
