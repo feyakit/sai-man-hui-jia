@@ -87,7 +87,7 @@ export class FinishView {
     this.node.once(Node.EventType.NODE_DESTROYED,() => updateConfetti(this.pool,2500,750,this.height));
   }
 
-  layout(height: number, board: Rect): void {
+  layout(height: number, board: Rect, headlineLift = 0): void {
     this.height=height;
     this.node.getComponent(UITransform)!.setContentSize(750,height);
     this.carY=height/2-board.y-board.h/2;
@@ -120,7 +120,7 @@ export class FinishView {
     fill(bg,gold,-352,-height/2+32,3,height-304);
     fill(bg,gold,349,-height/2+32,3,height-304);
     for (let i=0;i<5;i++) fill(bg,new Color(224,91,62),-7,-height/2+80+i*95,14,44,4);
-    this.headline.setPosition(0,-110);
+    this.headline.setPosition(0,-110+headlineLift);
     this.actions.setPosition(0,-height/2+330);
     this.buttonRects.length=0;
     for (let i=0;i<this.choices.length;i++) this.buttonRects.push({
