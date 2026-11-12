@@ -1,0 +1,11 @@
+# 《塞满回家》省份排行后台。只用免费额度；部署到 workers.dev，不绑定任何路由或域名。
+name = "smhj-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+workers_dev = true
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "smhj-rank"
+database_id = "df310abc-d25a-4bd9-b3c9-52fef1d3e7da"
