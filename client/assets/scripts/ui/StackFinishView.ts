@@ -57,6 +57,8 @@ export class StackFinishView {
     private readonly onAction: (action: FinishAction) => void,
     private readonly onShare: () => void = () => undefined,
     private readonly onRank?: () => void,
+    /** Non-sedan ride of this level: its art drives home instead of the sedan. */
+    private readonly ride?: FinishRide,
   ) {
     this.node = uiNode('StackFinish', parent, 750, 1334);
     this.backdrop = uiNode('NightBackdrop', this.node, 750, 1334).addComponent(Sprite);
@@ -79,7 +81,12 @@ export class StackFinishView {
       this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
     }
     this.bodyImage = this.imageNode('CarBody', this.car);
-    void Promise.all([
+    if (ride) {
+      // Cargo rides on top of the load area, so it must draw above the vehicle art.
+      this.cargo.setSiblingIndex(this.car.children.length - 1);
+      if (ride.tint) this.bodyImage.color = new Color(ride.tint[0], ride.tint[1], ride.tint[2], 255);
+    }
+    void Promise.all(ride ? [loadArt(ride.art), Promise.resolve(null)] : [
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
     ]).then(([body, trunk]) => {
@@ -223,6 +230,18 @@ export class StackFinishView {
   }
 
   private setupCar(): void {
+    if (this.ride) {
+      const bodyH = 470;
+      const bodyW = Math.min(700, bodyH * this.ride.w / this.ride.h * (this.ride.stretchX ?? 1));
+      const r = this.ride.region;
+      this.hole = {x: (r.x + r.w / 2 - .5) * bodyW, y: (.5 - (r.y + r.h / 2)) * bodyH + 40, w: r.w * bodyW, h: r.h * bodyH + 80};
+      this.show(this.bodyImage, 0, 0, bodyW, bodyH);
+      this.trunkImage.enabled = false;
+      this.layoutCargo();
+      this.car.setScale(.98, .98, 1);
+      this.car.setPosition(0, -this.height * .035 - this.squeeze * 1.65);
+      return;
+    }
     const bodyW = 720, bodyH = 450;
     const holeX = Math.round((BODY_HOLE.left + BODY_HOLE.right) / 2 / 1024 * bodyW - bodyW / 2);
     const holeY = Math.round((BODY_HOLE.top + BODY_HOLE.bottom) / 2 / 640 * bodyH - bodyH / 2);
@@ -282,3 +301,13 @@ export class StackFinishView {
 }
 
 const BODY_HOLE = { left: 159, right: 878, top: 104, bottom: 425 } as const;
+
+export interface FinishRide {
+  readonly art: string;
+  readonly w: number;
+  readonly h: number;
+  readonly stretchX?: number;
+  /** Main load area in 0..1 art fractions. */
+  readonly region: {readonly x: number; readonly y: number; readonly w: number; readonly h: number};
+  readonly tint?: readonly [number, number, number] | null;
+}
