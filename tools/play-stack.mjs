@@ -56,23 +56,30 @@ async function state(page) {
 async function tapSolutionCard(page, id) {
   const before = await state(page);
   if (before.status !== 'playing') return before;
-  const point = await page.evaluate(cardId => (
-    window.__stack.getClickable().find(card => card.id === cardId)
-  ), id);
-  if (!point) throw new Error(`solution card ${id} is not clickable (remaining ${before.remaining})`);
-  if (point.screenX < 0 || point.screenX > 390 || point.screenY < 0 || point.screenY > 844) {
-    throw new Error(`solution card ${id} is outside the viewport: ${point.screenX},${point.screenY}`);
+  let after = before;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const point = await page.evaluate(cardId => (
+      window.__stack.getClickable().find(card => card.id === cardId)
+    ), id);
+    if (!point) throw new Error(`solution card ${id} is not clickable (remaining ${before.remaining})`);
+    if (point.screenX < 0 || point.screenX > 390 || point.screenY < 0 || point.screenY > 844) {
+      throw new Error(`solution card ${id} is outside the viewport: ${point.screenX},${point.screenY}`);
+    }
+    await page.touchscreen.tap(point.screenX, point.screenY);
+    await page.waitForTimeout(220);
+    after = await state(page);
+    if (after.remaining <= before.remaining - 3
+      || after.status !== 'playing'
+      || after.slot.some(card => card.id === id)) break;
+    await page.waitForTimeout(350);
   }
-  await page.touchscreen.tap(point.screenX, point.screenY);
-  await page.waitForTimeout(180);
-  const after = await state(page);
   const accepted = after.remaining <= before.remaining - 3
     || after.status !== 'playing'
     || after.slot.some(card => card.id === id);
   if (!accepted) {
     throw new Error(`tap on solution card ${id} was not accepted: ${JSON.stringify(after)}`);
   }
-  await page.waitForTimeout(1_250);
+  await page.waitForTimeout(1_500);
   return state(page);
 }
 
