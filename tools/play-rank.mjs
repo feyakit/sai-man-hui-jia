@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from 'node:http';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
@@ -10,7 +11,11 @@ const options = {
   api: null,
   province: '广东',
   viewport: { width: 390, height: 844 },
+  test: false,
 };
+const RANK_API = 'https://smhj-api.feyakit.workers.dev';
+const TEST_HEADER = 'x-smhj-test';
+const TEST_KEY_FILE = path.join(os.homedir(), '.secrets', 'smhj-test.env');
 const positional = [];
 for (let index = 2; index < process.argv.length; index++) {
   const arg = process.argv[index];
@@ -20,6 +25,7 @@ for (let index = 2; index < process.argv.length; index++) {
   else if (arg.startsWith('--province=')) options.province = arg.slice('--province='.length);
   else if (arg === '--viewport') options.viewport = parseViewport(process.argv[++index] ?? '');
   else if (arg.startsWith('--viewport=')) options.viewport = parseViewport(arg.slice('--viewport='.length));
+  else if (arg === '--test') options.test = true;
   else positional.push(arg);
 }
 if (positional[0]) options.baseUrl = positional[0];
@@ -28,14 +34,24 @@ if (positional[1]) options.outDir = positional[1];
 const { width: viewportWidth, height: viewportHeight } = options.viewport;
 const mockMode = options.api === 'mock' ? 'data' : options.api === 'mock-empty' ? 'empty' : null;
 const defaultRoot = mockMode === 'data'
-  ? '/workspace/play-check/match3-v6-mock'
-  : '/workspace/play-check/match3-v6-local';
+  ? '/workspace/play-check/match3-v7-mock'
+  : '/workspace/play-check/match3-v7-local';
 options.outDir ??= path.join(defaultRoot, `${viewportWidth}x${viewportHeight}`);
-if (mockMode === 'data' && /(^|\/)match3-v6(\/|$)/.test(options.outDir)) {
-  throw new Error('populated mock screenshots must not be written to /workspace/play-check/match3-v6/');
+if (mockMode === 'data' && /(^|\/)match3-v[67](\/|$)/.test(options.outDir)) {
+  throw new Error('populated mock screenshots must not be written to the live match3-v6/v7 folders');
 }
 
+const liveTarget = !mockMode && options.api === null && !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(options.baseUrl);
+if (liveTarget && !options.test) {
+  throw new Error('refusing to play against the public leaderboard: pass --test (test-key tables) or --api off|mock');
+}
+if (options.test && (mockMode || options.api !== null)) throw new Error('--test only works with the real rank API');
+// The test key never appears on the command line or in output: env first, then ~/.secrets.
+const testKey = options.test ? await loadTestKey() : null;
+
 const screenshots = [];
+const clearPosts = [];
+const testReport = {};
 const pageErrors = [];
 let mockServer;
 try {
@@ -62,6 +78,18 @@ try {
     hasTouch: true,
     deviceScaleFactor: 2,
   });
+  let currentLabel = 'home';
+  context.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/clear') clearPosts.push({label: currentLabel});
+  });
+  if (testKey) {
+    // Every rank request from the game carries the test key, so it lands in test_clears only.
+    await context.route(`${RANK_API}/**`, route => route.continue({
+      headers: {...route.request().headers(), [TEST_HEADER]: testKey},
+    }));
+    testReport.publicBefore = await publicTotals();
+    testReport.resetBefore = await testApi('/api/test/reset', {method: 'POST'});
+  }
 
   function pageUrl(query, { forceOffline = false } = {}) {
     const url = new URL(query, root);
@@ -236,7 +264,8 @@ try {
     await waitRankSettled(home);
     let state = await rankState(home);
     assertRankButtons(state);
-    const mode = state.status === 'error' ? 'offline' : mockMode ?? 'live';
+    const mode = state.status === 'error' ? 'offline' : mockMode ?? (testKey ? 'empty' : 'live');
+    if (testKey && mode !== 'empty') throw new Error(`fresh test board should be empty, got ${JSON.stringify(state)}`);
     if (mode === 'offline') {
       if (state.status !== 'error') throw new Error(`expected offline rank, got ${state.status}`);
       if (!state.buttons.retry) throw new Error('offline rank page has no retry button');
@@ -244,9 +273,10 @@ try {
     } else if (mode === 'empty' || mode === 'data' || mode === 'live') {
       if (state.status !== 'ready') throw new Error(`expected ready rank, got ${state.status}`);
       assertRankRows(state, mode);
-      await screenshot(home, `04-rank-${mode}.png`);
+      const label = testKey ? 'test-empty' : mode;
+      await screenshot(home, `04-rank-${label}.png`);
       const last = await collectRankPages(home, state);
-      await screenshot(home, `05-rank-${mode}-last-page.png`);
+      await screenshot(home, `05-rank-${label}-last-page.png`);
       if (last.page !== last.pages) throw new Error(`last page marker is inconsistent: ${last.page}/${last.pages}`);
     } else {
       throw new Error(`rank page settled without a recognized API mode: ${JSON.stringify(state)}`);
@@ -257,6 +287,10 @@ try {
     await home.touchscreen.tap(start.buttons.start.screenX, start.buttons.start.screenY);
     await home.waitForFunction(() => !!window.__stack, undefined, { timeout: 8_000 });
     await home.waitForFunction(() => window.__stack?.getState().stage === 1, undefined, { timeout: 5_000 });
+    currentLabel = 'stage1-normal';
+    const stageOnePost = testKey ? home.waitForResponse(response => (
+      response.request().method() === 'POST' && response.url().endsWith('/api/clear')
+    ), { timeout: 30_000 }) : null;
     const solution = await home.evaluate(() => window.__stack.getSolution());
     if (solution.length !== 18) throw new Error(`unexpected stage 1 solution length ${solution.length}`);
     for (let index = 0; index < solution.length; index++) {
@@ -274,8 +308,16 @@ try {
       throw new Error(`normal stage-1 settlement did not show 打包 6 箱: ${JSON.stringify(normalStats)}`);
     }
     await screenshot(home, '06-stage1-normal-win.png');
+    if (stageOnePost) {
+      const response = await stageOnePost;
+      testReport.stage1Post = {status: response.status(), body: await response.json()};
+      if (response.status() !== 200 || testReport.stage1Post.body.test !== true) {
+        throw new Error(`stage-1 test-key report failed: ${JSON.stringify(testReport.stage1Post)}`);
+      }
+    }
     await home.close();
 
+    currentLabel = 'debug-win';
     const win = await newPage('?mode=stack&stage=2&debug=win');
     await win.waitForFunction(() => !!window.__stack, undefined, { timeout: 20_000 });
     await waitFinishSettled(win);
@@ -291,21 +333,35 @@ try {
     }
     await screenshot(win, '07-stage2-settlement.png');
     const rankLine = await win.evaluate(() => window.__stack.getFinishRank());
-    if (mockMode === 'data' && !rankLine.includes('+1')) {
-      throw new Error(`mock settlement rank line is missing +1: ${rankLine}`);
+    if (rankLine !== '调试模式不计入排行') throw new Error(`debug settlement should not report: ${rankLine}`);
+    if (testKey) {
+      // debug=win wrote nothing, so seed one stage-2 clear through the test path to show it on the page.
+      testReport.seed = await testApi('/api/clear', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({province: options.province, stage: 2, ms: 60_000, sessionId: `play-rank-seed-${Date.now()}`, boxes: 50, momBoxes: 0}),
+      });
+      if (testReport.seed.test !== true || testReport.seed.duplicate !== false) throw new Error(`test seed failed: ${JSON.stringify(testReport.seed)}`);
     }
     const rankButton = finishButtons.find(button => button.action === 'rank');
     if (!rankButton) throw new Error('settlement page did not expose 看省份排行');
     await win.touchscreen.tap(rankButton.screenX, rankButton.screenY);
     await win.waitForFunction(() => !!window.__rank, undefined, { timeout: 5_000 });
     await waitRankSettled(win);
-    await screenshot(win, '08-rank-from-settlement.png');
+    await screenshot(win, testKey ? '08-rank-test-seeded.png' : '08-rank-from-settlement.png');
     const fromSettlement = await rankState(win);
+    if (testKey) {
+      const own = fromSettlement.allRows.find(row => row.province === options.province);
+      if (!own || own.waiting || own.total !== 1 || own.rank !== 1) {
+        throw new Error(`test-key rank page did not show the seeded clear: ${JSON.stringify(own)}`);
+      }
+    }
     assertRankButtons(fromSettlement);
     await win.touchscreen.tap(fromSettlement.buttons.start.screenX, fromSettlement.buttons.start.screenY);
     await win.waitForFunction(() => window.__stack?.getState().stage === 1, undefined, { timeout: 8_000 });
     await win.close();
 
+    currentLabel = 'debug-fail';
     const fail = await newPage('?mode=stack&stage=2&debug=fail');
     await fail.waitForFunction(() => window.__stack?.getState().modal === 'fail', undefined, { timeout: 8_000 });
     await fail.waitForTimeout(250);
@@ -319,9 +375,20 @@ try {
     await fail.close();
 
     if (pageErrors.length) throw new Error(pageErrors.join('\n'));
+    const debugPosts = clearPosts.filter(post => post.label.startsWith('debug'));
+    if (debugPosts.length) throw new Error(`debug runs posted ${debugPosts.length} clear(s)`);
+    if (testKey) {
+      testReport.publicAfter = await publicTotals();
+      if (testReport.publicAfter.totalClears !== testReport.publicBefore.totalClears) {
+        throw new Error(`public leaderboard changed during the test run: ${JSON.stringify(testReport)}`);
+      }
+    }
     console.log(JSON.stringify({
       ok: true,
       api: options.api,
+      test: options.test,
+      clearPosts,
+      testReport,
       mockMode,
       province: options.province,
       viewport: options.viewport,
@@ -332,7 +399,34 @@ try {
     await browser.close();
   }
 } finally {
+  if (testKey) {
+    // Always leave the test tables empty, even when a check above failed.
+    try { testReport.resetAfter = await testApi('/api/test/reset', {method: 'POST'}); console.error(`test tables reset: ${JSON.stringify(testReport.resetAfter.deleted)}`); }
+    catch (error) { console.error(`TEST TABLE RESET FAILED: ${error.message}`); process.exitCode = 1; }
+  }
   await new Promise(resolve => mockServer ? mockServer.close(resolve) : resolve());
+}
+
+async function loadTestKey() {
+  let key = process.env.SMHJ_TEST_KEY;
+  if (!key) {
+    const text = await readFile(TEST_KEY_FILE, 'utf8').catch(() => '');
+    key = /^SMHJ_TEST_KEY=(.+)$/m.exec(text)?.[1]?.trim();
+  }
+  if (!key) throw new Error(`--test needs SMHJ_TEST_KEY (env or ${TEST_KEY_FILE})`);
+  return key;
+}
+
+async function testApi(pathname, init = {}) {
+  const response = await fetch(`${RANK_API}${pathname}`, {...init, headers: {...init.headers, [TEST_HEADER]: testKey}});
+  const body = await response.json();
+  if (!response.ok) throw new Error(`test API ${pathname} -> ${response.status} ${JSON.stringify(body)}`);
+  return body;
+}
+
+async function publicTotals() {
+  const body = await (await fetch(`${RANK_API}/api/rank`)).json();
+  return {totalClears: body.totalClears, provinces: body.provinces.length, test: body.test === true};
 }
 
 function parseViewport(value) {
