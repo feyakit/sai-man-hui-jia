@@ -126,7 +126,8 @@ export class StackHomecomingView {
     const w = h * this.tractorSize.w / this.tractorSize.h;
     const parkY = this.toLocal(830 * scale);
     const startY = -this.height / 2 + h * .2;
-    const x = 235 * scale * ease;
+    // Tall screens crop the cover-scaled backdrop's sides; keep the parked tractor fully on screen.
+    const x = Math.min(235 * scale, 375 - 14 - w / 2) * ease;
     this.show(this.tractor, x, startY + (parkY - startY) * ease + Math.sin(now / 90) * (1 - ease) * 4, w, h);
     this.title.active = arrive >= .7;
     this.subtitle.active = arrive >= .8;
@@ -163,7 +164,8 @@ export class StackHomecomingView {
     const frame = Math.floor(now / 70);
     for (const string of STRINGS) {
       const random = createRng(`home-spark-${string.x}-${frame}`);
-      const x = (string.x - 375) * scale;
+      // Clamp into the visible 750-wide column when tall screens crop the painted strings.
+      const x = Math.max(-345, Math.min(345, (string.x - 375) * scale));
       // The burning point creeps up the string, then the string starts again.
       const burn = (now / 2600) % 1;
       const y = this.toLocal((string.bottom - (string.bottom - string.top) * burn) * scale);
