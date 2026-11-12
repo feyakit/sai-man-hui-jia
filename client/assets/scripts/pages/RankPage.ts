@@ -246,10 +246,10 @@ export class RankPage {
     this.drawSummary(null);
     const card = {x:86,y:338,w:578,h:218};
     this.drawCard(card,wine,gold);
-    const title = this.contentLabel('RankLoading',RANK_LOADING_TEXT,28,0,card.y + 80,paleGold);
+    const title = this.contentLabel('RankLoading',RANK_LOADING_TEXT,28,375,card.y + 80,paleGold);
     title.node.getComponent(UITransform)!.setContentSize(520,42);
     title.overflow = Label.Overflow.SHRINK;
-    const hint = this.contentLabel('RankLoadingHint','正在看看乡亲们的年货都装到哪一步了',20,0,card.y + 143,muted);
+    const hint = this.contentLabel('RankLoadingHint','正在看看乡亲们的年货都装到哪一步了',20,375,card.y + 143,muted);
     hint.node.getComponent(UITransform)!.setContentSize(500,34);
     hint.overflow = Label.Overflow.SHRINK;
     this.drawFooter();
@@ -260,10 +260,10 @@ export class RankPage {
     this.drawSummary(null);
     const card = {x:64,y:322,w:622,h:276};
     this.drawCard(card,wine,gold);
-    const title = this.contentLabel('RankError',RANK_ERROR_TEXT,30,0,card.y + 78,paleGold);
+    const title = this.contentLabel('RankError',RANK_ERROR_TEXT,30,375,card.y + 78,paleGold);
     title.node.getComponent(UITransform)!.setContentSize(540,44);
     title.overflow = Label.Overflow.SHRINK;
-    const hint = this.contentLabel('RankErrorHint','检查网络后再试一次，排行会在这里等你',20,0,card.y + 139,muted);
+    const hint = this.contentLabel('RankErrorHint','检查网络后再试一次，排行会在这里等你',20,375,card.y + 139,muted);
     hint.node.getComponent(UITransform)!.setContentSize(520,34);
     hint.overflow = Label.Overflow.SHRINK;
     this.retryRect = {x:225,y:card.y + 174,w:300,h:64};
@@ -280,10 +280,10 @@ export class RankPage {
     if (empty) {
       const callout = {x:46,y:272,w:658,h:126};
       this.drawCard(callout,new Color(110,22,29,246),gold);
-      const title = this.contentLabel('RankEmpty',RANK_EMPTY_TEXT,26,0,callout.y + 52,cream);
+      const title = this.contentLabel('RankEmpty',RANK_EMPTY_TEXT,26,375,callout.y + 52,cream);
       title.node.getComponent(UITransform)!.setContentSize(600,42);
       title.overflow = Label.Overflow.SHRINK;
-      const hint = this.contentLabel('RankEmptyHint','第一箱年货，等你来装车',19,0,callout.y + 94,paleGold);
+      const hint = this.contentLabel('RankEmptyHint','第一箱年货，等你来装车',19,375,callout.y + 94,paleGold);
       hint.node.getComponent(UITransform)!.setContentSize(520,30);
       hint.overflow = Label.Overflow.SHRINK;
       this.listTop = 424;
@@ -298,7 +298,7 @@ export class RankPage {
     const pill = {x:232,y:220,w:286,h:38};
     this.drawCard(pill,new Color(42,10,20,170),new Color(255,207,111,90));
     const text = snapshot ? formatRankSummary(snapshot) : '全国乡亲 · 共赴团圆';
-    const summary = this.contentLabel('RankSummary',text,18,0,pill.y + 19,snapshot ? cream : muted);
+    const summary = this.contentLabel('RankSummary',text,18,375,pill.y + 19,snapshot ? cream : muted);
     summary.node.getComponent(UITransform)!.setContentSize(270,28);
     summary.overflow = Label.Overflow.SHRINK;
   }
@@ -344,7 +344,7 @@ export class RankPage {
     this.nextRect = {x:538,y:pagerTop,w:176,h:48};
     this.drawPagerButton(this.prevRect,this.page > 0,'上一页');
     this.drawPagerButton(this.nextRect,this.page < this.pageCount - 1,'下一页');
-    const pageText = this.contentLabel('RankPageCount',`第 ${this.page + 1} / ${this.pageCount} 页`,19,0,pagerTop + 24,empty ? muted : paleGold);
+    const pageText = this.contentLabel('RankPageCount',`第 ${this.page + 1} / ${this.pageCount} 页`,19,375,pagerTop + 24,empty ? muted : paleGold);
     pageText.node.getComponent(UITransform)!.setContentSize(280,30);
     pageText.overflow = Label.Overflow.SHRINK;
   }
@@ -404,7 +404,7 @@ export class RankPage {
       enabled ? new Color(255,218,145,190) : new Color(136,119,109,130),
       13,
     );
-    const item = this.contentLabel(`RankPager-${text}`,text,21,0,rect.y + rect.h / 2,enabled ? paleGold : new Color(160,145,137));
+    const item = this.contentLabel(`RankPager-${text}`,text,21,375,rect.y + rect.h / 2,enabled ? paleGold : new Color(160,145,137));
     item.node.getComponent(UITransform)!.setContentSize(rect.w - 24,rect.h - 4);
     item.overflow = Label.Overflow.SHRINK;
   }
@@ -420,7 +420,7 @@ export class RankPage {
     this.contentArt.stroke();
     fill(this.contentArt,red,card.x + 20 - 375,this.height / 2 - card.y - card.h + 20,5,card.h - 40,3);
     const info = this.footerText();
-    const own = this.contentLabel('RankOwnProvince',info,22,18,card.y + card.h / 2,this.api.province ? deepRed : muted);
+    const own = this.contentLabel('RankOwnProvince',info,22,375,card.y + card.h / 2,this.api.province ? deepRed : muted);
     own.isBold = !!this.api.province;
     own.node.getComponent(UITransform)!.setContentSize(636,card.h - 12);
     own.overflow = Label.Overflow.SHRINK;
@@ -454,12 +454,12 @@ export class RankPage {
       this.contentArt.roundRect(rect.x + 2 - 375,this.height / 2 - rect.y - rect.h + 2,rect.w - 4,rect.h - 4,22);
       this.contentArt.stroke();
     }
-    const title = this.contentLabel(`RankButton-${text}`,text,size,0,rect.y + rect.h / 2 - (subtext ? 9 : 0),textColor);
+    const title = this.contentLabel(`RankButton-${text}`,text,size,375,rect.y + rect.h / 2 - (subtext ? 9 : 0),textColor);
     title.isBold = primary;
     title.node.getComponent(UITransform)!.setContentSize(rect.w - 28,rect.h - 10);
     title.overflow = Label.Overflow.SHRINK;
     if (subtext) {
-      const sub = this.contentLabel(`RankButton-${text}-sub`,subtext,15,0,rect.y + rect.h / 2 + 23,new Color(122,65,25));
+      const sub = this.contentLabel(`RankButton-${text}-sub`,subtext,15,375,rect.y + rect.h / 2 + 23,new Color(122,65,25));
       sub.node.getComponent(UITransform)!.setContentSize(rect.w - 30,22);
       sub.overflow = Label.Overflow.SHRINK;
     }
