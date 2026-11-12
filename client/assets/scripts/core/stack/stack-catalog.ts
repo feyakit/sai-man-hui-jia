@@ -46,3 +46,25 @@ export function pickMomItem(items: readonly StackItemDef[], random: () => number
   const value = Number.isFinite(drawn) ? Math.max(0, Math.min(0.999999, drawn)) : 0;
   return pool[Math.floor(value * pool.length)];
 }
+
+/**
+ * Mom prefers goods that are scarce on the board right now (fewest copies left), so her three
+ * cards cannot simply be matched against what is already lying around. Ties are broken randomly.
+ */
+export function pickRareMomItem(
+  items: readonly StackItemDef[],
+  boardKinds: readonly string[],
+  random: () => number = Math.random,
+): StackItemDef {
+  const preferredKeys = new Set<string>(MOM_ITEM_KEYS);
+  const candidates = items.filter(item => preferredKeys.has(item.key));
+  const pool = candidates.length ? candidates : items;
+  if (!pool.length) return {key: 'mandarin', name: '砂糖橘'};
+  const counts = new Map<string, number>();
+  for (const kind of boardKinds) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  const fewest = Math.min(...pool.map(item => counts.get(item.key) ?? 0));
+  const rare = pool.filter(item => (counts.get(item.key) ?? 0) === fewest);
+  const drawn = random();
+  const value = Number.isFinite(drawn) ? Math.max(0, Math.min(0.999999, drawn)) : 0;
+  return rare[Math.floor(value * rare.length)];
+}

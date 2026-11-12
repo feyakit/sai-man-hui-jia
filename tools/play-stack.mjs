@@ -262,10 +262,11 @@ try {
   if (layout.cardBounds.left < 0 || layout.cardBounds.right > 390) {
     throw new Error(`stage 2 cards exceed the 390px viewport: ${JSON.stringify(layout.cardBounds)}`);
   }
-  if (layout.cardSize.width < 56 || layout.cardSize.height < 56) {
+  // The whole board now shrinks to fit above the open trunk lid, so the floor is 50px at 390×844.
+  if (layout.cardSize.width < 50 || layout.cardSize.height < 50) {
     throw new Error(`stage 2 cards are too small on screen: ${JSON.stringify(layout.cardSize)}`);
   }
-  if (layout.stackRegion.ratio < .55) {
+  if (layout.stackRegion.ratio < .5) {
     throw new Error(`stage 2 cargo mound is too short: ${JSON.stringify(layout.stackRegion)}`);
   }
   if (layout.sideCounts.left < 8 || layout.sideCounts.right < 8) {
@@ -275,7 +276,7 @@ try {
     if (card.screenLeft < 0 || card.screenRight > 390) {
       throw new Error(`clickable card ${card.id} exceeds viewport width: ${JSON.stringify(card)}`);
     }
-    if (card.screenTop < layout.hudBottom || card.screenBottom > layout.trunkTop) {
+    if (card.screenTop < layout.hudBottom || card.screenBottom > layout.lidTop) {
       throw new Error(`clickable card ${card.id} overlaps HUD/trunk: ${JSON.stringify({card, layout})}`);
     }
   }
