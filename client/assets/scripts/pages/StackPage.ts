@@ -10,6 +10,10 @@ import {
 } from '../core/stack/stack-layout';
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
+import {
+  sedanSlotCells, vehicleArtRect, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  type LevelVehicle, type Rgb,
+} from '../core/stack/stack-vehicles';
 import { createRng } from '../core/rng';
 import {
   formatContributionFailure,
@@ -147,7 +151,14 @@ export class StackPage {
   private readonly slotViewMap = new Map<number,CardView>();
   /** Card ids currently being packed; their nodes are the only ones allowed to vanish. */
   private packingIds = new Set<number>();
-  private readonly slotRects: Rect[] = Array.from({length: SLOT_CAPACITY},() => ({x:0,y:0,w:0,h:0}));
+  private slotRects: Rect[] = [];
+  /** The ride for this level; it owns the whole bottom of the page (art, containers, label, buttons). */
+  private readonly vehicle: LevelVehicle;
+  private readonly capacity: number;
+  private readonly vehicleImage: Sprite;
+  private vehicleFrame?: SpriteFrame;
+  private artRect: Rect = {x:0,y:0,w:0,h:0};
+  private introShown = false;
   private readonly actions: ActionButton[] = [];
   private readonly failButtons: FailButton[] = [];
   private readonly touchWorld = new Vec3();
@@ -193,6 +204,11 @@ export class StackPage {
     private readonly onAction: (action: StackPageAction) => void,
   ) {
     this.level = generateStackLevel(stage, STACK_SEEDS[stage - 1]).level;
+    this.capacity = (this.level as StackLevel & {slotCapacity?: number}).slotCapacity ?? SLOT_CAPACITY;
+    const forcedVehicle = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vehicle');
+    const levelVehicle = vehicleForLevel(this.level.stage);
+    const forcedDef = forcedVehicle ? vehicleByKey(forcedVehicle) : undefined;
+    this.vehicle = forcedDef ? {def:forcedDef,lap:0,tint:null,displayName:forcedDef.name} : levelVehicle;
     this.game = new StackGame(this.level, createRng(`${this.level.seed}:runtime`), Date.now());
     this.node = uiNode('StackPage',parent,750,1334);
     this.sounds = new StackSound();
@@ -211,7 +227,16 @@ export class StackPage {
     this.trunkImage = this.makeImageNode('TrunkWell',this.carLayer);
     this.bodyImage = this.makeImageNode('CarBody',this.carLayer);
     this.lidImage = this.makeImageNode('TrunkLid',this.carLayer);
+    this.vehicleImage = this.makeImageNode('VehicleRear',this.carLayer);
     this.carDetail = uiNode('TrunkDetails',this.carLayer,750,1334).addComponent(Graphics);
+    if (this.vehicle.def.art) {
+      void loadArt(this.vehicle.def.art).then(frame => {
+        if (!frame || !this.node.isValid) return;
+        this.vehicleFrame = frame;
+        this.drawCarSlots(this.carRect);
+        if (this.failLayer?.isValid) this.drawOverflowCar(this.failLayer);
+      });
+    }
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
@@ -247,7 +272,7 @@ export class StackPage {
     this.warnLayer.active = false;
     this.slotLayer = uiNode('TrunkSlots',this.node,750,1334);
     this.fxLayer = uiNode('Effects',this.node,750,1334);
-    this.slotTitle = label(this.node,'SlotTitle','轿车后备箱 · 7 格',17,0,0);
+    this.slotTitle = label(this.node,'SlotTitle',vehicleSlotLabel(this.vehicle.def,this.capacity),17,0,0);
     this.slotTitle.color = paleGold;
     this.reserveTitle = label(this.reserveLayer,'ReserveTitle','临时暂存区',16,0,0);
     this.reserveTitle.color = new Color(255,224,175,190);
@@ -359,7 +384,9 @@ export class StackPage {
   private layout(bottom: number): void {
     this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
-    const metrics = createStackPageLayout(this.height,bottom);
+    const base = createStackPageLayout(this.height,bottom);
+    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY);
+    const metrics = this.isSedan ? base : createStackPageLayout(this.height,bottom,this.artRect.y);
     this.safeBottom = metrics.safeBottom;
     this.board = fitStackBoard(stackContentBounds(this.level),metrics);
     this.actionY = metrics.actionY;
@@ -370,16 +397,16 @@ export class StackPage {
       w:STACK_BODY_SIZE.w,
       h:metrics.bodyHeight,
     };
-    this.slotCell = 96;
-    const gap = 3;
-    const slotWidth = SLOT_CAPACITY*this.slotCell + (SLOT_CAPACITY-1)*gap;
-    const slotX = Math.round((750-slotWidth)/2);
-    this.slotY = this.trunk.y + Math.round((this.trunk.h-this.slotCell)/2);
-    for (let i=0;i<SLOT_CAPACITY;i++) {
-      this.slotRects[i].x = slotX + i*(this.slotCell+gap);
-      this.slotRects[i].y = this.slotY;
-      this.slotRects[i].w = this.slotCell;
-      this.slotRects[i].h = this.slotCell;
+    this.slotRects = this.isSedan
+      ? sedanSlotCells(this.trunk,this.capacity)
+      : vehicleSlotCells(this.vehicle.def,this.capacity,this.artRect);
+    this.slotCell = this.slotRects[0].w;
+    this.slotY = Math.min(...this.slotRects.map(r => r.y));
+    if (!this.isSedan) {
+      // The red “almost full” pulse wraps the cargo cells of this vehicle.
+      const left = Math.min(...this.slotRects.map(r => r.x)), right = Math.max(...this.slotRects.map(r => r.x+r.w));
+      const bottomY = Math.max(...this.slotRects.map(r => r.y+r.h));
+      this.trunk = {x:left-10,y:this.slotY-10,w:right-left+20,h:bottomY-this.slotY+20};
     }
     this.stageLabel.node.setPosition(-242,this.height/2-61);
     this.remainingLabel.node.setPosition(198,this.height/2-61);
@@ -387,10 +414,11 @@ export class StackPage {
     this.musicButton.setPosition(323,this.height/2-216);
     this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-61);
     this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-105);
-    this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-17));
+    this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-(this.isSedan ? 17 : 24)));
     this.reserveTitle.node.setPosition(-235,this.height/2-920);
     this.momLayer.getChildByName('MomBubble')!.setPosition(40,this.height/2-204);
     this.momAvatar.setPosition(-250,this.height/2-204);
+    this.showVehicleIntro();
     for (let i=0;i<this.actions.length;i++) {
       const rect = this.actions[i].rect;
       rect.x = 44 + i*222; rect.y = this.actionY; rect.w = 210; rect.h = this.actionH;
@@ -438,6 +466,11 @@ export class StackPage {
     this.rect(g,new Color(255,194,102,24),74,912,602,206,44);
     this.rect(g,new Color(246,195,67,62),132,1032,486,2,1);
 
+    if (!this.isSedan) {
+      this.drawVehicle();
+      return;
+    }
+    this.vehicleImage.enabled = false;
     if (!this.carFrames.body) {
       this.rect(g,new Color(34,22,29,210),car.x,car.y,car.w,Math.min(430,car.h),54);
       this.rect(g,new Color(163,31,39),car.x+28,car.y+86,car.w-56,296,46);
@@ -447,7 +480,8 @@ export class StackPage {
     this.carDetail.clear();
     this.drawTrunkDetails();
 
-    const slotWidth = (this.slotRects[SLOT_CAPACITY-1].x+this.slotRects[SLOT_CAPACITY-1].w)-this.slotRects[0].x;
+    const last = this.slotRects[this.slotRects.length-1];
+    const slotWidth = (last.x+last.w)-this.slotRects[0].x;
     const shelfX = this.slotRects[0].x-13;
     const shelfY = this.slotY-10;
     this.rect(this.carDetail,new Color(9,8,12,220),shelfX,shelfY,slotWidth+26,this.slotCell+20,16);
@@ -459,6 +493,115 @@ export class StackPage {
       this.rect(this.carDetail,new Color(246,195,67,105),slot.x+slot.w*.31,slot.y+slot.h-11,slot.w*.38,3,2);
     }
     this.rect(this.carDetail,new Color(255,196,81,118),this.slotRects[0].x+24,this.slotY+this.slotCell+9,slotWidth-48,2,1);
+  }
+
+  private get isSedan(): boolean { return !this.vehicle.def.art; }
+
+  private paletteColor(rgb: Rgb,alpha = 255): Color { return new Color(rgb[0],rgb[1],rgb[2],alpha); }
+
+  /** Non-sedan rides: one rear-view sprite plus code-drawn containers, cells and label plate. */
+  private drawVehicle(): void {
+    this.trunkImage.enabled = false;
+    this.bodyImage.enabled = false;
+    this.lidImage.enabled = false;
+    const art = this.artRect;
+    const pal = this.vehicle.def.palette;
+    const g = this.carDetail;
+    g.clear();
+    // Ground shadow under the ride.
+    this.rect(g,new Color(8,4,8,90),art.x+art.w*.08,art.y+art.h*.9,art.w*.84,art.h*.08,art.h*.04);
+    if (this.vehicleFrame) {
+      this.showImage(this.vehicleImage,this.vehicleFrame,art.x+art.w/2,art.y+art.h/2,art.w,art.h);
+      const tint = this.vehicle.tint;
+      this.vehicleImage.color = tint ? new Color(tint[0],tint[1],tint[2],255) : Color.WHITE;
+    } else {
+      this.vehicleImage.enabled = false;
+      this.rect(g,this.paletteColor(pal.panel,230),art.x+art.w*.06,art.y+art.h*.2,art.w*.88,art.h*.62,40);
+    }
+    const regions = vehicleRegionRects(this.vehicle.def,art);
+    let cursor = 0;
+    const split = regions.map(region => this.slotRects.filter(cell => cell.x >= region.x-2 && cell.x+cell.w <= region.x+region.w+2
+      && cell.y >= region.y-2 && cell.y+cell.h <= region.y+region.h+2).length);
+    regions.forEach((region,index) => {
+      const cells = this.slotRects.slice(cursor,cursor+split[index]);
+      cursor += split[index];
+      if (!cells.length) return;
+      const left = Math.min(...cells.map(c => c.x))-9, top = Math.min(...cells.map(c => c.y))-9;
+      const right = Math.max(...cells.map(c => c.x+c.w))+9, bottom = Math.max(...cells.map(c => c.y+c.h))+9;
+      this.drawContainer(this.vehicle.def.regions[index].style,left,top,right-left,bottom-top);
+    });
+    for (const slot of this.slotRects) {
+      this.rect(g,this.paletteColor(pal.well,236),slot.x,slot.y,slot.w,slot.h,10);
+      this.stroke(g,this.paletteColor(pal.accent,190),2,slot.x+2,slot.y+2,slot.w-4,slot.h-4,9);
+      this.rect(g,this.paletteColor(pal.accent,110),slot.x+slot.w*.31,slot.y+slot.h-10,slot.w*.38,3,2);
+    }
+    // Label plate above the first container.
+    const plateW = Math.max(200,this.slotTitle.string.length*17+36);
+    this.rect(g,this.paletteColor(pal.panel,236),375-plateW/2,this.slotY-38,plateW,28,14);
+    this.stroke(g,this.paletteColor(pal.accent,220),2,375-plateW/2+1,this.slotY-37,plateW-2,26,13);
+    this.slotTitle.color = this.paletteColor(pal.text);
+  }
+
+  private drawContainer(style: 'box' | 'bag' | 'bed' | 'hatch' | 'door',x: number,y: number,w: number,h: number): void {
+    const g = this.carDetail;
+    const pal = this.vehicle.def.palette;
+    const accent = this.paletteColor(pal.accent,210);
+    if (style === 'box') {
+      this.rect(g,new Color(18,10,12,215),x,y,w,h,16);
+      this.stroke(g,accent,3,x+1,y+1,w-2,h-2,15);
+      this.rect(g,this.paletteColor(pal.accent,150),x+12,y+3,w-24,3,2);
+    } else if (style === 'bag') {
+      this.rect(g,new Color(64,14,18,225),x,y,w,h,20);
+      this.stroke(g,accent,3,x+1,y+1,w-2,h-2,19);
+      // Flap seam and buckle.
+      this.rect(g,this.paletteColor(pal.accent,170),x+10,y+h*.5-1,w-20,2,1);
+      this.rect(g,accent,x+w/2-8,y+h*.5-7,16,14,4);
+    } else if (style === 'bed') {
+      this.rect(g,new Color(40,30,26,205),x,y,w,h,8);
+      g.strokeColor = new Color(255,220,160,40); g.lineWidth = 2;
+      for (let lineX = x+28; lineX < x+w-10; lineX += 34) {
+        g.moveTo(lineX-375,this.height/2-y-4); g.lineTo(lineX-375,this.height/2-y-h+4);
+      }
+      g.stroke();
+      this.stroke(g,accent,3,x+1,y+1,w-2,h-2,7);
+    } else if (style === 'hatch') {
+      this.rect(g,new Color(22,20,26,215),x,y,w,h,14);
+      this.stroke(g,new Color(205,205,215,150),2,x+3,y+3,w-6,h-6,12);
+      this.stroke(g,accent,2,x+1,y+1,w-2,h-2,13);
+    } else {
+      this.rect(g,new Color(30,30,36,220),x,y,w,h,6);
+      this.stroke(g,new Color(236,236,240,190),4,x+2,y+2,w-4,h-4,5);
+      this.rect(g,accent,x+6,y+h-10,w-12,4,2);
+    }
+  }
+
+  /** “本关座驾：…” banner; later levels slide the new ride in with “换车啦”. */
+  private showVehicleIntro(): void {
+    if (this.introShown) return;
+    this.introShown = true;
+    const swap = this.level.stage >= 2;
+    const banner = uiNode('VehicleIntro',this.fxLayer,520,120);
+    const g = banner.addComponent(Graphics);
+    const pal = this.vehicle.def.palette;
+    fill(g,new Color(30,10,14,210),-250,-52,500,104,26);
+    fill(g,this.paletteColor(pal.accent),-244,-46,488,92,22);
+    fill(g,this.paletteColor(pal.panel),-238,-40,476,80,18);
+    const title = label(banner,'IntroTitle',swap ? '换车啦！' : '出发回家',24,0,18);
+    title.color = this.paletteColor(pal.text);
+    const name = label(banner,'IntroVehicle',`本关座驾：${this.vehicle.displayName}`,30,0,-16);
+    name.color = this.paletteColor(pal.accent);
+    const opacity = banner.addComponent(UIOpacity);
+    const y = this.height/2-(this.artRect.y > 0 && !this.isSedan ? this.artRect.y-70 : this.carRect.y-150);
+    banner.setPosition(0,y,40);
+    banner.setScale(.7,.7,1);
+    tween(banner).to(.22,{scale:new Vec3(1,1,1)},{easing:'backOut'}).delay(1.5).call(() => {
+      tween(opacity).to(.35,{opacity:0}).call(() => { if (banner.isValid) banner.destroy(); }).start();
+    }).start();
+    if (swap) {
+      this.carLayer.setPosition(820,0,0);
+      tween(this.carLayer).to(.55,{position:new Vec3(0,0,0)},{easing:'quadOut'}).start();
+    }
+    this.sounds.play('swap');
   }
 
   private makeImageNode(name: string,parent: Node): Sprite {
@@ -550,11 +693,12 @@ export class StackPage {
     g.clear();
     for (const action of this.actions) {
       const used = this.game.props[action.key];
-      this.rect(g,used ? new Color(69,61,63,220) : new Color(86,28,37,238),action.rect.x,action.rect.y,action.rect.w,action.rect.h,20);
-      this.stroke(g,used ? gray : gold,2,action.rect.x+2,action.rect.y+2,action.rect.w-4,action.rect.h-4,18);
-      this.rect(g,used ? new Color(109,99,101) : new Color(255,213,132,90),action.rect.x+17,action.rect.y+action.rect.h-15,action.rect.w-34,3,2);
+      const pal = this.vehicle.def.palette;
+      this.rect(g,used ? new Color(69,61,63,240) : this.paletteColor(pal.panel,246),action.rect.x,action.rect.y,action.rect.w,action.rect.h,20);
+      this.stroke(g,used ? gray : this.paletteColor(pal.accent),2,action.rect.x+2,action.rect.y+2,action.rect.w-4,action.rect.h-4,18);
+      this.rect(g,used ? new Color(109,99,101) : this.paletteColor(pal.accent,90),action.rect.x+17,action.rect.y+action.rect.h-15,action.rect.w-34,3,2);
       action.label.string = used ? `${action.title} · 已用` : `${action.title} · 1 次`;
-      action.label.color = used ? new Color(185,177,169) : paleGold;
+      action.label.color = used ? new Color(185,177,169) : this.paletteColor(pal.text);
     }
   }
 
@@ -633,7 +777,7 @@ export class StackPage {
       if (view.node.isValid) view.node.destroy();
       this.slotViewMap.delete(id);
     }
-    for (let index=0;index<cards.length && index<SLOT_CAPACITY;index++) {
+    for (let index=0;index<cards.length && index<this.slotRects.length;index++) {
       const card = cards[index];
       if (card.id === options.reserve) continue;
       const rect = this.slotRects[index];
@@ -804,7 +948,7 @@ export class StackPage {
     setTimeout(() => { if (this.node.isValid) this.sounds.play('fly'); },35);
     const flyer = this.makeCardView(result.card,result.card.w*this.board.scale,this.fxLayer);
     flyer.node.setPosition(this.cardCenter(result.card));
-    const targetIndex = Math.min(result.insertIndex,SLOT_CAPACITY-1);
+    const targetIndex = Math.min(result.insertIndex,this.slotRects.length-1);
     const slot = this.slotRects[targetIndex];
     const target = new Vec3(slot.x+slot.w/2-375,this.height/2-(slot.y+slot.h/2),0);
     const scale = Math.max(.35,(slot.w-6)/(result.card.w*this.board.scale));
@@ -919,7 +1063,7 @@ export class StackPage {
 
   /** Red pulsing trunk when only one or two slot cells are left. */
   private updateWarning(): void {
-    const free = SLOT_CAPACITY-this.game.slot.length;
+    const free = this.capacity-this.game.slot.length;
     const danger = this.game.status === 'playing' && !this.finish && free <= 2;
     if (danger === this.warnActive) return;
     this.warnActive = danger;
@@ -962,9 +1106,9 @@ export class StackPage {
     fill(g,new Color(61,18,26,245),-300,-320,600,640,34);
     fill(g,gold,-292,-312,584,624,29);
     fill(g,new Color(176,34,42),-284,-304,568,608,24);
-    const title = label(layer,'OverflowTitle','后备箱塞爆了',46,0,236);
+    const title = label(layer,'OverflowTitle',this.isSedan ? '后备箱塞爆了' : `${this.vehicle.def.container.split('+')[0]}塞爆了`,46,0,236);
     title.color = gold;
-    const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);
+    const hint = label(layer,'OverflowHint',`${this.capacity} 格全满，还差一件同款年货`,22,0,190);
     hint.color = cream;
     this.drawOverflowCar(layer);
     const share = this.failButton(layer,'share','生成分享图',-180);
@@ -986,14 +1130,25 @@ export class StackPage {
     fill(fallback,new Color(132,30,34),-129,-84,258,158,26);
     fill(fallback,new Color(22,18,23),-91,-49,182,87,16);
     const body = this.makeImageNode('OverflowBody',car);
-    if (this.carFrames.body) {
+    if (!this.isSedan) {
+      fallbackNode.active = !this.vehicleFrame;
+      if (this.vehicleFrame) {
+        body.spriteFrame = this.vehicleFrame;
+        body.enabled = true;
+        const h = 196, w = h*this.vehicle.def.artSize.w/this.vehicle.def.artSize.h*(this.vehicle.def.stretchX ?? 1);
+        body.node.getComponent(UITransform)!.setContentSize(Math.min(290,w),h);
+        body.node.setPosition(0,-6);
+        const tint = this.vehicle.tint;
+        if (tint) body.color = new Color(tint[0],tint[1],tint[2],255);
+      }
+    } else if (this.carFrames.body) {
       body.spriteFrame = this.carFrames.body;
       body.enabled = true;
       body.node.getComponent(UITransform)!.setContentSize(252,158);
       body.node.setPosition(0,-8);
     }
     const lid = this.makeImageNode('OverflowLid',car);
-    if (this.carFrames.lid) {
+    if (this.isSedan && this.carFrames.lid) {
       lid.spriteFrame = this.carFrames.lid;
       lid.enabled = true;
       lid.node.getComponent(UITransform)!.setContentSize(238,76);
@@ -1237,10 +1392,10 @@ export class StackPage {
     const origin = this.toScreen(0,0);
     const cards = this.game.cards.map(card => ({...card,...mapStackRect(this.board,card)}));
     const bounds = stackCardBounds(cards);
-    const layout = createStackPageLayout(this.height,this.safeBottom);
+    const layout = this.isSedan ? createStackPageLayout(this.height,this.safeBottom) : createStackPageLayout(this.height,this.safeBottom,this.artRect.y);
     const topLeft = this.toScreen(bounds.left,bounds.top);
     const bottomRight = this.toScreen(bounds.right,bounds.bottom);
-    const lidTop = this.carRect.y-75;
+    const lidTop = this.isSedan ? this.carRect.y-75 : this.artRect.y;
     const actionsBottom = this.actionY+this.actionH;
     return {
       viewport:{width:typeof window === 'undefined' ? 750 : window.innerWidth,height:typeof window === 'undefined' ? this.height : window.innerHeight},
@@ -1254,7 +1409,20 @@ export class StackPage {
       hudBottom:this.toScreen(0,layout.stackTop).y,
       trunkTop:this.toScreen(0,this.trunk.y).y,
       lidTop:this.toScreen(0,lidTop).y,
-      carTop:this.toScreen(0,this.carRect.y).y,
+      carTop:this.toScreen(0,this.isSedan ? this.carRect.y : this.artRect.y).y,
+      vehicle:{key:this.vehicle.def.key,name:this.vehicle.displayName,capacity:this.capacity,label:this.slotTitle.string},
+      actionsTop:this.toScreen(0,this.actionY).y,
+      reserveBounds:(() => {
+        const size = Math.round(this.level.cardW*.72);
+        const rects = this.level.reservePositions.map(p => mapStackRect(this.board,{x:p.x,y:p.y,w:size,h:size}));
+        const a = this.toScreen(Math.min(...rects.map(r => r.x)),Math.min(...rects.map(r => r.y)));
+        const b = this.toScreen(Math.max(...rects.map(r => r.x+r.w)),Math.max(...rects.map(r => r.y+r.h)));
+        return {left:a.x,top:a.y,right:b.x,bottom:b.y};
+      })(),
+      slotCells:this.slotRects.map(r => {
+        const a = this.toScreen(r.x,r.y), b = this.toScreen(r.x+r.w,r.y+r.h);
+        return {left:a.x,top:a.y,right:b.x,bottom:b.y};
+      }),
       actionsBottom:this.toScreen(0,actionsBottom).y,
       safeBottom:this.safeBottom*origin.k,
       stackRegion:{
