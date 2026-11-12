@@ -101,7 +101,7 @@ export async function handle(request: Request, store: RankStore, now = Date.now(
       totalClears: provinces.reduce((sum, row) => sum + row.total, 0),
       todayClears: provinces.reduce((sum, row) => sum + row.today, 0),
       updatedAt: now,
-    }, origin, {'Cache-Control': 'public, max-age=10'});
+    }, origin, {'Cache-Control': 'no-store'});
   }
 
   if (url.pathname === '/api/clear' && request.method === 'POST') {
