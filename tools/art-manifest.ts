@@ -15,7 +15,10 @@ export const ITEM_ART: ArtEntry[] = (Object.keys(ITEMS) as ShapeId[]).map(shape 
 })));
 export const ART: ArtEntry[] = [...ITEM_ART,...[
   ['vehicles/sedan_v1_body',1024,640,'车尾'],['vehicles/sedan_v1_lid',1024,360,'后备箱盖'],
-  ['vehicles/sedan_v1_trunk',1024,768,'箱内底'],['ui/btn_rotate',240,240,'旋转'],
+  ['vehicles/sedan_v1_trunk',1024,768,'箱内底'],
+  ['vehicles/moto',548,678,'摩托车'],['vehicles/trike',646,670,'电动三轮'],['vehicles/suv',682,665,'SUV'],
+  ['vehicles/van',527,680,'面包车'],['vehicles/pickup',706,646,'皮卡'],['vehicles/truck',770,625,'小货车'],
+  ['vehicles/bus',519,661,'大巴车'],['vehicles/tractor',457,647,'拖拉机'],['ui/btn_rotate',240,240,'旋转'],
   ['ui/btn_undo',160,160,'撤销'],['ui/btn_restart',160,160,'重开'],['ui/mom',512,512,'妈妈'],
   ['ui/hand',160,160,'手指'],['ui/bg_night',750,1334,'夜色归家'],
   ...Array.from({length:4},(_,i) => [`fx/confetti_${i+1}`,32,32,'彩纸']),
