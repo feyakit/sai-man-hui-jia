@@ -7,7 +7,7 @@ import type { StackCard, StackItemDef, StackLevel, StackPoint } from './stack-ty
 
 export const STACK_SEEDS = ['trunk-stack-stage1-v1', 'trunk-stack-stage2-v1'] as const;
 export const STAGE1_CARDS = 18;
-export const STAGE2_CARDS = 78;
+export const STAGE2_CARDS = 150;
 
 export interface GeneratedStackLevel {
   readonly level: StackLevel;
@@ -47,48 +47,45 @@ function layoutStageOne(): StackCard[] {
 }
 
 const STAGE2_CARD = STACK_CARD_SIZE;
-/** Top-to-bottom rows of a wide pyramid: each level loses one column and half a card. */
-const MAIN_LAYERS = [
-  {columns: 1, rows: 1},
-  {columns: 2, rows: 1},
-  {columns: 3, rows: 2},
-  {columns: 4, rows: 2},
-  {columns: 5, rows: 3},
-  {columns: 6, rows: 5},
-] as const;
-const MAIN_STEP_X = 114;
-const MAIN_STEP_Y = 55;
-const MAIN_TOP_Y = 142;
+const GRID = 112;
+const HALF = GRID / 2;
+const GRID_X0 = Math.round((750 - (5 * GRID + STAGE2_CARD)) / 2);
+const GRID_Y0 = 150;
+/**
+ * Bottom-to-top layers of the hard mound. Odd layers sit half a card right and down, so every
+ * card is pinned by up to four cards above; upper layers shrink towards the centre and the
+ * base loses its top corners, giving a hill silhouette instead of a wall.
+ */
+const MAIN_LAYERS: readonly {cols: readonly [number, number]; rows: readonly [number, number]; half: boolean; skip?: readonly string[]}[] = [
+  {cols: [0, 5], rows: [0, 6], half: false, skip: ['0,0', '5,0', '0,1', '5,1']},
+  {cols: [0, 4], rows: [0, 5], half: true, skip: ['0,0', '4,0']},
+  {cols: [1, 4], rows: [0, 6], half: false},
+  {cols: [1, 3], rows: [0, 5], half: true},
+  {cols: [2, 3], rows: [1, 5], half: false},
+  {cols: [2, 2], rows: [1, 4], half: true},
+];
 const SIDE_STACKS = [
-  {source: 'side-left', x: 36, y: 1006, count: 8, step: 12},
-  {source: 'side-right', x: 606, y: 1006, count: 8, step: -12},
+  {source: 'side-left', x: 36, y: 1006, count: 12, step: 13},
+  {source: 'side-right', x: 606, y: 1006, count: 12, step: -13},
 ] as const;
 
 function layoutStageTwo(random: () => number): StackCard[] {
   const cards: StackCard[] = [];
   let id = 0;
-  let rowCursor = 0;
-  for (let layer = 0; layer < MAIN_LAYERS.length; layer++) {
-    const {columns, rows} = MAIN_LAYERS[layer];
-    const layerY = MAIN_TOP_Y + (layer % 2 === 1 ? Math.round(MAIN_STEP_Y / 2) : 0);
-    const rowWidth = (columns - 1) * MAIN_STEP_X + STAGE2_CARD;
-    const startX = Math.round((750 - rowWidth) / 2);
-    for (let row = 0; row < rows; row++) {
-      const jitterY = Math.round((random() - .5) * 4);
-      const y = Math.round(layerY + rowCursor * MAIN_STEP_Y + jitterY);
-      for (let column = 0; column < columns; column++) {
+  MAIN_LAYERS.forEach((layer, index) => {
+    const offset = layer.half ? HALF : 0;
+    for (let row = layer.rows[0]; row <= layer.rows[1]; row++) {
+      for (let col = layer.cols[0]; col <= layer.cols[1]; col++) {
+        if (layer.skip?.includes(`${col},${row}`)) continue;
         const jitterX = Math.round((random() - .5) * 4);
-        const x = startX + column * MAIN_STEP_X + jitterX;
-        cards.push(pileCard(++id, x, y, STAGE2_CARD, STAGE2_CARD, layer, 'pile'));
+        const jitterY = Math.round((random() - .5) * 4);
+        cards.push(pileCard(++id, GRID_X0 + offset + col * GRID + jitterX, GRID_Y0 + offset + row * GRID + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
       }
-      rowCursor++;
     }
-  }
-  const sideSize = STAGE2_CARD;
+  });
   for (const stack of SIDE_STACKS) {
     for (let index = 0; index < stack.count; index++) {
-      const x = stack.x + index * stack.step;
-      cards.push(pileCard(++id, x, stack.y, sideSize, sideSize, 20 + index, stack.source));
+      cards.push(pileCard(++id, stack.x + index * stack.step, stack.y, STAGE2_CARD, STAGE2_CARD, 20 + index, stack.source));
     }
   }
   return cards;
