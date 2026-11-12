@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PROVINCES } from '../client/assets/scripts/core/provinces';
 import {
+  isDebugRun,
+  RANK_DEBUG_TEXT,
   RANK_DEFAULT_API_BASE,
   RANK_DEVICE_STORAGE_KEY,
   RANK_MAX_PENDING_CLEARS,
@@ -51,6 +53,8 @@ const report = {
   stage: 2 as const,
   ms: 61_000,
   sessionId: 'device_12345678',
+  boxes: 50,
+  momBoxes: 0,
 };
 
 describe('rank API config', () => {
@@ -92,6 +96,19 @@ describe('rank validation and device identity', () => {
     expect(isValidClearReport({...report,ms:0})).toBe(false);
     expect(isValidClearReport({...report,sessionId:'short'})).toBe(false);
     expect(isValidClearReport(null)).toBe(false);
+    expect(isValidClearReport({...report,boxes:undefined})).toBe(false);
+    expect(isValidClearReport({...report,boxes:1.5})).toBe(false);
+    expect(isValidClearReport({...report,momBoxes:-1})).toBe(false);
+  });
+
+  it('treats every debug parameter as a run that must not be reported', () => {
+    expect(RANK_DEBUG_TEXT).toBe('调试模式不计入排行');
+    for (const value of ['win','fail','mom','anything','']) {
+      expect(isDebugRun(`?mode=stack&stage=2&debug=${value}`)).toBe(true);
+    }
+    expect(isDebugRun('?mode=stack&stage=2')).toBe(false);
+    expect(isDebugRun('')).toBe(false);
+    expect(isDebugRun('?api=off&debugger=1')).toBe(false);
   });
 
   it('validates session ids at the documented boundaries', () => {

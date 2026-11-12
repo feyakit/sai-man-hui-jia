@@ -137,6 +137,8 @@ export class RankApi {
           stage:report.stage,
           ms:report.ms,
           sessionId:report.sessionId,
+          boxes:report.boxes,
+          momBoxes:report.momBoxes,
         }),
       });
     } catch { return {kind:'retry'}; }

@@ -14,6 +14,8 @@ import {
   formatContributionFailure,
   formatContributionResult,
   formatRankProgress,
+  isDebugRun,
+  RANK_DEBUG_TEXT,
   type Province,
 } from '../core/rank/rank';
 import { FINISH_DURATION, FinishPlayback, type FinishAction } from '../game/FinishTimeline';
@@ -938,6 +940,11 @@ export class StackPage {
     );
     this.finishView.layout(this.height);
     this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
+    // Any ?debug=… run (win/fail/mom/…) is a test drive: it never reaches the leaderboard.
+    if (typeof window !== 'undefined' && isDebugRun(window.location.search)) {
+      this.finishView.setRankStatus(RANK_DEBUG_TEXT);
+      return;
+    }
     if (this.level.stage === 2) this.startRankReporting(elapsedMs);
     else this.startStageOneReporting(elapsedMs);
   }
@@ -991,6 +998,8 @@ export class StackPage {
         stage,
         ms,
         sessionId:this.rankApi.deviceId,
+        boxes:this.game.clearedGroups,
+        momBoxes:this.game.momEventCount,
       });
     } catch {
       outcome = {ok:false,reason:'network'};
