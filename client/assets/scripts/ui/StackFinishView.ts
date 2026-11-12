@@ -119,8 +119,8 @@ export class StackFinishView {
     fill(this.wash, night, -375, -height / 2, 750, height, 0);
     this.drawCarFallback();
     this.headline.setPosition(0, height / 2 - 207);
-    this.statsLabel.setPosition(0, height / 2 - 350);
-    const actionsY = -height / 2 + 320;
+    this.statsLabel.setPosition(0, height / 2 - 380);
+    const actionsY = -height / 2 + 450;
     this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
     const baseY = 68;

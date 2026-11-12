@@ -92,7 +92,10 @@ async function tapSolutionCard(page, id) {
   if (!accepted) {
     throw new Error(`tap on solution card ${id} was not accepted: ${JSON.stringify(after)}`);
   }
-  await page.waitForFunction(() => !window.__stack.getState().busy, undefined, { timeout: 4_000 });
+  await page.waitForFunction(() => {
+    const current = window.__stack.getState();
+    return !current.busy || current.status !== 'playing' || current.finishing;
+  }, undefined, { timeout: 4_000 });
   await page.waitForTimeout(80);
   return state(page);
 }
@@ -126,8 +129,9 @@ try {
   if (!undone.props.undo || undone.remaining !== 18 || undone.totalRemaining !== 18) {
     throw new Error(`undo did not restore the pile count: ${JSON.stringify(undone)}`);
   }
-  if (!afterUndoBoard.some(card => card.id === solution[0])
-    || beforeUndoBoard.length !== afterUndoBoard.length) {
+  if (beforeUndoBoard.some(card => card.id === solution[0])
+    || !afterUndoBoard.some(card => card.id === solution[0])
+    || afterUndoBoard.length !== 18) {
     throw new Error('undo did not restore the tapped card to the pile');
   }
   if (!undone.clickable.some(card => card.id === solution[0])) {
