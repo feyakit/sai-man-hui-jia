@@ -126,3 +126,5 @@ export function solveStackLevel(level: StackLevel, options: StackSolveOptions = 
     method: picks ? 'search' : 'none',
   };
 }
+
+export { solveStackState, type StackStateSolveResult } from './stack-state-solver';
