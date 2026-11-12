@@ -64,6 +64,7 @@ export class StackGame {
   private currentStatus: StackStatus = 'playing';
   private history?: Snapshot;
   private propState: StackProps = {moveOut: false, undo: false, shuffle: false};
+  private reviveUsed = false;
   private groupsCleared = 0;
   private lastMomGroup = 0;
   private momEvents = 0;
@@ -90,6 +91,8 @@ export class StackGame {
   get clearedGroups(): number { return this.groupsCleared; }
   get momEventCount(): number { return this.momEvents; }
   get props(): StackProps { return this.propState; }
+  /** A lost game may be revived once (three slot cards go to the side shelf). */
+  get canRevive(): boolean { return !this.reviveUsed && this.currentStatus === 'lost' && this.slotList.length >= PACK_SIZE; }
 
   canTap(id: number): boolean {
     if (this.currentStatus !== 'playing') return false;
@@ -146,7 +149,8 @@ export class StackGame {
   }
 
   revive(): StackCard[] {
-    if (this.currentStatus !== 'lost' || this.slotList.length < PACK_SIZE) return [];
+    if (!this.canRevive) return [];
+    this.reviveUsed = true;
     const moved = this.moveOutCards();
     this.currentStatus = 'playing';
     this.history = undefined;
