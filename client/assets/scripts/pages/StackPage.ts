@@ -1,6 +1,6 @@
 import {
   Color, EventTouch, Game, Graphics, Label, Node, Rect as SpriteRect, Size, Sprite, SpriteFrame,
-  UITransform, Vec2, Vec3, game, sys, tween, view,
+  Tween, UIOpacity, UITransform, Vec2, Vec3, game, sys, tween, view,
 } from 'cc';
 import { STACK_SEEDS, generateStackLevel } from '../core/stack/stack-generator';
 import {
@@ -30,6 +30,8 @@ import { fill, label, uiNode } from '../ui/UIKit';
 import { StackFinishView, type StackFinishStats } from '../ui/StackFinishView';
 import { RankPage } from './RankPage';
 
+/** Packs closer together than this count as a combo. */
+const STACK_COMBO_WINDOW_MS = 3_000;
 const ink = new Color(74,44,26);
 const red = new Color(184,27,43);
 const brightRed = new Color(218,52,43);
@@ -122,7 +124,16 @@ export class StackPage {
   private readonly soundButton: Node;
   private readonly soundButtonArt: Graphics;
   private readonly soundButtonLabel: Label;
-  private soundRect: Rect = {x:647,y:162,w:94,h:52};
+  private soundRect: Rect = {x:655,y:150,w:86,h:40};
+  private musicRect: Rect = {x:655,y:196,w:86,h:40};
+  private readonly musicButton: Node;
+  private readonly musicButtonArt: Graphics;
+  private readonly musicButtonLabel: Label;
+  private comboCount = 0;
+  private lastPackAt = 0;
+  private warnLayer!: Node;
+  private warnArt!: Graphics;
+  private warnActive = false;
   private readonly pileLayer: Node;
   private readonly slotLayer: Node;
   private readonly fxLayer: Node;
@@ -133,6 +144,9 @@ export class StackPage {
   private readonly cardViews = new Map<number, CardView>();
   private readonly itemFrames = new Map<string,SpriteFrame | undefined>();
   private slotViews: CardView[] = [];
+  private readonly slotViewMap = new Map<number,CardView>();
+  /** Card ids currently being packed; their nodes are the only ones allowed to vanish. */
+  private packingIds = new Set<number>();
   private readonly slotRects: Rect[] = Array.from({length: SLOT_CAPACITY},() => ({x:0,y:0,w:0,h:0}));
   private readonly actions: ActionButton[] = [];
   private readonly failButtons: FailButton[] = [];
@@ -216,14 +230,21 @@ export class StackPage {
     label(this.hud,'ModeTitle','年货三消',38,0,0).color = gold;
     const subtitle = label(this.hud,'Subtitle','点没被压住的年货 · 三件装一箱',19,0,0);
     subtitle.color = cream;
-    this.soundButton = uiNode('SoundToggle',this.hud,94,52);
+    this.soundButton = uiNode('SoundToggle',this.hud,86,40);
     this.soundButtonArt = this.soundButton.addComponent(Graphics);
-    this.soundButtonLabel = label(this.soundButton,'SoundLabel','声音 开',16,0,0);
+    this.soundButtonLabel = label(this.soundButton,'SoundLabel','音效 开',15,0,0);
+    this.musicButton = uiNode('MusicToggle',this.hud,86,40);
+    this.musicButtonArt = this.musicButton.addComponent(Graphics);
+    this.musicButtonLabel = label(this.musicButton,'MusicLabel','音乐 开',15,0,0);
     this.drawSoundButton();
     this.reserveLayer = uiNode('ReserveZone',this.node,750,1334);
     this.reserveShelf = this.reserveLayer.addComponent(Graphics);
     this.reserveLayer.active = false;
     this.pileLayer = uiNode('CargoPile',this.node,750,1334);
+    this.warnLayer = uiNode('TrunkWarning',this.node,750,1334);
+    this.warnArt = this.warnLayer.addComponent(Graphics);
+    this.warnLayer.addComponent(UIOpacity);
+    this.warnLayer.active = false;
     this.slotLayer = uiNode('TrunkSlots',this.node,750,1334);
     this.fxLayer = uiNode('Effects',this.node,750,1334);
     this.slotTitle = label(this.node,'SlotTitle','轿车后备箱 · 7 格',17,0,0);
@@ -280,6 +301,7 @@ export class StackPage {
         x:card.x, y:card.y, w:card.w, h:card.h,
       })),
       getLayout: () => this.debugLayout(),
+      getSlotViews: () => this.debugSlotViews(),
     };
     if (typeof window !== 'undefined') {
       (window as Window & {__stack?: object}).__stack = Object.freeze(this.debugHook);
@@ -361,7 +383,8 @@ export class StackPage {
     }
     this.stageLabel.node.setPosition(-242,this.height/2-61);
     this.remainingLabel.node.setPosition(198,this.height/2-61);
-    this.soundButton.setPosition(319,this.height/2-188);
+    this.soundButton.setPosition(323,this.height/2-170);
+    this.musicButton.setPosition(323,this.height/2-216);
     this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-61);
     this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-105);
     this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-17));
@@ -378,6 +401,8 @@ export class StackPage {
     this.drawActions();
     this.drawSoundButton();
     this.drawFailButtons();
+    this.warnActive = false;
+    this.warnLayer.active = false;
     this.refresh();
     this.finishView?.layout(this.height);
   }
@@ -505,16 +530,19 @@ export class StackPage {
   }
 
   private drawSoundButton(): void {
-    const g = this.soundButtonArt;
+    this.drawToggle(this.soundButtonArt,this.soundButtonLabel,this.sounds.soundEnabled,'音效');
+    this.drawToggle(this.musicButtonArt,this.musicButtonLabel,this.sounds.musicEnabled,'音乐');
+  }
+
+  private drawToggle(g: Graphics,text: Label,on: boolean,name: string): void {
     g.clear();
-    const on = this.sounds.enabled;
-    fill(g,on ? gold : new Color(96,87,89),-47,-26,94,52,16);
-    fill(g,on ? new Color(139,31,38) : new Color(67,61,64),-43,-22,86,44,13);
+    fill(g,on ? gold : new Color(96,87,89),-43,-20,86,40,14);
+    fill(g,on ? new Color(139,31,38) : new Color(67,61,64),-40,-17,80,34,11);
     g.strokeColor = on ? new Color(255,226,164) : new Color(155,146,146);
     g.lineWidth = 1.5;
-    g.roundRect(-45,-24,90,48,15); g.stroke();
-    this.soundButtonLabel.string = on ? '声音 开' : '声音 关';
-    this.soundButtonLabel.color = on ? paleGold : new Color(205,198,194);
+    g.roundRect(-41,-18,82,36,12); g.stroke();
+    text.string = `${name} ${on ? '开' : '关'}`;
+    text.color = on ? paleGold : new Color(205,198,194);
   }
 
   private drawActions(): void {
@@ -530,11 +558,12 @@ export class StackPage {
     }
   }
 
-  private refresh(): void {
+  private refresh(animateSlot = false): void {
     this.updateHud();
     this.updateReserve();
     this.syncPile();
-    this.renderSlot(this.game.slot);
+    this.renderSlot(this.game.slot,{animate:animateSlot});
+    this.updateWarning();
     this.drawActions();
   }
 
@@ -591,17 +620,53 @@ export class StackPage {
     }
   }
 
-  private renderSlot(cards: readonly StackCard[]): void {
-    for (const view of this.slotViews) if (view.node.isValid) view.node.destroy();
-    this.slotViews = [];
+  /**
+   * Reconciles slot card nodes with the slot contents. Every card keeps its own node for as long
+   * as it stays in the slot (never hidden, rebuilt or re-textured); cards that move tween to their
+   * new cell, cards that left are destroyed, and `reserve` keeps an empty cell for a card in flight.
+   */
+  private renderSlot(cards: readonly StackCard[],options: {animate?: boolean; reserve?: number} = {}): void {
+    const keep = new Set(cards.map(card => card.id));
+    for (const [id,view] of this.slotViewMap) {
+      if (keep.has(id) && id !== options.reserve) continue;
+      Tween.stopAllByTarget(view.node);
+      if (view.node.isValid) view.node.destroy();
+      this.slotViewMap.delete(id);
+    }
     for (let index=0;index<cards.length && index<SLOT_CAPACITY;index++) {
       const card = cards[index];
+      if (card.id === options.reserve) continue;
       const rect = this.slotRects[index];
-      const size = Math.max(42,rect.w-6);
-      const view = this.makeCardView(card,size,this.slotLayer);
-      view.node.setPosition(rect.x+rect.w/2-375,this.height/2-(rect.y+rect.h/2));
-      this.slotViews.push(view);
+      const target = new Vec3(rect.x+rect.w/2-375,this.height/2-(rect.y+rect.h/2),0);
+      let view = this.slotViewMap.get(card.id);
+      if (!view) {
+        view = this.makeCardView(card,Math.max(42,rect.w-6),this.slotLayer);
+        view.node.setPosition(target);
+        this.slotViewMap.set(card.id,view);
+        continue;
+      }
+      const current = view.node.position;
+      if (Math.abs(current.x-target.x) < .5 && Math.abs(current.y-target.y) < .5) continue;
+      Tween.stopAllByTarget(view.node);
+      if (options.animate) tween(view.node).to(.16,{position:target},{easing:'quadOut'}).start();
+      else view.node.setPosition(target);
     }
+    this.slotViews = [...this.slotViewMap.values()];
+  }
+
+  /** Snapshot for the frame-sampling slot check (tools/play-slot.mjs). */
+  private debugSlotViews(): {id:number;kind:string;uuid:string;active:boolean;opacity:number;spriteEnabled:boolean;frame:string;x:number;scale:number}[] {
+    return [...this.slotViewMap.values()].map(view => ({
+      id:view.cardId,
+      kind:view.kind,
+      uuid:view.node.uuid,
+      active:view.node.isValid && view.node.activeInHierarchy,
+      opacity:view.node.getComponent(UIOpacity)?.opacity ?? 255,
+      spriteEnabled:view.sprite.enabled,
+      frame:view.sprite.spriteFrame ? `${view.sprite.spriteFrame.name}#${(view.sprite.spriteFrame as unknown as {_uuid?: string})._uuid ?? ''}` : 'fallback',
+      x:view.node.position.x,
+      scale:view.node.scale.x,
+    }));
   }
 
   private makeCardView(card: StackCard,size: number,parent: Node): CardView {
@@ -701,7 +766,12 @@ export class StackPage {
       return;
     }
     if (contains(this.soundRect,p.x,p.y)) {
-      this.sounds.toggle();
+      this.sounds.toggleSound();
+      this.drawSoundButton();
+      return;
+    }
+    if (contains(this.musicRect,p.x,p.y)) {
+      this.sounds.toggleMusic();
       this.drawSoundButton();
       return;
     }
@@ -740,38 +810,58 @@ export class StackPage {
     const scale = Math.max(.35,(slot.w-6)/(result.card.w*this.board.scale));
     this.syncPile();
     this.updateHud();
+    // Neighbours after the insert point slide right now, leaving a gap the flyer lands in.
+    this.renderSlot(result.slotBeforePack,{animate:true,reserve:result.card.id});
+    const landed = result.card;
     tween(flyer.node).to(.2,{position:target,scale:new Vec3(scale,scale,1)},{easing:'quadOut'}).call(() => {
       if (flyer.node.isValid) flyer.node.destroy();
+      this.renderSlot(result.slotBeforePack,{animate:true});
+      void landed;
       if (result.packed.length === PACK_SIZE) this.playPack(result);
       else this.finishTap(result);
     }).start();
   }
 
   private playPack(result: StackTapResult): void {
-    this.renderSlot(result.slotBeforePack);
     this.sounds.play('pack');
+    const now = Date.now();
+    this.comboCount = now - this.lastPackAt <= STACK_COMBO_WINDOW_MS ? this.comboCount + 1 : 1;
+    this.lastPackAt = now;
+    if (this.comboCount >= 2) {
+      const level = Math.min(8,this.comboCount-1);
+      setTimeout(() => { if (this.node.isValid) this.sounds.play('combo',{level}); },120);
+      this.showCombo(this.comboCount);
+    }
     const packed = new Set(result.packed.map(card => card.id));
-    const views = this.slotViews.filter(view => packed.has(view.cardId));
+    this.packingIds = packed;
+    const views = [...this.slotViewMap.values()].filter(view => packed.has(view.cardId));
     const first = views[0];
-    if (!first) { this.finishTap(result); return; }
-    const center = first.node.position.clone();
-    const start = views.map(view => view.node.position.clone());
+    if (!first) { this.packingIds = new Set(); this.finishTap(result); return; }
+    const center = views[Math.min(1,views.length-1)].node.position.clone();
     setTimeout(() => {
       if (!this.node.isValid) return;
       for (let i=0;i<views.length;i++) {
         const view = views[i];
+        Tween.stopAllByTarget(view.node);
         tween(view.node).to(.24,{position:center,scale:new Vec3(.58,.58,1),angle:i === 0 ? -8 : i === 2 ? 8 : 0},{easing:'quadIn'}).start();
       }
       setTimeout(() => {
         if (!this.node.isValid) return;
-        for (let i=0;i<views.length;i++) views[i].node.setPosition(start[i]);
+        // Only the three packed cards leave; every other slot card keeps its node and slides left.
+        for (const view of views) {
+          Tween.stopAllByTarget(view.node);
+          if (view.node.isValid) view.node.destroy();
+          this.slotViewMap.delete(view.cardId);
+        }
+        this.slotViews = [...this.slotViewMap.values()];
+        this.packingIds = new Set();
+        this.renderSlot(this.game.slot,{animate:true});
         this.showPackedBox(center,() => this.finishTap(result));
       },250);
     },80);
   }
 
   private showPackedBox(at: Vec3,onDone: () => void): void {
-    for (const view of this.slotViews) view.node.active = false;
     const box = uiNode('PackedBox',this.fxLayer,132,104);
     box.setPosition(at.x,at.y,20);
     const g = box.addComponent(Graphics);
@@ -797,22 +887,56 @@ export class StackPage {
 
   private finishTap(result: StackTapResult): void {
     this.busy = false;
-    this.refresh();
+    this.refresh(true);
     if (result.status === 'lost') this.openFail();
     else if (result.status === 'won') this.beginFinish();
   }
 
   private useAction(key: ActionButton['key']): void {
-    this.sounds.play('tap');
-    if (key === 'moveOut') {
-      const moved = this.game.useMoveOut();
-      if (moved.length) this.sounds.play('fly');
-    } else if (key === 'undo') {
-      if (this.game.useUndo()) this.sounds.play('fly');
-    } else if (this.game.useShuffle()) {
-      this.sounds.play('fly');
-    }
+    let used = false;
+    if (key === 'moveOut') used = this.game.useMoveOut().length > 0;
+    else if (key === 'undo') used = this.game.useUndo();
+    else used = this.game.useShuffle();
+    this.sounds.play(used ? 'prop' : 'tap');
     this.refresh();
+  }
+
+  /** “连击 ×N” floats up from the slot and fades out. */
+  private showCombo(count: number): void {
+    const node = uiNode('ComboFloat',this.fxLayer,320,80);
+    const text = label(node,'ComboText',`连击 ×${count}`,44,0,0);
+    text.color = gold;
+    text.enableOutline = true;
+    text.outlineColor = new Color(120,14,22);
+    text.outlineWidth = 4;
+    const opacity = node.addComponent(UIOpacity);
+    const y = this.height/2-(this.slotY-70);
+    node.setPosition(0,y,30);
+    node.setScale(.6,.6,1);
+    tween(node).to(.16,{scale:new Vec3(1.15,1.15,1)},{easing:'backOut'}).to(.5,{position:new Vec3(0,y+70,30)}).call(() => { if (node.isValid) node.destroy(); }).start();
+    tween(opacity).delay(.35).to(.3,{opacity:0}).start();
+  }
+
+  /** Red pulsing trunk when only one or two slot cells are left. */
+  private updateWarning(): void {
+    const free = SLOT_CAPACITY-this.game.slot.length;
+    const danger = this.game.status === 'playing' && !this.finish && free <= 2;
+    if (danger === this.warnActive) return;
+    this.warnActive = danger;
+    const opacity = this.warnLayer.getComponent(UIOpacity)!;
+    Tween.stopAllByTarget(opacity);
+    this.warnLayer.active = danger;
+    if (!danger) return;
+    this.sounds.play('warn');
+    const g = this.warnArt;
+    g.clear();
+    const t = this.trunk;
+    g.fillColor = new Color(230,30,36,92);
+    g.roundRect(t.x-6-375,this.height/2-(t.y+t.h)-6,t.w+12,t.h+12,18); g.fill();
+    g.strokeColor = new Color(255,70,60,255); g.lineWidth = 5;
+    g.roundRect(t.x-6-375,this.height/2-(t.y+t.h)-6,t.w+12,t.h+12,18); g.stroke();
+    opacity.opacity = 255;
+    tween(opacity).repeatForever(tween<UIOpacity>().to(.32,{opacity:70}).to(.32,{opacity:255})).start();
   }
 
   private prefillFailure(): void {
@@ -843,10 +967,11 @@ export class StackPage {
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);
     hint.color = cream;
     this.drawOverflowCar(layer);
-    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-98);
     const share = this.failButton(layer,'share','生成分享图',-180);
     const restart = this.failButton(layer,'restart','重来',-262);
-    this.failButtons.push(revive,share,restart);
+    if (this.game.canRevive) this.failButtons.push(this.failButton(layer,'revive','用道具复活一次 · 移出 3 件',-98));
+    else label(layer,'ReviveUsed','本局复活已用过',22,0,-98).color = cream;
+    this.failButtons.push(share,restart);
     this.sounds.play('fail');
     this.refreshFailButtons();
   }
@@ -930,7 +1055,7 @@ export class StackPage {
     this.failLayer?.destroy();
     this.failLayer = undefined;
     this.failButtons.length = 0;
-    this.sounds.play('tap');
+    this.sounds.play('prop');
     this.refresh();
   }
 
