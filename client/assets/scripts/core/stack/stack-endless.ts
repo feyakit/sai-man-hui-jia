@@ -237,6 +237,8 @@ export interface EndlessTuning {
   readonly maxOpenGroups: number;
   /** First generator attempt to try; picked offline so the shipped board hits its target rate. */
   readonly attempt: number;
+  /** Fewer item kinds than the level default (eases a board that is still too hard). */
+  readonly kindDelta?: number;
 }
 
 /** Share of all cards that start as closed cartons: 15% on level 4, +3 points a level, capped at 30%. */
@@ -273,7 +275,7 @@ function attemptEndless(n: number, baseSeed: string, attempt: number, tuning: En
   const seed = attempt === 0 ? baseSeed : `${baseSeed}#retry-${attempt}`;
   const random = createRng(seed);
   const cards = layoutEndless(n, random);
-  const items = ENDLESS_ITEMS.slice(0, endlessKindCount(n));
+  const items = ENDLESS_ITEMS.slice(0, endlessKindCount(n) - (tuning.kindDelta ?? 0));
   const capacity = capacityForLevel(n);
   const assigned = assignTriples(cards, items, random, {
     capacity,

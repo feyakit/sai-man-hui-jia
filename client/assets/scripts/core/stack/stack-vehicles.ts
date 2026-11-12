@@ -61,7 +61,7 @@ export const VEHICLES: readonly VehicleDef[] = [
     palette: {panel: [126, 26, 30], accent: [255, 206, 92], text: [255, 236, 190], well: [36, 32, 34]},
   },
   {
-    key: 'sedan', name: '红色轿车', container: '轿车后备箱', art: null, artSize: {w: 1024, h: 640}, height: 0,
+    key: 'sedan', name: '红轿车', container: '轿车后备箱', art: null, artSize: {w: 1024, h: 640}, height: 0,
     regions: [],
     palette: RED_GOLD,
   },
@@ -97,15 +97,8 @@ export const VEHICLES: readonly VehicleDef[] = [
   },
 ];
 
-/** Later laps through the garage repaint the same rides (tint multiplies the red-gold art). */
-const LAP_TINTS: readonly (Rgb | null)[] = [null, [255, 226, 160], [196, 214, 255], [214, 255, 214]];
-const LAP_NAMES = ['', '金色', '蓝色', '青色'];
-
 export interface LevelVehicle {
   readonly def: VehicleDef;
-  readonly lap: number;
-  readonly tint: Rgb | null;
-  /** Display name including the lap colour, e.g. “金色摩托车”. */
   readonly displayName: string;
 }
 
@@ -113,14 +106,11 @@ export function vehicleByKey(key: string): VehicleDef | undefined {
   return VEHICLES.find(vehicle => vehicle.key === key);
 }
 
-/** Level 1 starts on the motorcycle; after the list runs out it repeats with a new colour. */
+/** One ride per level on the 9-level road home: level 1 the motorcycle … level 9 the tractor. */
 export function vehicleForLevel(level: number): LevelVehicle {
-  const index = Math.max(0, Math.floor(level) - 1);
-  const def = VEHICLES[index % VEHICLES.length];
-  const lap = Math.floor(index / VEHICLES.length);
-  const tint = def.art ? LAP_TINTS[lap % LAP_TINTS.length] : null;
-  const colour = def.art ? LAP_NAMES[lap % LAP_NAMES.length] : '';
-  return {def, lap, tint, displayName: `${colour}${def.name}`};
+  const index = Math.max(0, Math.min(VEHICLES.length - 1, Math.floor(level) - 1));
+  const def = VEHICLES[index];
+  return {def, displayName: def.name};
 }
 
 /** Short phones (page under 1450 design units tall) shrink the ride so the board keeps ~44px cards. */
