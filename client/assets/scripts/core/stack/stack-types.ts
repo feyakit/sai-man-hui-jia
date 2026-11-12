@@ -32,6 +32,10 @@ export interface StackLevel {
   readonly momPositions: readonly StackPoint[];
   /** Click order recorded by the triples used to assign kinds. A simulator rechecks every step. */
   readonly solution: readonly number[];
+  /** Slot capacity for this level. Omitted levels keep the original seven slots. */
+  readonly slotCapacity?: number;
+  /** Whether covered cards are rendered face-down in the UI. Rules ignore this presentation flag. */
+  readonly hideCovered?: boolean;
 }
 
 export interface StackTapResult {

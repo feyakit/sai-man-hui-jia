@@ -7,6 +7,7 @@ import type { Level } from './core/types';
 import { HomePage } from './pages/HomePage';
 import { StagePage } from './pages/StagePage';
 import { StackPage, type StackPageAction } from './pages/StackPage';
+import type { StackRoute } from './core/stack/stack-progress';
 import { WebPlatform } from './platform/WebPlatform';
 import { Api } from './services/Api';
 import { RankApi } from './services/RankApi';
@@ -42,6 +43,7 @@ export class Bootstrap extends Component {
     this.stack = undefined;
     this.home = new HomePage(this.node,{
       onStart:() => this.startStack(1),
+      onDaily:() => this.startStack('daily'),
       onClassic:() => this.startPack(),
     });
   }
@@ -63,14 +65,17 @@ export class Bootstrap extends Component {
     });
   }
 
-  private startStack(stage: 1 | 2): void {
+  private startStack(route: StackRoute): void {
     this.node.destroyAllChildren();
     this.stage = undefined;
     this.home = undefined;
-    this.stack = new StackPage(this.node,stage,(action: StackPageAction) => {
-      if (action === 'next') this.startStack(2);
+    this.stack = new StackPage(this.node,route,(action: StackPageAction) => {
+      if (route === 'daily') {
+        if (action === 'replay') this.startStack('daily');
+        else this.showHome();
+      } else if (action === 'next') this.startStack(route+1);
       else if (action === 'first') this.startStack(1);
-      else this.startStack(stage);
+      else this.startStack(route);
     });
   }
 
