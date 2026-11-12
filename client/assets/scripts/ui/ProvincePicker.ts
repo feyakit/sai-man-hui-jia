@@ -65,12 +65,19 @@ export class ProvincePicker {
     const gridY = panelY + 88;
 
     const art = uiNode('PickerChrome',this.node,this.width,this.height).addComponent(Graphics);
-    fill(art,new Color(8,5,14,180),panelX + 7,panelY + 9,panelW,panelH,34);
-    fill(art,gold,panelX,panelY,panelW,panelH,34);
-    fill(art,deep,panelX + 5,panelY + 5,panelW - 10,panelH - 10,30);
-    fill(art,panel,panelX + 12,panelY + 12,panelW - 24,panelH - 24,26);
-    fill(art,new Color(255,219,145,42),panelX + 20,panelY + 18,panelW - 40,2,1);
-    fill(art,new Color(255,209,121,34),panelX + 18,panelY + 65,panelW - 36,1,1);
+    const box = (color: Color,x: number,y: number,w: number,h: number,radius = 0) => {
+      fill(art,color,x - 375,this.height/2 - y - h,w,h,radius);
+    };
+    const strokeBox = (x: number,y: number,w: number,h: number,radius: number) => {
+      art.roundRect(x - 375,this.height/2 - y - h,w,h,radius);
+      art.stroke();
+    };
+    box(new Color(8,5,14,180),panelX + 7,panelY + 9,panelW,panelH,34);
+    box(gold,panelX,panelY,panelW,panelH,34);
+    box(deep,panelX + 5,panelY + 5,panelW - 10,panelH - 10,30);
+    box(panel,panelX + 12,panelY + 12,panelW - 24,panelH - 24,26);
+    box(new Color(255,219,145,42),panelX + 20,panelY + 18,panelW - 40,2,1);
+    box(new Color(255,209,121,34),panelX + 18,panelY + 65,panelW - 36,1,1);
 
     const title = label(this.node,'PickerTitle','选择你的省份',38,0,this.height/2 - (panelY + 36));
     title.color = paleGold;
@@ -84,13 +91,12 @@ export class ProvincePicker {
       const x = gridX + column * (cellW + gap);
       const y = gridY + row * (cellH + gap);
       const selected = province === current;
-      fill(art,selected ? gold : cell,x,y + 3,cellW,cellH,16);
+      box(selected ? gold : cell,x,y + 3,cellW,cellH,16);
       if (!selected) {
-        fill(art,cellGlow,x + 2,y + 5,cellW - 4,cellH - 4,14);
+        box(cellGlow,x + 2,y + 5,cellW - 4,cellH - 4,14);
         art.strokeColor = new Color(255,207,111,150);
         art.lineWidth = 1.5;
-        art.roundRect(x + 1,y + 1,cellW - 2,cellH - 2,16);
-        art.stroke();
+        strokeBox(x + 1,y + 1,cellW - 2,cellH - 2,16);
       }
       const text = label(this.node,`Province-${province}`,province,22,0,0);
       text.node.getComponent(UITransform)!.setContentSize(cellW - 8,cellH);
@@ -107,11 +113,10 @@ export class ProvincePicker {
       w:220,
       h:52,
     };
-    fill(art,new Color(255,231,173,18),this.cancelRect.x,this.cancelRect.y,this.cancelRect.w,this.cancelRect.h,16);
+    box(new Color(255,231,173,18),this.cancelRect.x,this.cancelRect.y,this.cancelRect.w,this.cancelRect.h,16);
     art.strokeColor = new Color(255,207,111,150);
     art.lineWidth = 1.5;
-    art.roundRect(this.cancelRect.x,this.cancelRect.y,this.cancelRect.w,this.cancelRect.h,16);
-    art.stroke();
+    strokeBox(this.cancelRect.x,this.cancelRect.y,this.cancelRect.w,this.cancelRect.h,16);
     const cancel = label(this.node,'PickerCancel','取消',22,0,this.height/2 - (this.cancelRect.y + this.cancelRect.h/2));
     cancel.color = paleGold;
 

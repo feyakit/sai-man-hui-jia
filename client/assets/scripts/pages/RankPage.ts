@@ -119,19 +119,25 @@ export class RankPage {
 
   private drawChrome(): void {
     const g = this.chrome;
-    fill(g,new Color(3,4,14,232),-375,-this.height/2,750,this.height);
+    const box = (color: Color,x: number,y: number,w: number,h: number,radius = 0) => {
+      fill(g,color,x - 375,this.height/2 - y - h,w,h,radius);
+    };
+    const strokeBox = (x: number,y: number,w: number,h: number,radius: number) => {
+      g.roundRect(x - 375,this.height/2 - y - h,w,h,radius);
+      g.stroke();
+    };
+    fill(g,new Color(3,4,14,250),-375,-this.height/2,750,this.height);
     fill(g,new Color(31,9,26,200),-375,this.height/2 - 260,750,260);
     fill(g,new Color(64,12,28,150),-375,-this.height/2,750,220);
     fill(g,new Color(255,207,111,34),-375,this.height/2 - 250,750,2);
     fill(g,new Color(255,207,111,24),-375,-this.height/2 + 150,750,2);
 
     const back = this.backRect;
-    fill(g,new Color(70,18,29,238),back.x,back.y,back.w,back.h,18);
+    box(new Color(70,18,29,238),back.x,back.y,back.w,back.h,18);
     g.strokeColor = new Color(255,207,111,175);
     g.lineWidth = 1.5;
-    g.roundRect(back.x,back.y,back.w,back.h,18);
-    g.stroke();
-    const backLabel = label(this.node,'RankBack','返回',22,0,this.height/2 - (back.y + back.h/2));
+    strokeBox(back.x,back.y,back.w,back.h,18);
+    const backLabel = label(this.node,'RankBack','返回',22,back.x + back.w/2 - 375,this.height/2 - (back.y + back.h/2));
     backLabel.color = paleGold;
     label(this.node,'RankBackArrow','‹',34,back.x + 23 - 375,this.height/2 - (back.y + back.h/2)).color = gold;
 
@@ -158,14 +164,14 @@ export class RankPage {
     this.statusLabel.node.active = true;
     this.statusLabel.string = RANK_ERROR_TEXT;
     this.statusLabel.color = paleGold;
-    this.statusLabel.node.setPosition(0,this.height/2 - this.height * .43);
+    this.statusLabel.node.setPosition(0,60);
     this.statusLabel.fontSize = 28;
     this.statusLabel.lineHeight = 34;
-    this.retryRect.y = Math.round(this.height * .53);
-    fill(this.listArt,new Color(98,24,34,230),this.retryRect.x,this.retryRect.y,this.retryRect.w,this.retryRect.h,20);
+    this.retryRect.y = Math.round(this.height/2 + 20);
+    fill(this.listArt,new Color(98,24,34,230),this.retryRect.x - 375,this.height/2 - this.retryRect.y - this.retryRect.h,this.retryRect.w,this.retryRect.h,20);
     this.listArt.strokeColor = gold;
     this.listArt.lineWidth = 2;
-    this.listArt.roundRect(this.retryRect.x + 2,this.retryRect.y + 2,this.retryRect.w - 4,this.retryRect.h - 4,18);
+    this.listArt.roundRect(this.retryRect.x + 2 - 375,this.height/2 - this.retryRect.y - this.retryRect.h + 2,this.retryRect.w - 4,this.retryRect.h - 4,18);
     this.listArt.stroke();
     const retry = label(this.listLayer,'RankRetry',RANK_RETRY_TEXT,24,0,this.height/2 - (this.retryRect.y + this.retryRect.h/2));
     retry.color = cream;
@@ -217,12 +223,12 @@ export class RankPage {
       fill(
         this.listArt,
         isOwn ? ownRow : index % 2 === 0 ? rowDark : rowLight,
-        rowX,y,rowW,rowH - 4,Math.min(18,Math.round(rowH/2) - 2),
+        rowX - 375,this.height/2 - y - (rowH - 4),rowW,rowH - 4,Math.min(18,Math.round(rowH/2) - 2),
       );
       if (isOwn) {
         this.listArt.strokeColor = gold;
         this.listArt.lineWidth = 2;
-        this.listArt.roundRect(rowX + 1,y + 1,rowW - 2,rowH - 6,Math.min(17,Math.round(rowH/2) - 3));
+        this.listArt.roundRect(rowX + 1 - 375,this.height/2 - y - (rowH - 4) + 1,rowW - 2,rowH - 6,Math.min(17,Math.round(rowH/2) - 3));
         this.listArt.stroke();
       }
       const values = [
@@ -248,10 +254,10 @@ export class RankPage {
     const entry = own ? findRankEntry(snapshot,own) : undefined;
     const rank = entry ? entries.findIndex(item => item.province === entry.province) + 1 : undefined;
     const footerY = this.height - 112;
-    fill(this.listArt,new Color(58,14,27,242),36,footerY,678,78,24);
+    fill(this.listArt,new Color(58,14,27,242),36 - 375,this.height/2 - footerY - 78,678,78,24);
     this.listArt.strokeColor = new Color(255,207,111,160);
     this.listArt.lineWidth = 1.5;
-    this.listArt.roundRect(38,footerY + 2,674,74,22);
+    this.listArt.roundRect(38 - 375,this.height/2 - footerY - 78 + 2,674,74,22);
     this.listArt.stroke();
     const text = label(this.listLayer,'RankOwnProvince',formatYourProvince(own,entry,rank),21,0,this.height/2 - (footerY + 39));
     text.node.getComponent(UITransform)!.setContentSize(646,60);
