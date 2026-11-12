@@ -73,13 +73,14 @@ describe('synthesized background music', () => {
 });
 
 describe('synthesized sound effects', () => {
-  it('renders all ten events within duration and peak limits', () => {
-    expect(STACK_SFX_EVENTS).toHaveLength(10);
+  it('renders all eleven events within duration and peak limits', () => {
+    expect(STACK_SFX_EVENTS).toHaveLength(11);
     for (const event of STACK_SFX_EVENTS) {
       const samples = renderSfx(event, RATE, event === 'combo' ? { level: 4 } : undefined);
       expect(samples.length, event).toBe(Math.round(SFX_DURATIONS[event] * RATE));
       expect(SFX_DURATIONS[event], event).toBeGreaterThanOrEqual(0.1);
-      expect(SFX_DURATIONS[event], event).toBeLessThanOrEqual(2.5);
+      // The finale firecracker string is the only long cue.
+      expect(SFX_DURATIONS[event], event).toBeLessThanOrEqual(event === 'home' ? 3.6 : 2.5);
       expect(peak(samples), event).toBeGreaterThan(0.02);
       expect(peak(samples), event).toBeLessThanOrEqual(0.6);
     }

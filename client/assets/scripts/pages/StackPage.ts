@@ -3,7 +3,8 @@ import {
   Tween, UIOpacity, UITransform, Vec2, Vec3, game, sys, tween, view,
 } from 'cc';
 import {
-  browserStorage, levelForRoute, markDailyDone, nextRouteTitle, recordLevelReached, routeHeadline, vehicleLevelForRoute,
+  ROAD_FINAL_STAGE, browserStorage, levelForRoute, markDailyDone, markHomeDone, nextRouteTitle, recordLevelReached, routeHeadline,
+  vehicleLevelForRoute,
   type StackRoute,
 } from '../core/stack/stack-progress';
 import {
@@ -35,6 +36,7 @@ import { showStackShareImage } from '../services/StackShareImage';
 import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { StackFinishView, type StackFinishStats } from '../ui/StackFinishView';
+import { StackHomecomingView } from '../ui/StackHomecomingView';
 import { RankPage } from './RankPage';
 
 /** Packs closer together than this count as a combo. */
@@ -109,7 +111,7 @@ interface StackDebugCard {
   readonly screenH: number;
 }
 
-export type StackPageAction = 'next' | 'replay' | 'first';
+export type StackPageAction = 'next' | 'replay' | 'first' | 'home';
 
 /** Code-built match-three page. All rules live in core/stack; this file only paints and animates. */
 export class StackPage {
@@ -184,7 +186,7 @@ export class StackPage {
   private rankPage?: RankPage;
   private readonly rankApi = new RankApi();
   private finish?: FinishPlayback;
-  private finishView?: StackFinishView;
+  private finishView?: StackFinishView | StackHomecomingView;
   private finishStarted = 0;
   private readonly startedAt = Date.now();
   private modal: 'fail' | undefined;
@@ -218,7 +220,7 @@ export class StackPage {
     const forcedVehicle = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vehicle');
     const levelVehicle = vehicleForLevel(vehicleLevelForRoute(route));
     const forcedDef = forcedVehicle ? vehicleByKey(forcedVehicle) : undefined;
-    this.vehicle = forcedDef ? {def:forcedDef,lap:0,tint:null,displayName:forcedDef.name} : levelVehicle;
+    this.vehicle = forcedDef ? {def:forcedDef,displayName:forcedDef.name} : levelVehicle;
     this.game = new StackGame(this.level, createRng(`${this.level.seed}:runtime`), Date.now());
     this.node = uiNode('StackPage',parent,750,1334);
     this.sounds = new StackSound();
@@ -525,8 +527,7 @@ export class StackPage {
     this.rect(g,new Color(8,4,8,90),art.x+art.w*.08,art.y+art.h*.9,art.w*.84,art.h*.08,art.h*.04);
     if (this.vehicleFrame) {
       this.showImage(this.vehicleImage,this.vehicleFrame,art.x+art.w/2,art.y+art.h/2,art.w,art.h);
-      const tint = this.vehicle.tint;
-      this.vehicleImage.color = tint ? new Color(tint[0],tint[1],tint[2],255) : Color.WHITE;
+      this.vehicleImage.color = Color.WHITE;
     } else {
       this.vehicleImage.enabled = false;
       this.rect(g,this.paletteColor(pal.panel,230),art.x+art.w*.06,art.y+art.h*.2,art.w*.88,art.h*.62,40);
@@ -777,7 +778,7 @@ export class StackPage {
         view.node.setPosition(center);
       }
       const blocked = isBlocked(card,this.game.cards);
-      view.back.node.active = this.hideCovered && blocked;
+      view.back.node.active = !!card.carton && blocked;
       this.drawDim(view,blocked && !view.back.node.active);
     }
   }
@@ -883,7 +884,7 @@ export class StackPage {
   }
 
   private get hideCovered(): boolean {
-    return !!(this.level as StackLevel & {hideCovered?: boolean}).hideCovered;
+    return this.level.cards.some(card => card.carton);
   }
 
   /** Kraft carton with red tape and a 福 stamp: what a covered card looks like from level 4 on. */
@@ -1179,8 +1180,6 @@ export class StackPage {
         const h = 196, w = h*this.vehicle.def.artSize.w/this.vehicle.def.artSize.h*(this.vehicle.def.stretchX ?? 1);
         body.node.getComponent(UITransform)!.setContentSize(Math.min(290,w),h);
         body.node.setPosition(0,-6);
-        const tint = this.vehicle.tint;
-        if (tint) body.color = new Color(tint[0],tint[1],tint[2],255);
       }
     } else if (this.carFrames.body) {
       body.spriteFrame = this.carFrames.body;
@@ -1269,6 +1268,23 @@ export class StackPage {
       }
     });
     if (this.route === 'daily') markDailyDone(browserStorage());
+    const finale = this.route === ROAD_FINAL_STAGE;
+    const elapsedSecFinale = instant ? Math.round(elapsedMs/1000) : Math.max(1,Math.round(elapsedMs/1000));
+    if (finale) {
+      // Level 9 is the end of the road: the homecoming scene replaces the usual finish screen.
+      markHomeDone(browserStorage());
+      this.sounds.play('home');
+      this.finishStats = {elapsedSec:elapsedSecFinale,boxes:instant ? Math.floor(this.level.cards.length / 3) : this.game.clearedGroups};
+      this.finishView = new StackHomecomingView(this.node,this.finishStats,action => {
+        if (action === 'share') this.openShare(true);
+        else if (action === 'road') this.onAction('first');
+        else this.onAction('home');
+      });
+      this.finishView.layout(this.height);
+      this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
+      if (typeof window !== 'undefined' && isDebugRun(window.location.search)) this.finishView.setRankStatus(RANK_DEBUG_TEXT);
+      return;
+    }
     const choices = this.route === 'daily'
       ? [{title:'今日已塞满 · 回首页',action:'first' as const},{title:'再来一次',action:'replay' as const}]
       : this.route === 1
@@ -1290,7 +1306,6 @@ export class StackPage {
         h:this.vehicle.def.artSize.h,
         stretchX:this.vehicle.def.stretchX,
         region:this.vehicle.def.regions[0],
-        tint:this.vehicle.tint,
       } : undefined,
     );
     this.finishView.layout(this.height);
@@ -1397,6 +1412,7 @@ export class StackPage {
       province:this.rankApi.province,
       rank:victory ? this.lastProvinceRank : null,
       counted:(this.route === 1 || this.route === 2) && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
+      ending:victory && this.route === ROAD_FINAL_STAGE,
       ride:{
         name:this.vehicle.displayName,
         art:def.art,
@@ -1404,7 +1420,6 @@ export class StackPage {
         h:def.artSize.h,
         stretchX:def.stretchX,
         region:def.regions[0],
-        tint:this.vehicle.tint,
       },
     });
   }
@@ -1513,10 +1528,12 @@ export class StackPage {
     for (const card of this.game.cards) kindCounts[card.kind] = (kindCounts[card.kind] ?? 0) + 1;
     return {
       stage:this.level.stage,
+      finale:this.finishView instanceof StackHomecomingView,
       route:this.route,
       headline:routeHeadline(this.route),
       capacity:this.capacity,
       hideCovered:this.hideCovered,
+      cartonCards:this.game.cards.filter(card => card.carton).length,
       cartonBacks:[...this.cardViews.values()].filter(view => view.node.active && view.back.node.active).length,
       status:this.game.status,
       remaining:this.game.pileRemaining,

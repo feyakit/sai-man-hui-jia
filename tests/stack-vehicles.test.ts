@@ -10,15 +10,12 @@ describe('vehicle per level', () => {
       .toEqual(['moto', 'trike', 'sedan', 'suv', 'van', 'pickup', 'truck', 'bus', 'tractor']);
   });
 
-  it('never repeats a ride on adjacent levels and repaints later laps', () => {
-    for (let level = 1; level < 60; level++) {
-      expect(vehicleForLevel(level).def.key).not.toBe(vehicleForLevel(level + 1).def.key);
-    }
-    const second = vehicleForLevel(10);
-    expect(second.def.key).toBe('moto');
-    expect(second.tint).not.toBeNull();
-    expect(second.displayName).toBe('金色摩托车');
-    expect(vehicleForLevel(12).displayName).toBe('红色轿车');
+  it('gives each of the 9 levels its own ride with no colour laps', () => {
+    expect(new Set([1, 2, 3, 4, 5, 6, 7, 8, 9].map(level => vehicleForLevel(level).def.key)).size).toBe(9);
+    expect(vehicleForLevel(3).displayName).toBe('红轿车');
+    expect(vehicleForLevel(9).displayName).toBe('拖拉机');
+    expect(vehicleForLevel(12).def.key).toBe('tractor');
+    expect(Object.keys(vehicleForLevel(5)).sort()).toEqual(['def', 'displayName']);
   });
 
   it('labels the container with the slot count', () => {

@@ -89,6 +89,8 @@ function exposureScore(card: StackCard, cards: readonly StackCard[], slot: Map<s
       && other.y < below.y + below.h && other.y + other.h > below.y);
     if (stillCovered) continue;
     newlyFree++;
+    // A covered carton hides its kind; dimmed faces are readable like on the real board.
+    if (below.carton) continue;
     if ((slot.get(below.kind) ?? 0) > 0) matchingSlot++;
     if (below.kind === card.kind) matchingKind++;
   }

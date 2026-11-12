@@ -14,6 +14,8 @@ export interface StackCard extends StackPoint {
   readonly h: number;
   readonly layer: number;
   readonly source: StackCardSource;
+  /** Shown as a closed carton (kind hidden) while covered; otherwise covered cards show dimmed faces. */
+  readonly carton?: boolean;
 }
 
 export interface StackItemDef {

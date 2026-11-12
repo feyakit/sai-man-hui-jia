@@ -1,5 +1,5 @@
 import { generateDailyLevel, dailySeed } from './stack-daily';
-import { ENDLESS_MIN_STAGE, generateEndlessLevel, routeTitleForLevel } from './stack-endless';
+import { ENDLESS_MIN_STAGE, ROAD_FINAL_STAGE, generateEndlessLevel, routeTitleForLevel } from './stack-endless';
 import { STACK_SEEDS, generateStackLevel } from './stack-generator';
 import type { StackLevel } from './stack-types';
 
@@ -8,6 +8,8 @@ export type StackRoute = number | 'daily';
 
 export const STACK_BEST_LEVEL_KEY = 'smhj.bestLevel';
 export const STACK_DAILY_DONE_KEY = 'smhj.dailyDone';
+export const STACK_HOME_DONE_KEY = 'smhj.homeDone';
+export { ROAD_FINAL_STAGE };
 
 export interface ProgressStorage {
   getItem(key: string): string | null;
@@ -17,7 +19,8 @@ export interface ProgressStorage {
 export function normalizeRoute(value: string | null | undefined): StackRoute {
   if (value === 'daily') return 'daily';
   const n = Number(value);
-  return Number.isInteger(n) && n >= 1 && n <= 999 ? n : 1;
+  if (!Number.isInteger(n) || n < 1) return 1;
+  return Math.min(ROAD_FINAL_STAGE, n);
 }
 
 export function levelForRoute(route: StackRoute, now: Date = new Date()): StackLevel {
@@ -57,7 +60,7 @@ export function readBestLevel(storage: ProgressStorage | undefined): number {
 
 /** Remembers the farthest level the player has reached (started). Returns the new best. */
 export function recordLevelReached(storage: ProgressStorage | undefined, level: number): number {
-  const best = Math.max(readBestLevel(storage), Math.floor(level));
+  const best = Math.min(ROAD_FINAL_STAGE, Math.max(readBestLevel(storage), Math.floor(level)));
   try { storage?.setItem(STACK_BEST_LEVEL_KEY, String(best)); } catch { /* storage optional */ }
   return best;
 }
@@ -71,8 +74,24 @@ export function markDailyDone(storage: ProgressStorage | undefined, now: Date = 
 }
 
 export function nextRouteTitle(route: StackRoute): string | null {
-  if (route === 'daily') return null;
+  if (route === 'daily' || route >= ROAD_FINAL_STAGE) return null;
   return `继续回家路 · 第 ${route + 1} 关`;
+}
+
+/** Whether the level-9 finale has been cleared at least once. */
+export function isHomeDone(storage: ProgressStorage | undefined): boolean {
+  try { return storage?.getItem(STACK_HOME_DONE_KEY) === '1'; } catch { return false; }
+}
+
+export function markHomeDone(storage: ProgressStorage | undefined): void {
+  try { storage?.setItem(STACK_HOME_DONE_KEY, '1'); } catch { /* storage optional */ }
+}
+
+/** Home-screen progress: “回家进度 N/9”, or “已到家” once the finale is cleared. */
+export function homeProgressLabel(storage: ProgressStorage | undefined): string {
+  if (isHomeDone(storage)) return '已到家';
+  const best = readBestLevel(storage);
+  return best >= 2 ? `回家进度 ${best}/${ROAD_FINAL_STAGE}` : '';
 }
 
 export function browserStorage(): ProgressStorage | undefined {

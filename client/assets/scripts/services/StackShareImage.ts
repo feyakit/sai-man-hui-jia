@@ -6,6 +6,7 @@ import {
 } from '../core/stack/stack-layout';
 import {
   createStackShareCopy,
+  createStackHomecomingCopy,
   formatStackShareProvince,
   formatStackShareVehicle,
   STACK_SHARE_LINK,
@@ -26,7 +27,6 @@ export interface StackShareRide {
   readonly h: number;
   readonly stretchX?: number;
   readonly region?: {readonly x: number; readonly y: number; readonly w: number; readonly h: number};
-  readonly tint?: readonly [number, number, number] | null;
 }
 
 export interface StackShareScene {
@@ -39,6 +39,8 @@ export interface StackShareScene {
   /** False for levels/runs the leaderboard does not count. */
   readonly counted?: boolean;
   readonly ride?: StackShareRide;
+  /** Level-9 finale card: the home gate, parents and the parked tractor. */
+  readonly ending?: boolean;
 }
 
 interface FrameDrawable {
@@ -251,7 +253,7 @@ function drawBackground(context: CanvasRenderingContext2D): void {
 }
 
 function drawTexts(context: CanvasRenderingContext2D, scene: StackShareScene): ReturnType<typeof createStackShareCopy> {
-  const copy = createStackShareCopy(scene.stage, scene.result);
+  const copy = scene.ending ? createStackHomecomingCopy(scene.result) : createStackShareCopy(scene.stage, scene.result);
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.save();
@@ -263,14 +265,15 @@ function drawTexts(context: CanvasRenderingContext2D, scene: StackShareScene): R
   context.fillText(copy.title, 540, 156);
   context.restore();
 
-  fillRounded(context, 'rgba(93,9,16,.42)', 395, 224, 290, 64, 32);
+  const pillW = scene.ending ? 380 : 290;
+  fillRounded(context, 'rgba(93,9,16,.42)', 540 - pillW / 2, 224, pillW, 64, 32);
   context.strokeStyle = 'rgba(255,225,157,.72)';
   context.lineWidth = 3;
-  roundedRect(context, 397, 226, 286, 60, 30);
+  roundedRect(context, 542 - pillW / 2, 226, pillW - 4, 60, 30);
   context.stroke();
   context.font = `700 34px ${FONT}`;
   context.fillStyle = pale;
-  context.fillText(scene.stageLabel ?? copy.stageText, 540, 256);
+  context.fillText(scene.ending ? copy.stageText : scene.stageLabel ?? copy.stageText, 540, 256);
 
   fitFont(context, copy.statsText, 900, 45, '800');
   context.fillStyle = pale;
@@ -363,7 +366,7 @@ function drawPill(context: CanvasRenderingContext2D, text: string, y: number, si
   context.fillText(text, 540, y + 1);
 }
 
-/** Non-sedan ride: its rear art, tinted for later laps, with the goods heaped on the load area. */
+/** Non-sedan ride: its rear art with the goods heaped on the load area. */
 function drawRide(
   context: CanvasRenderingContext2D,
   ride: StackShareRide,
@@ -381,19 +384,6 @@ function drawRide(
     context.shadowOffsetY = 18;
     drawFrame(context, art, x + w / 2, y + h / 2, w, h);
     context.restore();
-    if (ride.tint) {
-      // Multiply the lap colour onto the art only (source-atop keeps the background untouched).
-      const layer = document.createElement('canvas');
-      layer.width = Math.ceil(w); layer.height = Math.ceil(h);
-      const lc = layer.getContext('2d');
-      if (lc) {
-        drawFrame(lc, art, w / 2, h / 2, w, h);
-        lc.globalCompositeOperation = 'source-atop';
-        lc.fillStyle = `rgba(${ride.tint[0]},${ride.tint[1]},${ride.tint[2]},.45)`;
-        lc.fillRect(0, 0, w, h);
-        context.drawImage(layer, x, y);
-      }
-    }
   } else {
     drawFallbackCar(context);
   }
@@ -433,9 +423,49 @@ function drawCaption(context: CanvasRenderingContext2D, caption: string): void {
   context.fillText(`试玩：${STACK_SHARE_LINK}`, 540, 1392);
 }
 
+/** Finale card: bg_home (gate, parents, couplets, lanterns, firecrackers) with the tractor parked. */
+async function renderHomecomingCanvas(scene: StackShareScene): Promise<string | null> {
+  const [homeFrame, tractorFrame] = await Promise.all([loadArt('ui/bg_home'), loadArt('vehicles/tractor')]);
+  const [home, tractor] = await Promise.all([
+    freshDrawable('art/ui/bg_home', homeFrame),
+    freshDrawable('art/vehicles/tractor', tractorFrame),
+  ]);
+  const canvas = document.createElement('canvas');
+  canvas.width = STACK_SHARE_WIDTH;
+  canvas.height = STACK_SHARE_HEIGHT;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  drawBackground(context);
+  if (home) {
+    // Width-fit the 750×1334 art and crop so the gate and the parents sit mid-card.
+    const h = STACK_SHARE_WIDTH * home.height / home.width;
+    drawFrame(context, home, 540, h / 2 - 300, STACK_SHARE_WIDTH, h);
+    const shade = context.createLinearGradient(0, 0, 0, 420);
+    shade.addColorStop(0, 'rgba(20,6,20,.75)');
+    shade.addColorStop(1, 'rgba(20,6,20,0)');
+    context.fillStyle = shade;
+    context.fillRect(0, 0, STACK_SHARE_WIDTH, 420);
+  }
+  if (tractor) {
+    const h = 380, w = h * tractor.width / tractor.height;
+    context.save();
+    context.shadowColor = 'rgba(20,0,5,.55)';
+    context.shadowBlur = 24;
+    context.shadowOffsetY = 14;
+    drawFrame(context, tractor, 840, 1180 - h / 2, w, h);
+    context.restore();
+  }
+  const copy = drawTexts(context, scene);
+  const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
+  if (provinceLine) drawPill(context, provinceLine, 422, 38, 'rgba(120,12,22,.82)', gold);
+  drawCaption(context, copy.caption);
+  return canvas.toDataURL('image/png');
+}
+
 async function renderShareCanvas(scene: StackShareScene): Promise<string | null> {
   if (!canUseBrowserCanvas()) return null;
   try {
+    if (scene.ending) return await renderHomecomingCanvas(scene);
     const rideArt = scene.ride?.art ?? null;
     const [bodyFrame, trunkFrame, ...itemFrames] = await Promise.all([
       loadArt(rideArt ?? 'vehicles/sedan_v1_body'),

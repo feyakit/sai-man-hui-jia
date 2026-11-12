@@ -12,7 +12,8 @@ export type StackSfxEvent =
   | 'swap'
   | 'win'
   | 'fail'
-  | 'prop';
+  | 'prop'
+  | 'home';
 
 export interface StackSfxOptions {
   /** Combo level, clamped to 1..8. Ignored by other events. */
@@ -20,7 +21,7 @@ export interface StackSfxOptions {
 }
 
 export const STACK_SFX_EVENTS: readonly StackSfxEvent[] = [
-  'tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop',
+  'tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop', 'home',
 ];
 
 export const SFX_DURATIONS: Readonly<Record<StackSfxEvent, number>> = {
@@ -34,6 +35,7 @@ export const SFX_DURATIONS: Readonly<Record<StackSfxEvent, number>> = {
   win: 2.3,
   fail: 0.9,
   prop: 0.6,
+  home: 3.6,
 };
 
 const SFX_PEAKS: Readonly<Record<StackSfxEvent, number>> = {
@@ -47,6 +49,7 @@ const SFX_PEAKS: Readonly<Record<StackSfxEvent, number>> = {
   win: 0.58,
   fail: 0.52,
   prop: 0.46,
+  home: 0.58,
 };
 
 export function comboFrequency(level: number): number {
@@ -245,6 +248,50 @@ function addWin(buffer: Float32Array, sampleRate: number): void {
   addFirecrackers(buffer, sampleRate);
 }
 
+/** Finale at home: a long string of firecrackers, two gongs and a rising festive phrase. */
+function addHome(buffer: Float32Array, sampleRate: number): void {
+  const random = createNoise(seedFromString('sfx-home-firecracker-string-v1'));
+  for (let index = 0; index < 120; index++) {
+    // Denser in the middle, like a hanging string burning down.
+    const start = 0.05 + Math.pow(random(), 0.9) * 3.1;
+    const duration = 0.018 + random() * 0.04;
+    addNoise(buffer, sampleRate, {
+      start, duration, gain: 0.08 + random() * 0.12, seed: Math.floor(random() * 0xffffffff),
+      attack: 0.001, decay: 0.008 + random() * 0.01, release: 0.006,
+      filter: { kind: 'bandpass', frequency: 1200 + random() * 4800, q: 0.7 + random() * 0.7, mix: 0.95 },
+    });
+    if (random() < 0.3) {
+      addTone(buffer, sampleRate, {
+        start, duration: 0.06, gain: 0.05 + random() * 0.04, frequency: 80 + random() * 110,
+        wave: 'sine', attack: 0.001, decay: 0.02, release: 0.012,
+      });
+    }
+  }
+  for (const start of [0.0, 1.6]) {
+    addTone(buffer, sampleRate, {
+      start, duration: 1.4, gain: 0.16, frequency: 196, endFrequency: 185,
+      wave: 'triangle', attack: 0.004, decay: 0.6, release: 0.4,
+    });
+    addTone(buffer, sampleRate, {
+      start, duration: 1.2, gain: 0.07, frequency: 523.25, endFrequency: 498,
+      wave: 'sine', attack: 0.003, decay: 0.5, release: 0.3,
+    });
+  }
+  const phrase = [587.33, 659.25, 783.99, 880, 1046.5, 880, 1174.66];
+  for (let index = 0; index < phrase.length; index++) {
+    addTone(buffer, sampleRate, {
+      start: 0.45 + index * 0.17, duration: index === phrase.length - 1 ? 0.6 : 0.2, gain: 0.12,
+      frequency: phrase[index], wave: 'sawtooth', attack: 0.006, decay: 0.08, release: 0.06,
+      filter: { kind: 'bandpass', frequency: 1700, q: 0.9, mix: 0.7 },
+    });
+  }
+  addNoise(buffer, sampleRate, {
+    start: 3.2, duration: 0.3, gain: 0.16, seed: seedFromString('sfx-home-final-bang'),
+    attack: 0.001, decay: 0.09, release: 0.05,
+    filter: { kind: 'lowpass', frequency: 900, q: 0.8, mix: 1 },
+  });
+}
+
 function addFail(buffer: Float32Array, sampleRate: number): void {
   addTone(buffer, sampleRate, {
     start: 0.0, duration: 0.58, gain: 0.16, frequency: 392, endFrequency: 196,
@@ -305,9 +352,10 @@ export function renderSfx(event: StackSfxEvent, sampleRate: number, options: Sta
     case 'win': addWin(buffer, sampleRate); break;
     case 'fail': addFail(buffer, sampleRate); break;
     case 'prop': addProp(buffer, sampleRate); break;
+    case 'home': addHome(buffer, sampleRate); break;
   }
 
-  fadeEdges(buffer, sampleRate, 0.0015, event === 'win' ? 0.03 : 0.012);
+  fadeEdges(buffer, sampleRate, 0.0015, event === 'win' || event === 'home' ? 0.03 : 0.012);
   normalizePeak(buffer, SFX_PEAKS[event]);
   return buffer;
 }

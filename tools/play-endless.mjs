@@ -28,7 +28,7 @@ async function open(query, wait = 2600, ctx = context) {
 }
 
 try {
-  for (const level of [3, 4, 5]) {
+  for (const level of [3, 4, 5, 6]) {
     const { page, readyMs } = await open(`?mode=stack&stage=${level}`);
     const state = await page.evaluate(() => window.__stack.getState());
     const layout = await page.evaluate(() => window.__stack.getLayout());
@@ -40,7 +40,11 @@ try {
     if (state.headline.stage !== `第 ${level} 关` || !state.headline.subtitle) fail(`level ${level} headline ${JSON.stringify(state.headline)}`);
     if (layout.slotCells.length !== state.capacity) fail(`level ${level}: ${layout.slotCells.length} cells for capacity ${state.capacity}`);
     if (level === 3 && (state.hideCovered || state.cartonBacks)) fail('level 3 must show item faces');
-    if (level === 4 && (!state.hideCovered || state.cartonBacks < 20)) fail(`level 4 carton backs ${state.cartonBacks}`);
+    // Covered cards show dimmed faces; only ~15% (level 4) … 30% are cartons, never the open top.
+    const cartonShare = state.cartonBacks / state.totalRemaining;
+    report[`level${level}`].cartonShare = +cartonShare.toFixed(3);
+    if (level >= 4 && (cartonShare < .1 || cartonShare > .31)) fail(`level ${level} carton share ${cartonShare.toFixed(2)}`);
+    if (state.clickable.length < 6 || state.clickable.length > 8) fail(`level ${level} opens with ${state.clickable.length} tappable cards`);
     if (layout.cardBounds.bottom > layout.lidTop + .5) fail(`level ${level} cards overlap the ride`);
     await page.screenshot({ path: path.join(outDir, `390x844-level${level}-start.png`) });
     await page.close();
@@ -79,7 +83,10 @@ try {
   const homeButtons = await home.evaluate(() => window.__home.getButtons());
   const best = await home.evaluate(() => localStorage.getItem('smhj.bestLevel'));
   report.home = { best, buttons: homeButtons.map(b => b.key) };
-  if (best !== '5') fail(`best level stored ${best}`);
+  if (best !== '6') fail(`best level stored ${best}`);
+  const homeState = await home.evaluate(() => window.__home.getState());
+  report.home.progress = homeState.progress;
+  if (homeState.progress !== '回家进度 6/9') fail(`home progress ${homeState.progress}`);
   const daily = homeButtons.find(b => b.key === 'daily');
   if (!daily) fail('no daily button');
   await home.screenshot({ path: path.join(outDir, '390x844-home.png') });
@@ -92,6 +99,38 @@ try {
     await home.screenshot({ path: path.join(outDir, '390x844-daily-start.png') });
   }
   await home.close();
+
+  // Level 9 finale: homecoming scene, no next level, ending share card, home shows 已到家.
+  {
+    const { page: fin } = await open('?mode=stack&stage=9&api=off&debug=win', 600);
+    await fin.waitForFunction(() => window.__stack.getState().finale === true, undefined, { timeout: 15_000 }).catch(() => fail('level 9 win did not open the homecoming scene'));
+    await fin.waitForTimeout(2600);
+    const finButtons = await fin.evaluate(() => window.__stack.getFinishButtons());
+    report.finale = finButtons.map(b => b.title);
+    if (!finButtons.some(b => b.title === '再走一遍回家路')) fail(`finale buttons ${JSON.stringify(report.finale)}`);
+    if (finButtons.some(b => /下一关|继续回家路/.test(b.title))) fail('finale offers a next level');
+    await fin.screenshot({ path: path.join(outDir, '390x844-finale.png') });
+    const share = finButtons.find(b => b.action === 'share');
+    if (share) {
+      await fin.touchscreen.tap(share.screenX, share.screenY);
+      await fin.waitForFunction(() => document.querySelector('#stack-share-image')?.naturalWidth > 0, undefined, { timeout: 25_000 }).catch(() => fail('finale share image missing'));
+      const dataUrl = await fin.evaluate(() => document.querySelector('#stack-share-image')?.src ?? '');
+      if (dataUrl.startsWith('data:image/png;base64,')) {
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(path.join(outDir, 'share-finale.png'), Buffer.from(dataUrl.split(',')[1], 'base64'));
+      }
+    }
+    await fin.close();
+    const after = await context.newPage();
+    await after.goto(new URL('?api=off', base).href, { waitUntil: 'domcontentloaded' });
+    await after.waitForFunction(() => !!window.__home, undefined, { timeout: 20_000 });
+    await after.waitForTimeout(800);
+    const progress = (await after.evaluate(() => window.__home.getState())).progress;
+    report.homeAfterFinale = progress;
+    if (progress !== '已到家') fail(`home after finale shows ${progress}`);
+    await after.screenshot({ path: path.join(outDir, '390x844-home-arrived.png') });
+    await after.close();
+  }
 
   // Daily win → "今日已塞满" on the button and on the home screen.
   const { page: dailyWin } = await open('?mode=stack&stage=daily&debug=win', 1200);

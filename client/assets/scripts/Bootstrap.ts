@@ -73,7 +73,8 @@ export class Bootstrap extends Component {
       if (route === 'daily') {
         if (action === 'replay') this.startStack('daily');
         else this.showHome();
-      } else if (action === 'next') this.startStack(route+1);
+      } else if (action === 'home') this.showHome();
+      else if (action === 'next') this.startStack(route+1);
       else if (action === 'first') this.startStack(1);
       else this.startStack(route);
     });
