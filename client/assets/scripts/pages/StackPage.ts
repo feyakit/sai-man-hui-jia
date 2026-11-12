@@ -9,7 +9,7 @@ import { createRng } from '../core/rng';
 import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
 import { loadArt } from '../services/OptionalResources';
-import { SoundEffects } from '../services/SoundEffects';
+import { StackSound } from '../services/StackSound';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { StackFinishView } from '../ui/StackFinishView';
 
@@ -77,6 +77,10 @@ interface StackDebugCard {
   readonly name: string;
   readonly screenX: number;
   readonly screenY: number;
+  readonly screenLeft: number;
+  readonly screenRight: number;
+  readonly screenTop: number;
+  readonly screenBottom: number;
 }
 
 export type StackPageAction = 'next' | 'replay' | 'first';
@@ -86,7 +90,7 @@ export class StackPage {
   readonly node: Node;
   private readonly level: StackLevel;
   private game: StackGame;
-  private readonly sounds: SoundEffects;
+  private readonly sounds: StackSound;
   private readonly bgImage: Sprite;
   private readonly background: Graphics;
   private readonly carLayer: Node;
@@ -100,6 +104,10 @@ export class StackPage {
   private readonly hud: Node;
   private readonly stageLabel: Label;
   private readonly remainingLabel: Label;
+  private readonly soundButton: Node;
+  private readonly soundButtonArt: Graphics;
+  private readonly soundButtonLabel: Label;
+  private soundRect: Rect = {x:647,y:62,w:94,h:52};
   private readonly pileLayer: Node;
   private readonly slotLayer: Node;
   private readonly fxLayer: Node;
@@ -127,6 +135,7 @@ export class StackPage {
   private finishStarted = 0;
   private readonly startedAt = Date.now();
   private modal: 'fail' | undefined;
+  private debugMomPending = false;
   private busy = false;
   private width = 750;
   private height = 1334;
@@ -149,7 +158,7 @@ export class StackPage {
     this.level = generateStackLevel(stage, STACK_SEEDS[stage - 1]).level;
     this.game = new StackGame(this.level, createRng(`${this.level.seed}:runtime`), Date.now());
     this.node = uiNode('StackPage',parent,750,1334);
-    this.sounds = new SoundEffects(parent);
+    this.sounds = new StackSound();
     this.bgImage = uiNode('StackNight',this.node,750,1334).addComponent(Sprite);
     this.bgImage.sizeMode = Sprite.SizeMode.CUSTOM;
     this.bgImage.trim = false;
@@ -184,6 +193,10 @@ export class StackPage {
     label(this.hud,'ModeTitle','年货三消',38,0,0).color = gold;
     const subtitle = label(this.hud,'Subtitle','点没被压住的年货 · 三件装一箱',19,0,0);
     subtitle.color = cream;
+    this.soundButton = uiNode('SoundToggle',this.hud,94,52);
+    this.soundButtonArt = this.soundButton.addComponent(Graphics);
+    this.soundButtonLabel = label(this.soundButton,'SoundLabel','声音 开',16,0,0);
+    this.drawSoundButton();
     this.reserveLayer = uiNode('ReserveZone',this.node,750,1334);
     this.reserveShelf = this.reserveLayer.addComponent(Graphics);
     this.reserveLayer.active = false;
@@ -230,6 +243,12 @@ export class StackPage {
       getClickable: () => this.debugClickable(),
       getSolution: () => [...this.level.solution],
       getModalButtons: () => this.debugModalButtons(),
+      getActions: () => this.debugActions(),
+      getBoard: () => this.game.cards.map(card => ({
+        id:card.id, kind:card.kind, source:card.source, layer:card.layer,
+        x:card.x, y:card.y, w:card.w, h:card.h,
+      })),
+      getLayout: () => this.debugLayout(),
     };
     if (typeof window !== 'undefined') {
       (window as Window & {__stack?: object}).__stack = Object.freeze(this.debugHook);
@@ -242,7 +261,9 @@ export class StackPage {
       }
     });
     this.tick();
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'fail') {
+    const debug = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('debug');
+    this.debugMomPending = debug === 'mom';
+    if (debug === 'fail') {
       this.prefillFailure();
       this.refresh();
       if (this.game.status === 'lost') this.openFail();
@@ -266,6 +287,11 @@ export class StackPage {
       return;
     }
     if (!this.busy && !this.modal && this.game.status === 'playing') {
+      if (this.debugMomPending) {
+        this.debugMomPending = false;
+        const debugAdded = this.game.triggerMom();
+        if (debugAdded.length) this.onMomAdded(debugAdded);
+      }
       const added = this.game.tickMom(Date.now());
       if (added.length) this.onMomAdded(added);
     }
@@ -297,7 +323,8 @@ export class StackPage {
       this.slotRects[i].h = this.slotCell;
     }
     this.stageLabel.node.setPosition(-242,this.height/2-61);
-    this.remainingLabel.node.setPosition(226,this.height/2-61);
+    this.remainingLabel.node.setPosition(198,this.height/2-61);
+    this.soundButton.setPosition(319,this.height/2-88);
     this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-61);
     this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-105);
     this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-17));
@@ -312,6 +339,7 @@ export class StackPage {
     this.layoutBackground();
     this.drawCarSlots(this.carRect);
     this.drawActions();
+    this.drawSoundButton();
     this.drawFailButtons();
     this.refresh();
     this.finishView?.layout(this.height);
@@ -439,6 +467,19 @@ export class StackPage {
     return {key,title,rect:{x:0,y:0,w:0,h:0},label:text};
   }
 
+  private drawSoundButton(): void {
+    const g = this.soundButtonArt;
+    g.clear();
+    const on = this.sounds.enabled;
+    fill(g,on ? gold : new Color(96,87,89),-47,-26,94,52,16);
+    fill(g,on ? new Color(139,31,38) : new Color(67,61,64),-43,-22,86,44,13);
+    g.strokeColor = on ? new Color(255,226,164) : new Color(155,146,146);
+    g.lineWidth = 1.5;
+    g.roundRect(-45,-24,90,48,15); g.stroke();
+    this.soundButtonLabel.string = on ? '声音 开' : '声音 关';
+    this.soundButtonLabel.color = on ? paleGold : new Color(205,198,194);
+  }
+
   private drawActions(): void {
     const g = this.buttonsArt;
     g.clear();
@@ -480,7 +521,7 @@ export class StackPage {
 
   private updateHud(): void {
     this.stageLabel.string = `第 ${this.level.stage} 关`;
-    this.remainingLabel.string = `剩余 ${this.game.remaining} 件`;
+    this.remainingLabel.string = `剩余 ${this.game.pileRemaining} 件`;
   }
 
   private syncPile(): void {
@@ -597,6 +638,7 @@ export class StackPage {
   }
 
   private touch(event: EventTouch): void {
+    this.sounds.unlock();
     const p = this.point(event);
     if (this.finish) { this.finishView?.press(p.x,p.y); return; }
     if (this.modal === 'fail') {
@@ -608,6 +650,11 @@ export class StackPage {
       }
       return;
     }
+    if (contains(this.soundRect,p.x,p.y)) {
+      this.sounds.toggle();
+      this.drawSoundButton();
+      return;
+    }
     if (this.busy || this.game.status !== 'playing') return;
     for (const action of this.actions) {
       if (!contains(action.rect,p.x,p.y)) continue;
@@ -616,7 +663,7 @@ export class StackPage {
     }
     const hit = topCardAt(this.game.cards,p.x,p.y);
     if (!hit) return;
-    if (!this.game.canTap(hit.id)) { this.sounds.play('invalid'); return; }
+    if (!this.game.canTap(hit.id)) { this.sounds.play('tap'); return; }
     this.tapCard(hit.id);
   }
 
@@ -630,9 +677,10 @@ export class StackPage {
 
   private tapCard(id: number): void {
     const result = this.game.tap(id,Date.now());
-    if (!result.ok || !result.card) { this.sounds.play('invalid'); return; }
+    if (!result.ok || !result.card) { this.sounds.play('tap'); return; }
     this.busy = true;
-    this.sounds.play('pickup');
+    this.sounds.play('tap');
+    setTimeout(() => { if (this.node.isValid) this.sounds.play('fly'); },35);
     const flyer = this.makeCardView(result.card,result.card.w,this.fxLayer);
     flyer.node.setPosition(this.cardCenter(result.card));
     const targetIndex = Math.min(result.insertIndex,SLOT_CAPACITY-1);
@@ -704,13 +752,14 @@ export class StackPage {
   }
 
   private useAction(key: ActionButton['key']): void {
+    this.sounds.play('tap');
     if (key === 'moveOut') {
       const moved = this.game.useMoveOut();
-      if (moved.length) this.sounds.play('drop');
+      if (moved.length) this.sounds.play('fly');
     } else if (key === 'undo') {
-      if (this.game.useUndo()) this.sounds.play('undo');
+      if (this.game.useUndo()) this.sounds.play('fly');
     } else if (this.game.useShuffle()) {
-      this.sounds.play('drop');
+      this.sounds.play('fly');
     }
     this.refresh();
   }
@@ -747,7 +796,7 @@ export class StackPage {
     const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-126);
     const restart = this.failButton(layer,'restart','重来',-218);
     this.failButtons.push(revive,restart);
-    this.sounds.play('invalid');
+    this.sounds.play('fail');
     this.refreshFailButtons();
   }
 
@@ -832,17 +881,18 @@ export class StackPage {
     this.failLayer?.destroy();
     this.failLayer = undefined;
     this.failButtons.length = 0;
-    this.sounds.play('drop');
+    this.sounds.play('tap');
     this.refresh();
   }
 
   private beginFinish(): void {
     if (this.finish) return;
     this.busy = true;
-    this.sounds.play('cheer');
+    this.sounds.play('win');
     this.finishStarted = Date.now();
     this.finish = new FinishPlayback(cue => {
-      this.sounds.play(cue.sound);
+      if (cue.sound === 'trunk_slam') this.sounds.play('pack');
+      else if (cue.sound === 'horn') this.sounds.play('tap');
       if (cue.vibration && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         try { navigator.vibrate(cue.vibration); } catch { /* Optional vibration: silent. */ }
       }
@@ -888,21 +938,69 @@ export class StackPage {
         id:card.id,
         kind:card.kind,
         name:card.name,
-        screenX:(card.x+card.w/2)/size.width*screenWidth,
+        screenX:(card.x+card.w/2)/750*screenWidth,
         screenY:(card.y+card.h/2)/this.height*screenHeight,
+        screenLeft:card.x/750*screenWidth,
+        screenRight:(card.x+card.w)/750*screenWidth,
+        screenTop:card.y/this.height*screenHeight,
+        screenBottom:(card.y+card.h)/this.height*screenHeight,
       }));
   }
 
+  private debugActions(): {key:string;used:boolean;screenX:number;screenY:number}[] {
+    const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
+    const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
+    return this.actions.map(action => ({
+      key:action.key,
+      used:this.game.props[action.key],
+      screenX:(action.rect.x+action.rect.w/2)/750*screenWidth,
+      screenY:(action.rect.y+action.rect.h/2)/this.height*screenHeight,
+    }));
+  }
+
+  private debugLayout(): object {
+    const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
+    const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
+    const cards = this.game.cards;
+    const left = Math.min(...cards.map(card => card.x));
+    const right = Math.max(...cards.map(card => card.x+card.w));
+    const top = Math.min(...cards.map(card => card.y));
+    const bottom = Math.max(...cards.map(card => card.y+card.h));
+    return {
+      viewport:{width:screenWidth,height:screenHeight},
+      cardBounds:{
+        left:left/750*screenWidth,
+        right:right/750*screenWidth,
+        top:top/this.height*screenHeight,
+        bottom:bottom/this.height*screenHeight,
+      },
+      hudBottom:140/this.height*screenHeight,
+      trunkTop:this.trunk.y/this.height*screenHeight,
+      sideCounts:{
+        left:cards.filter(card => card.source === 'side-left').length,
+        right:cards.filter(card => card.source === 'side-right').length,
+      },
+    };
+  }
+
   private debugState(): object {
+    const kindCounts: Record<string,number> = {};
+    for (const card of this.game.cards) kindCounts[card.kind] = (kindCounts[card.kind] ?? 0) + 1;
     return {
       stage:this.level.stage,
       status:this.game.status,
-      remaining:this.game.remaining,
+      remaining:this.game.pileRemaining,
+      pileRemaining:this.game.pileRemaining,
+      totalRemaining:this.game.remaining,
       modal:this.modal ?? null,
       busy:this.busy,
       finishing:!!this.finish,
+      momEvents:this.game.momEventCount,
+      momVisible:this.momLayer.active,
+      soundEnabled:this.sounds.enabled,
       slot:this.game.slot.map(card => ({id:card.id,kind:card.kind,name:card.name})),
       props:this.game.props,
+      kindCounts,
       clickable:this.debugClickable(),
     };
   }

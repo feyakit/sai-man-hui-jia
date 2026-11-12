@@ -41,6 +41,7 @@ export class StackFinishView {
   private height = 1334;
   private state?: FinishState;
   private ready = false;
+  private lidClosedY = -39;
 
   constructor(
     parent: Node,
@@ -117,15 +118,16 @@ export class StackFinishView {
     this.wash.clear();
     fill(this.wash, night, -375, -height / 2, 750, height, 0);
     this.drawCarFallback();
-    this.headline.setPosition(0, height / 2 - 238);
-    this.statsLabel.setPosition(0, height / 2 - 374);
-    this.actions.setPosition(0, -height / 2 + 205);
+    this.headline.setPosition(0, height / 2 - 207);
+    this.statsLabel.setPosition(0, height / 2 - 350);
+    const actionsY = -height / 2 + 320;
+    this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
     const baseY = 68;
     for (let index = 0; index < this.buttons.length; index++) {
       const button = this.buttons[index];
-      button.rect.y = height - 310 + index * 92;
       const localY = baseY - index * 92;
+      button.rect.y = height / 2 - (actionsY + localY) - 37;
       button.label.setPosition(0, localY);
       fill(this.actionArt, index === 0 ? gold : darkRed, -250, localY - 37, 500, 74, 22);
       if (index !== 0) {
@@ -135,7 +137,7 @@ export class StackFinishView {
         this.actionArt.stroke();
       }
     }
-    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 100);
+    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 118);
     this.setupCar();
     if (this.state) this.render(this.state);
   }
@@ -143,11 +145,11 @@ export class StackFinishView {
   render(state: FinishState): void {
     this.state = state;
     const drive = Math.max(0, Math.min(1, (state.time - 1050) / (FINISH_DURATION - 1050)));
-    const carScale = .96 - .52 * drive;
+    const carScale = .98 - .20 * drive;
     this.car.setScale(carScale, carScale, 1);
-    this.car.setPosition(0, -this.height * .18 + this.height * .135 * drive);
-    this.lidImage.node.setPosition(0, -39 + (1 - state.lidProgress) * 180);
-    this.lidImage.node.setScale(1, .56 + state.lidProgress * .44, 1);
+    this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive);
+    this.lidImage.node.setPosition(0, this.lidClosedY);
+    this.lidImage.node.setScale(1, 1, 1);
     this.headline.active = state.celebration;
     this.statsLabel.active = state.celebration;
     this.actions.active = state.buttons;
@@ -175,12 +177,13 @@ export class StackFinishView {
     const holeY = Math.round(BODY_HOLE.top / 640 * bodyH - bodyH / 2);
     const holeW = Math.round((BODY_HOLE.right - BODY_HOLE.left) / 1024 * bodyW);
     const holeH = Math.round((BODY_HOLE.bottom - BODY_HOLE.top) / 640 * bodyH);
+    this.lidClosedY = holeY + holeH / 2;
     this.show(this.bodyImage, 0, 0, bodyW, bodyH);
-    this.show(this.trunkImage, 0, holeY + holeH / 2, holeW, holeH);
-    this.show(this.lidImage, 0, holeY + holeH / 2 + (1 - (this.state?.lidProgress ?? 0)) * 180, holeW, holeH);
-    this.lidImage.node.setScale(1, .56 + (this.state?.lidProgress ?? 0) * .44, 1);
+    this.show(this.trunkImage, 0, this.lidClosedY, holeW, holeH);
+    this.show(this.lidImage, 0, this.lidClosedY, holeW + 24, holeH + 20);
+    this.lidImage.node.setScale(1, 1, 1);
     this.car.setScale(.98, .98, 1);
-    this.car.setPosition(0, -this.height * .18);
+    this.car.setPosition(0, -this.height * .035);
   }
 
   private drawCarFallback(): void {
