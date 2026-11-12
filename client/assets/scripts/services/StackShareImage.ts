@@ -1,4 +1,4 @@
-import type { SpriteFrame } from 'cc';
+import { assetManager, ImageAsset, resources, type SpriteFrame } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import {
   STACK_BODY_HOLE,
@@ -59,10 +59,12 @@ function frameDrawable(frame: SpriteFrame | undefined): FrameDrawable | null {
  * view has drawn the same goods), so reload the original file from its URL and only fall back to
  * the cached element when that is impossible.
  */
-async function freshDrawable(frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
-  if (!frame) return null;
+async function freshDrawable(path: string, frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
   try {
-    const url = (frame.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+    const info = resources.getInfoWithPath(path, ImageAsset);
+    const url = info
+      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: '.png', bundle: 'resources'} as never)
+      : (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
     if (url && typeof Image !== 'undefined') {
       const image = await new Promise<HTMLImageElement | null>(resolve => {
         const element = new Image();
@@ -71,11 +73,7 @@ async function freshDrawable(frame: SpriteFrame | undefined): Promise<FrameDrawa
         element.src = url;
       });
       if (image && image.naturalWidth > 0) {
-        return {
-          image,
-          width: Math.max(1, Number(frame.rect?.width) || image.naturalWidth),
-          height: Math.max(1, Number(frame.rect?.height) || image.naturalHeight),
-        };
+        return {image, width: image.naturalWidth, height: image.naturalHeight};
       }
     }
   } catch { /* fall back to the cached element */ }
@@ -359,8 +357,9 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
       loadArt('vehicles/sedan_v1_trunk'),
       ...STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`)),
     ]);
+    const paths = ['art/vehicles/sedan_v1_body', 'art/vehicles/sedan_v1_trunk', ...STACK_SHARE_ITEM_KEYS.map(key => `art/items/${key}`)];
     const [bodyArt, trunkArt, ...itemArt] = await Promise.all(
-      [bodyFrame, trunkFrame, ...itemFrames].map(freshDrawable),
+      [bodyFrame, trunkFrame, ...itemFrames].map((frame, index) => freshDrawable(paths[index], frame)),
     );
     const canvas = document.createElement('canvas');
     canvas.width = STACK_SHARE_WIDTH;
