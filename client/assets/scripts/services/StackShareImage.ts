@@ -6,6 +6,9 @@ import {
 } from '../core/stack/stack-layout';
 import {
   createStackShareCopy,
+  formatStackShareProvince,
+  formatStackShareVehicle,
+  STACK_SHARE_LINK,
   STACK_CARGO_POSITIONS,
   STACK_SHARE_HEIGHT,
   STACK_SHARE_ITEM_KEYS,
@@ -15,9 +18,25 @@ import {
 } from '../core/stack/stack-share';
 import { loadArt } from './OptionalResources';
 
+export interface StackShareRide {
+  readonly name: string;
+  /** resources path of a non-sedan ride; null keeps the sedan art. */
+  readonly art: string | null;
+  readonly w: number;
+  readonly h: number;
+  readonly stretchX?: number;
+  readonly region?: {readonly x: number; readonly y: number; readonly w: number; readonly h: number};
+  readonly tint?: readonly [number, number, number] | null;
+}
+
 export interface StackShareScene {
   readonly stage: number;
   readonly result: StackShareResult;
+  readonly province?: string | null;
+  readonly rank?: number | null;
+  /** False for levels/runs the leaderboard does not count. */
+  readonly counted?: boolean;
+  readonly ride?: StackShareRide;
 }
 
 interface FrameDrawable {
@@ -327,6 +346,69 @@ function drawCargo(
   context.stroke();
 }
 
+function drawPill(context: CanvasRenderingContext2D, text: string, y: number, size: number, fillColor: string, textColor: string): void {
+  context.font = `800 ${size}px ${FONT}`;
+  const width = Math.min(960, context.measureText(text).width + size * 1.6);
+  fillRounded(context, fillColor, 540 - width / 2, y - size * .85, width, size * 1.7, size * .85);
+  context.strokeStyle = 'rgba(255,225,157,.8)';
+  context.lineWidth = 3;
+  roundedRect(context, 540 - width / 2 + 2, y - size * .85 + 2, width - 4, size * 1.7 - 4, size * .85 - 2);
+  context.stroke();
+  fitFont(context, text, width - size, size, '800');
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = textColor;
+  context.fillText(text, 540, y + 1);
+}
+
+/** Non-sedan ride: its rear art, tinted for later laps, with the goods heaped on the load area. */
+function drawRide(
+  context: CanvasRenderingContext2D,
+  ride: StackShareRide,
+  art: FrameDrawable | null,
+  items: readonly (FrameDrawable | null)[],
+): void {
+  const maxH = 610, maxW = 900;
+  let h = maxH, w = h * ride.w / ride.h * (ride.stretchX ?? 1);
+  if (w > maxW) { w = maxW; h = w / (ride.w / ride.h * (ride.stretchX ?? 1)); }
+  const x = 540 - w / 2, y = 1080 - h;
+  if (art) {
+    context.save();
+    context.shadowColor = 'rgba(35,0,5,.55)';
+    context.shadowBlur = 30;
+    context.shadowOffsetY = 18;
+    drawFrame(context, art, x + w / 2, y + h / 2, w, h);
+    context.restore();
+    if (ride.tint) {
+      // Multiply the lap colour onto the art only (source-atop keeps the background untouched).
+      const layer = document.createElement('canvas');
+      layer.width = Math.ceil(w); layer.height = Math.ceil(h);
+      const lc = layer.getContext('2d');
+      if (lc) {
+        drawFrame(lc, art, w / 2, h / 2, w, h);
+        lc.globalCompositeOperation = 'source-atop';
+        lc.fillStyle = `rgba(${ride.tint[0]},${ride.tint[1]},${ride.tint[2]},.45)`;
+        lc.fillRect(0, 0, w, h);
+        context.drawImage(layer, x, y);
+      }
+    }
+  } else {
+    drawFallbackCar(context);
+  }
+  const region = ride.region ?? {x: .15, y: .35, w: .7, h: .3};
+  const hole = {x: x + region.x * w, y: y + region.y * h, w: region.w * w, h: region.h * h};
+  for (let index = 0; index < STACK_CARGO_POSITIONS.length && index < items.length; index++) {
+    const item = items[index];
+    if (!item) continue;
+    const [px, py, angle] = STACK_CARGO_POSITIONS[index];
+    const max = Math.min(hole.w * .3, hole.h * .7, 150);
+    const ratio = item.width / item.height;
+    const iw = ratio >= 1 ? max : max * ratio;
+    const ih = ratio >= 1 ? max / ratio : max;
+    drawFrame(context, item, hole.x + hole.w * px, hole.y + hole.h * (py * .9 - .1), iw, ih, angle);
+  }
+}
+
 function drawCaption(context: CanvasRenderingContext2D, caption: string): void {
   context.save();
   context.shadowColor = 'rgba(71,5,12,.58)';
@@ -346,18 +428,19 @@ function drawCaption(context: CanvasRenderingContext2D, caption: string): void {
   context.fillText(caption, 540, 1282);
   context.font = `700 24px ${FONT}`;
   context.fillStyle = 'rgba(255,225,162,.82)';
-  context.fillText('把年货装进后备箱 · 把团圆带回家', 540, 1392);
+  context.fillText(`试玩：${STACK_SHARE_LINK}`, 540, 1392);
 }
 
 async function renderShareCanvas(scene: StackShareScene): Promise<string | null> {
   if (!canUseBrowserCanvas()) return null;
   try {
+    const rideArt = scene.ride?.art ?? null;
     const [bodyFrame, trunkFrame, ...itemFrames] = await Promise.all([
-      loadArt('vehicles/sedan_v1_body'),
-      loadArt('vehicles/sedan_v1_trunk'),
+      loadArt(rideArt ?? 'vehicles/sedan_v1_body'),
+      rideArt ? Promise.resolve(undefined) : loadArt('vehicles/sedan_v1_trunk'),
       ...STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`)),
     ]);
-    const paths = ['art/vehicles/sedan_v1_body', 'art/vehicles/sedan_v1_trunk', ...STACK_SHARE_ITEM_KEYS.map(key => `art/items/${key}`)];
+    const paths = [`art/${rideArt ?? 'vehicles/sedan_v1_body'}`, 'art/vehicles/sedan_v1_trunk', ...STACK_SHARE_ITEM_KEYS.map(key => `art/items/${key}`)];
     const [bodyArt, trunkArt, ...itemArt] = await Promise.all(
       [bodyFrame, trunkFrame, ...itemFrames].map((frame, index) => freshDrawable(paths[index], frame)),
     );
@@ -368,19 +451,19 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     if (!context) return null;
     drawBackground(context);
     const copy = drawTexts(context, scene);
-    const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
-    const body = bodyArt;
-    if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
-    else drawFallbackCar(context);
-    drawCargo(
-      context,
-      trunkArt,
-      itemArt,
-      bodyX,
-      bodyY,
-      bodyWidth,
-      bodyHeight,
-    );
+    if (scene.ride?.art) {
+      drawRide(context, scene.ride, bodyArt, itemArt);
+    } else {
+      const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
+      const body = bodyArt;
+      if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
+      else drawFallbackCar(context);
+      drawCargo(context, trunkArt, itemArt, bodyX, bodyY, bodyWidth, bodyHeight);
+    }
+    const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
+    if (provinceLine) drawPill(context, provinceLine, 422, 38, scene.result.victory ? 'rgba(120,12,22,.82)' : 'rgba(60,8,14,.82)', gold);
+    const rideLine = formatStackShareVehicle(scene.ride?.name);
+    if (rideLine) drawPill(context, rideLine, 1132, 30, 'rgba(93,9,16,.78)', pale);
     drawCaption(context, copy.caption);
     return canvas.toDataURL('image/png');
   } catch {

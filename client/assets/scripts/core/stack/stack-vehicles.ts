@@ -48,9 +48,9 @@ export const VEHICLES: readonly VehicleDef[] = [
   {
     key: 'moto', name: '摩托车', container: '摩托后尾箱', art: 'vehicles/moto', artSize: {w: 548, h: 678}, height: 540,
     regions: [
-      {x: .13, y: .325, w: .74, h: .165, style: 'box'},
-      {x: 0, y: .56, w: .35, h: .32, style: 'bag'},
-      {x: .65, y: .56, w: .35, h: .32, style: 'bag'},
+      {x: .12, y: .30, w: .76, h: .20, style: 'box'},
+      {x: 0, y: .54, w: .36, h: .38, style: 'bag'},
+      {x: .64, y: .54, w: .36, h: .38, style: 'bag'},
     ],
     split: {7: [3, 2, 2], 8: [4, 2, 2], 9: [3, 3, 3]},
     palette: RED_GOLD,
