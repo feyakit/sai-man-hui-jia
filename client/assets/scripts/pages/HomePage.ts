@@ -136,7 +136,7 @@ export class HomePage {
     this.title.color = gold;
     this.subtitle = label(this.node, 'Subtitle', GAME_SUBTITLE, 28, 0, 0);
     this.subtitle.color = cream;
-    this.cargoTag = label(this.node, 'CargoTag', '后备箱已清空，等你装满', 23, 0, 0);
+    this.cargoTag = label(this.node, 'CargoTag', '妈妈备好了一车年货，等你装车回家', 23, 0, 0);
     this.cargoTag.color = paleGold;
     this.ruleLineOne = label(this.node, 'RuleOne', '点没被压住的年货，凑齐 3 件同款就打包装车', 22, 0, 0);
     this.ruleLineOne.color = cream;
