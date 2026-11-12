@@ -6,6 +6,7 @@ import {
   RANK_MAX_PENDING_CLEARS,
   RANK_PENDING_STORAGE_KEY,
   RANK_PROVINCE_STORAGE_KEY,
+  buildRankRows,
   createDeviceId,
   enqueuePendingClear,
   findRankEntry,
@@ -229,6 +230,41 @@ describe('rank payload parsing', () => {
     expect(formatYourProvince('广东')).toBe('你的省份：广东 暂无人通关');
     expect(formatYourProvince('广东',{province:'广东',total:12,today:3},2)).toBe('你的省份：广东 · 排第 2 名 · 12 人通关');
     expect(formatYourProvince('广东',{province:'广东',total:12,today:3})).toBe('你的省份：广东 · 12 人通关');
+  });
+
+  it('fills the rank page to 34 provinces and keeps own province first only on an empty board', () => {
+    const empty = {
+      provinces:[],
+      totalClears:0,
+      todayClears:0,
+      updatedAt:1,
+    };
+    const emptyRows = buildRankRows(empty,'广东');
+    expect(emptyRows).toHaveLength(34);
+    expect(emptyRows.map(row => row.province)).toEqual(['广东',...PROVINCES.filter(province => province !== '广东')]);
+    expect(emptyRows[0]).toMatchObject({province:'广东',total:0,today:0,rank:null,badge:null,own:true,waiting:true});
+    expect(emptyRows.every(row => row.waiting && row.total === 0 && row.today === 0 && row.rank === null)).toBe(true);
+
+    const snapshot = {
+      provinces:[
+        {province:'北京' as const,total:0,today:0},
+        {province:'江苏' as const,total:8,today:2},
+        {province:'广东' as const,total:5,today:1},
+        {province:'浙江' as const,total:3,today:0},
+        {province:'江苏' as const,total:99,today:99},
+      ],
+      totalClears:16,
+      todayClears:3,
+      updatedAt:1,
+    };
+    const rows = buildRankRows(snapshot,'广东');
+    expect(rows).toHaveLength(34);
+    expect(rows.slice(0,3).map(row => [row.province,row.rank,row.badge])).toEqual([
+      ['江苏',1,1],['广东',2,2],['浙江',3,3],
+    ]);
+    expect(rows.find(row => row.province === '广东')?.own).toBe(true);
+    expect(rows.slice(3).every(row => row.waiting && row.total === 0 && row.rank === null)).toBe(true);
+    expect(rows.filter(row => row.province === '江苏')).toHaveLength(1);
   });
 
   it('uses bounded exponential retry delays', () => {
