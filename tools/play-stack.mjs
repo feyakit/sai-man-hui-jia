@@ -262,10 +262,11 @@ try {
   if (layout.cardBounds.left < 0 || layout.cardBounds.right > 390) {
     throw new Error(`stage 2 cards exceed the 390px viewport: ${JSON.stringify(layout.cardBounds)}`);
   }
-  if (layout.cardSize.width < 56 || layout.cardSize.height < 56) {
+  // The whole board now shrinks to fit above the open trunk lid, so the floor is 50px at 390×844.
+  if (layout.cardSize.width < 50 || layout.cardSize.height < 50) {
     throw new Error(`stage 2 cards are too small on screen: ${JSON.stringify(layout.cardSize)}`);
   }
-  if (layout.stackRegion.ratio < .55) {
+  if (layout.stackRegion.ratio < .5) {
     throw new Error(`stage 2 cargo mound is too short: ${JSON.stringify(layout.stackRegion)}`);
   }
   if (layout.sideCounts.left < 8 || layout.sideCounts.right < 8) {
@@ -275,7 +276,7 @@ try {
     if (card.screenLeft < 0 || card.screenRight > 390) {
       throw new Error(`clickable card ${card.id} exceeds viewport width: ${JSON.stringify(card)}`);
     }
-    if (card.screenTop < layout.hudBottom || card.screenBottom > layout.trunkTop) {
+    if (card.screenTop < layout.hudBottom || card.screenBottom > layout.lidTop) {
       throw new Error(`clickable card ${card.id} overlaps HUD/trunk: ${JSON.stringify({card, layout})}`);
     }
   }
@@ -334,8 +335,13 @@ try {
   const momState = await state(mom);
   const momCards = await mom.evaluate(() => window.__stack.getBoard().filter(card => card.source === 'mom'));
   if (momCards.length !== 3) throw new Error(`mom event added ${momCards.length} cards`);
-  if (!momCards.every(card => momState.clickable.some(clickable => clickable.id === card.id))) {
-    throw new Error('mom cards are not all clickable/visible');
+  // Mom now tucks her goods into the pile: same kind, three separate spots, at least one on top
+  // (tappable) and at least one under other cards.
+  if (new Set(momCards.map(card => card.kind)).size !== 1) throw new Error('mom cards are not one kind');
+  const tappableMom = momCards.filter(card => momState.clickable.some(clickable => clickable.id === card.id)).length;
+  if (tappableMom < 1 || tappableMom > 2) throw new Error(`mom placement should mix top and covered cards, tappable=${tappableMom}`);
+  for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++) {
+    if (Math.abs(momCards[a].x - momCards[b].x) + Math.abs(momCards[a].y - momCards[b].y) < 100) throw new Error('mom cards are clumped together');
   }
   await screenshot(mom, '08-mom-event.png');
   await mom.close();

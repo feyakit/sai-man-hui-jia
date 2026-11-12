@@ -5,7 +5,8 @@ import {
 import { STACK_SEEDS, generateStackLevel } from '../core/stack/stack-generator';
 import {
   STACK_ACTION_HEIGHT, STACK_BODY_HOLE, STACK_BODY_SIZE, STACK_BODY_SLICE, STACK_CAR_SCALE_Y,
-  createStackPageLayout, stackCardBounds, stackPageHeight,
+  IDENTITY_BOARD, createStackPageLayout, fitStackBoard, mapStackRect, stackCardBounds, stackContentBounds,
+  stackPageHeight, unmapStackPoint, type StackBoardFit,
 } from '../core/stack/stack-layout';
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
@@ -162,6 +163,8 @@ export class StackPage {
   private slotY = 1185;
   private slotCell = 96;
   private safeBottom = 0;
+  /** Level → page mapping that keeps the whole board between the title bar and the trunk lid. */
+  private board: StackBoardFit = IDENTITY_BOARD;
   private actionY = 1527;
   private readonly actionH = STACK_ACTION_HEIGHT;
   private finishStats?: StackFinishStats;
@@ -306,7 +309,10 @@ export class StackPage {
       this.node.setScale(scale,scale,1);
       this.node.getComponent(UITransform)!.setContentSize(750,this.height);
       const safe = sys.getSafeAreaRect(false);
-      const bottom = Math.max(0,safe.y/size.height*this.height);
+      const cssInset = cssSafeBottomPx();
+      const innerHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
+      const cssBottom = innerHeight > 0 ? cssInset/innerHeight*this.height : 0;
+      const bottom = Math.max(0,safe.y/size.height*this.height,cssBottom);
       this.layout(bottom);
     }
     if (this.finish) {
@@ -328,6 +334,8 @@ export class StackPage {
     this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
     const metrics = createStackPageLayout(this.height,bottom);
+    this.safeBottom = metrics.safeBottom;
+    this.board = fitStackBoard(stackContentBounds(this.level),metrics);
     this.actionY = metrics.actionY;
     this.trunk = {...metrics.trunk};
     this.carRect = {
@@ -527,7 +535,7 @@ export class StackPage {
   }
 
   private updateReserve(): void {
-    const reserve = this.game.cards.filter(card => card.source === 'reserve');
+    const reserve = this.game.cards.filter(card => card.source === 'reserve').map(card => mapStackRect(this.board,card));
     this.reserveLayer.active = reserve.length > 0;
     if (!reserve.length) return;
     const minX = Math.min(...reserve.map(card => card.x));
@@ -559,16 +567,17 @@ export class StackPage {
       const card = sorted[index];
       let view = this.cardViews.get(card.id);
       if (!view) {
-        view = this.makeCardView(card,card.w,this.pileLayer);
+        view = this.makeCardView(card,card.w*this.board.scale,this.pileLayer);
         this.cardViews.set(card.id,view);
         view.born = true;
       }
-      if (view.kind !== card.kind || view.size !== card.w) this.configureCard(view,card,card.w);
+      const size = card.w*this.board.scale;
+      if (view.kind !== card.kind || Math.abs(view.size-size) > .01) this.configureCard(view,card,size);
       view.node.active = true;
       view.node.setSiblingIndex(index);
       const center = this.cardCenter(card);
       if (view.born) {
-        view.node.setPosition(center.x,center.y+(card.source === 'mom' ? 120 : 0),0);
+        view.node.setPosition(center.x,center.y+(card.source === 'mom' ? 120*this.board.scale : 0),0);
         if (card.source === 'mom') tween(view.node).to(0.28,{position:center},{easing:'bounceOut'}).start();
         view.born = false;
       } else if (!this.busy || card.source !== 'mom') {
@@ -659,7 +668,16 @@ export class StackPage {
   }
 
   private cardCenter(card: StackCard): Vec3 {
-    return new Vec3(card.x+card.w/2-375,this.height/2-(card.y+card.h/2),0);
+    const rect = mapStackRect(this.board,card);
+    return new Vec3(rect.x+rect.w/2-375,this.height/2-(rect.y+rect.h/2),0);
+  }
+
+  /** Page (750-wide design) point → CSS pixel on screen, including letterboxing. */
+  private toScreen(x: number,y: number): {x:number;y:number;k:number} {
+    const sw = typeof window === 'undefined' ? 750 : window.innerWidth;
+    const sh = typeof window === 'undefined' ? this.height : window.innerHeight;
+    const k = Math.min(sw/750,sh/this.height);
+    return {x:(sw-750*k)/2+x*k,y:(sh-this.height*k)/2+y*k,k};
   }
 
   private touch(event: EventTouch): void {
@@ -689,7 +707,8 @@ export class StackPage {
       this.useAction(action.key);
       return;
     }
-    const hit = topCardAt(this.game.cards,p.x,p.y);
+    const lp = unmapStackPoint(this.board,p.x,p.y);
+    const hit = topCardAt(this.game.cards,lp.x,lp.y);
     if (!hit) return;
     if (!this.game.canTap(hit.id)) { this.sounds.play('tap'); return; }
     this.tapCard(hit.id);
@@ -709,12 +728,12 @@ export class StackPage {
     this.busy = true;
     this.sounds.play('tap');
     setTimeout(() => { if (this.node.isValid) this.sounds.play('fly'); },35);
-    const flyer = this.makeCardView(result.card,result.card.w,this.fxLayer);
+    const flyer = this.makeCardView(result.card,result.card.w*this.board.scale,this.fxLayer);
     flyer.node.setPosition(this.cardCenter(result.card));
     const targetIndex = Math.min(result.insertIndex,SLOT_CAPACITY-1);
     const slot = this.slotRects[targetIndex];
     const target = new Vec3(slot.x+slot.w/2-375,this.height/2-(slot.y+slot.h/2),0);
-    const scale = Math.max(.35,(slot.w-6)/result.card.w);
+    const scale = Math.max(.35,(slot.w-6)/(result.card.w*this.board.scale));
     this.syncPile();
     this.updateHud();
     tween(flyer.node).to(.2,{position:target,scale:new Vec3(scale,scale,1)},{easing:'quadOut'}).call(() => {
@@ -1052,19 +1071,25 @@ export class StackPage {
     return this.game.cards
       .filter(card => this.game.canTap(card.id))
       .sort((a,b) => b.layer-a.layer)
-      .map(card => ({
-        id:card.id,
-        kind:card.kind,
-        name:card.name,
-        screenX:(card.x+card.w/2)/750*screenWidth,
-        screenY:(card.y+card.h/2)/this.height*screenHeight,
-        screenLeft:card.x/750*screenWidth,
-        screenRight:(card.x+card.w)/750*screenWidth,
-        screenTop:card.y/this.height*screenHeight,
-        screenBottom:(card.y+card.h)/this.height*screenHeight,
-        screenW:card.w/750*screenWidth,
-        screenH:card.h/this.height*screenHeight,
-      }));
+      .map(card => {
+        const rect = mapStackRect(this.board,card);
+        const a = this.toScreen(rect.x,rect.y);
+        const b = this.toScreen(rect.x+rect.w,rect.y+rect.h);
+        void screenWidth; void screenHeight;
+        return {
+          id:card.id,
+          kind:card.kind,
+          name:card.name,
+          screenX:(a.x+b.x)/2,
+          screenY:(a.y+b.y)/2,
+          screenLeft:a.x,
+          screenRight:b.x,
+          screenTop:a.y,
+          screenBottom:b.y,
+          screenW:b.x-a.x,
+          screenH:b.y-a.y,
+        };
+      });
   }
 
   private debugActions(): {key:string;used:boolean;screenX:number;screenY:number}[] {
@@ -1079,28 +1104,33 @@ export class StackPage {
   }
 
   private debugLayout(): object {
-    const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
-    const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
-    const cards = this.game.cards;
+    const viewport = this.toScreen(750,this.height);
+    const origin = this.toScreen(0,0);
+    const cards = this.game.cards.map(card => ({...card,...mapStackRect(this.board,card)}));
     const bounds = stackCardBounds(cards);
     const layout = createStackPageLayout(this.height,this.safeBottom);
+    const topLeft = this.toScreen(bounds.left,bounds.top);
+    const bottomRight = this.toScreen(bounds.right,bounds.bottom);
+    const lidTop = this.carRect.y-75;
+    const actionsBottom = this.actionY+this.actionH;
     return {
-      viewport:{width:screenWidth,height:screenHeight},
+      viewport:{width:typeof window === 'undefined' ? 750 : window.innerWidth,height:typeof window === 'undefined' ? this.height : window.innerHeight},
+      canvas:{left:origin.x,top:origin.y,right:viewport.x,bottom:viewport.y},
+      boardScale:this.board.scale,
       cardSize:{
-        width:this.level.cardW/750*screenWidth,
-        height:this.level.cardH/this.height*screenHeight,
+        width:this.level.cardW*this.board.scale*origin.k,
+        height:this.level.cardH*this.board.scale*origin.k,
       },
-      cardBounds:{
-        left:bounds.left/750*screenWidth,
-        right:bounds.right/750*screenWidth,
-        top:bounds.top/this.height*screenHeight,
-        bottom:bounds.bottom/this.height*screenHeight,
-      },
-      hudBottom:140/this.height*screenHeight,
-      trunkTop:this.trunk.y/this.height*screenHeight,
+      cardBounds:{left:topLeft.x,right:bottomRight.x,top:topLeft.y,bottom:bottomRight.y},
+      hudBottom:this.toScreen(0,layout.stackTop).y,
+      trunkTop:this.toScreen(0,this.trunk.y).y,
+      lidTop:this.toScreen(0,lidTop).y,
+      carTop:this.toScreen(0,this.carRect.y).y,
+      actionsBottom:this.toScreen(0,actionsBottom).y,
+      safeBottom:this.safeBottom*origin.k,
       stackRegion:{
-        top:140/this.height*screenHeight,
-        bottom:this.trunk.y/this.height*screenHeight,
+        top:this.toScreen(0,layout.stackTop).y,
+        bottom:this.toScreen(0,layout.stackBottom).y,
         ratio:layout.stackRatio,
       },
       sideCounts:{
@@ -1170,6 +1200,20 @@ export class StackPage {
       screenH:rect.h/this.height*screenHeight,
     };
   }
+}
+
+let safeProbe: HTMLDivElement | null = null;
+/** CSS env(safe-area-inset-bottom) in CSS pixels (iOS home indicator, Android gesture bar). */
+function cssSafeBottomPx(): number {
+  if (typeof document === 'undefined' || !document.body) return 0;
+  try {
+    if (!safeProbe) {
+      safeProbe = document.createElement('div');
+      safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;visibility:hidden;pointer-events:none;height:env(safe-area-inset-bottom,0px)';
+      document.body.appendChild(safeProbe);
+    }
+    return safeProbe.getBoundingClientRect().height || 0;
+  } catch { return 0; }
 }
 
 function contains(rect: Rect,x: number,y: number): boolean {

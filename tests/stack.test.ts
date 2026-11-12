@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MOM_ITEM_KEYS, STAGE1_ITEMS, STAGE2_ITEMS, pickMomItem, stackItemByName, stackItems } from '../client/assets/scripts/core/stack/stack-catalog';
-import { createStackPageLayout, stackCardBounds, stackCardsAreVisible, stackPageHeight } from '../client/assets/scripts/core/stack/stack-layout';
+import { STACK_LID_RISE, createStackPageLayout, fitStackBoard, mapStackRect, stackCardBounds, stackCardsAreVisible, stackContentBounds, stackPageHeight } from '../client/assets/scripts/core/stack/stack-layout';
+import { solveStackState } from '../client/assets/scripts/core/stack/stack-solver';
+import { pickRareMomItem } from '../client/assets/scripts/core/stack/stack-catalog';
 import { generateStackLevel, STACK_SEEDS } from '../client/assets/scripts/core/stack/stack-generator';
 import {
   freeCards, isBlocked, rectsOverlap, SLOT_CAPACITY, slotInsertIndex, StackGame, topCardAt,
@@ -97,12 +99,13 @@ describe('stack level generation', () => {
       expect(item.h).toBeGreaterThanOrEqual(108);
     }
     const pageLayout = createStackPageLayout(stackPageHeight(390, 844), 65);
-    expect(pageLayout.stackRatio).toBeGreaterThan(0.55);
-    expect(stackCardsAreVisible(level.cards, pageLayout)).toBe(true);
-    const bounds = stackCardBounds(level.cards);
+    expect(pageLayout.stackRatio).toBeGreaterThan(0.5);
+    const fit = fitStackBoard(stackContentBounds(level), pageLayout);
+    expect(stackCardsAreVisible(level.cards, pageLayout, fit)).toBe(true);
+    const bounds = stackCardBounds(level.cards.map(item => ({...item, ...mapStackRect(fit, item)})));
     expect(bounds.top).toBeGreaterThanOrEqual(pageLayout.stackTop);
     expect(bounds.bottom).toBeLessThanOrEqual(pageLayout.stackBottom);
-    expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(330);
+    expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(300);
     expect(bounds.left / 750 * 390).toBeGreaterThanOrEqual(10);
     expect(bounds.right / 750 * 390).toBeLessThanOrEqual(380);
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
@@ -228,25 +231,53 @@ describe('stack props, failure and mother event', () => {
     expect(game.useShuffle()).toBe(false);
   });
 
-  it('adds three matching top cards for the timed mother event and by cleared groups', () => {
+  it('mom spreads three same-kind goods through the pile, mostly covered, and keeps it solvable', () => {
     const base = generateStackLevel(2, STACK_SEEDS[1]).level;
-    const game = new StackGame(base, createRng('mom'), 0);
-    expect(game.tickMom(24_999)).toEqual([]);
-    const added = game.tickMom(25_000);
-    expect(added).toHaveLength(3);
-    expect(new Set(added.map(item => item.kind)).size).toBe(1);
-    expect(MOM_ITEM_KEYS).toContain(added[0].kind);
+    for (const seed of ['mom', 'mom-2', 'mom-3', 'mom-4', 'mom-5']) {
+      const game = new StackGame(base, createRng(seed), 0);
+      expect(game.tickMom(24_999)).toEqual([]);
+      const boardKinds = game.cards.map(item => item.kind);
+      const added = game.tickMom(25_000);
+      expect(added).toHaveLength(3);
+      expect(new Set(added.map(item => item.kind)).size).toBe(1);
+      expect(MOM_ITEM_KEYS).toContain(added[0].kind);
+      // The chosen kind is among the scarcest mom goods on the board.
+      const count = (kind: string) => boardKinds.filter(k => k === kind).length;
+      expect(count(added[0].kind)).toBe(Math.min(...MOM_ITEM_KEYS.map(count)));
+      expect(game.remaining).toBe(153);
+      // Three different spots, not a clump.
+      for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
+        expect(Math.abs(added[i].x - added[j].x) + Math.abs(added[i].y - added[j].y)).toBeGreaterThanOrEqual(base.cardW * 1.4);
+      }
+      const tappable = added.filter(item => game.canTap(item.id)).length;
+      expect(tappable).toBeGreaterThanOrEqual(1);
+      expect(3 - tappable).toBeGreaterThanOrEqual(1);
+      expect(added.every(item => item.layer < 1000)).toBe(true);
+      expect(game.momVerified).toBe(true);
+      expect(solveStackState(game.cards, game.slot.map(item => item.kind), {maxNodes: 20_000}).solvable).toBe(true);
+    }
     expect(pickMomItem(STAGE2_ITEMS, () => 0.999).key).toBe('toycar');
     expect(pickMomItem(STAGE2_ITEMS, () => Number.NaN).key).toBe('mandarin');
-    expect(game.remaining).toBe(153);
-    for (const item of added) expect(game.canTap(item.id)).toBe(true);
+    expect(pickRareMomItem(STAGE2_ITEMS, ['mandarin', 'duck', 'fruitbasket', 'suitcase_l', 'toycar', 'milk'], () => 0).key).toBe('oven');
+    expect(pickRareMomItem([], [], () => 0).key).toBe('mandarin');
 
     const simpleCards = Array.from({length: 33}, (_, index) => card(index + 1, `k${Math.floor(index / 3)}`, index * 10, 0));
     const groupGame = new StackGame(level(simpleCards, 2), () => 0);
-    for (const item of simpleCards) groupGame.tap(item.id);
-    expect(groupGame.clearedGroups).toBe(11);
-    expect(groupGame.remaining).toBe(3);
+    for (const item of simpleCards.slice(0, 30)) groupGame.tap(item.id);
+    expect(groupGame.clearedGroups).toBe(10);
     expect(groupGame.cards.filter(item => item.source === 'mom')).toHaveLength(3);
+    expect(solveStackState(groupGame.cards, [], {maxNodes: 2_000}).solvable).toBe(true);
+  });
+
+  it('solves live states and refuses ones that would overflow the slot', () => {
+    const cards = [card(1, 'a', 0, 0), card(2, 'a', 200, 0), card(3, 'a', 400, 0)];
+    expect(solveStackState(cards, [], {maxNodes: 50}).solvable).toBe(true);
+    expect(solveStackState(cards, ['b', 'c', 'd', 'e', 'f', 'g'], {maxNodes: 50}).solvable).toBe(false);
+    expect(solveStackState([], ['a', 'a', 'a'], {maxNodes: 5}).solvable).toBe(true);
+    const many = Array.from({length: 30}, (_, i) => card(i + 1, `k${i % 10}`, i * 5, 0, i));
+    const limited = solveStackState(many, [], {maxNodes: 3});
+    expect(limited.solvable).toBe(false);
+    expect(limited.limited).toBe(true);
   });
 
   it('rejects props and events when unavailable', () => {
@@ -257,6 +288,32 @@ describe('stack props, failure and mother event', () => {
     game.tap(1);
     expect(game.useShuffle()).toBe(false);
   });
+});
+
+describe('board fits above the trunk on every phone', () => {
+  const viewports = [[390, 844], [360, 780], [412, 780], [375, 667], [412, 732], [360, 640]] as const;
+  for (const stage of [1, 2] as const) {
+    for (const [w, h] of viewports) {
+      it(`stage ${stage} at ${w}x${h} keeps every card (and reserve/mom spots) above the open lid`, () => {
+        const level = generateStackLevel(stage, STACK_SEEDS[stage - 1]).level;
+        for (const safe of [0, 34]) {
+          const layout = createStackPageLayout(stackPageHeight(w, h), safe);
+          const fit = fitStackBoard(stackContentBounds(level), layout);
+          const content = mapStackRect(fit, (() => {
+            const b = stackContentBounds(level);
+            return {x: b.left, y: b.top, w: b.right - b.left, h: b.bottom - b.top};
+          })());
+          expect(stackCardsAreVisible(level.cards, layout, fit)).toBe(true);
+          expect(content.y + content.h).toBeLessThanOrEqual(layout.carTop - STACK_LID_RISE + 1e-6);
+          expect(content.y).toBeGreaterThanOrEqual(layout.stackTop);
+          expect(content.x).toBeGreaterThanOrEqual(0);
+          expect(content.x + content.w).toBeLessThanOrEqual(750);
+          // Bottom buttons keep a gesture-bar margin even when the browser reports no safe area.
+          expect(layout.height - (layout.actionY + 68)).toBeGreaterThanOrEqual(48);
+        }
+      });
+    }
+  }
 });
 
 describe('stack solver', () => {

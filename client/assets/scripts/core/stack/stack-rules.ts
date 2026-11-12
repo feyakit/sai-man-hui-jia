@@ -1,12 +1,17 @@
 import { shuffle } from '../rng';
-import { pickMomItem } from './stack-catalog';
+import { pickRareMomItem } from './stack-catalog';
+import { solveStackState } from './stack-state-solver';
 import type {
   StackCard, StackLevel, StackPoint, StackProps, StackStatus, StackTapResult,
 } from './stack-types';
 
-export const SLOT_CAPACITY = 7;
-export const PACK_SIZE = 3;
+import { PACK_SIZE, SLOT_CAPACITY } from './stack-constants';
+
+export { PACK_SIZE, SLOT_CAPACITY };
 export const MOM_INTERVAL_MS = 25_000;
+/** Solver budget per candidate placement of mom's goods. */
+export const MOM_SOLVE_NODES = 6_000;
+export const MOM_PLACEMENT_ATTEMPTS = 8;
 
 export interface StackRect {
   readonly x: number;
@@ -62,6 +67,7 @@ export class StackGame {
   private groupsCleared = 0;
   private lastMomGroup = 0;
   private momEvents = 0;
+  private lastMomSolvable = true;
   private nextMomAt: number;
   private maxCardId: number;
 
@@ -157,39 +163,83 @@ export class StackGame {
     return true;
   }
 
+  /**
+   * Mom slips three goods of one (currently scarce) kind into the pile at three different spots:
+   * one on top of a reachable card and two tucked between layers under other cards. A placement
+   * is only kept when the solver confirms the board can still be cleared from the current slot.
+   */
   triggerMom(): readonly StackCard[] {
-    if (this.level.stage !== 2 || this.currentStatus !== 'playing') return [];
-    const item = pickMomItem(this.level.items, this.random);
-    const added: StackCard[] = [];
-    for (let i = 0; i < PACK_SIZE; i++) {
-      const pos = this.level.momPositions[i % this.level.momPositions.length];
-      this.maxCardId++;
-      added.push({
-        id: this.maxCardId,
-        kind: item.key,
-        name: item.name,
-        x: pos.x,
-        y: pos.y,
-        w: this.level.cardW,
-        h: this.level.cardH,
-        layer: 2000 + this.momEvents * PACK_SIZE + i,
-        source: 'mom',
-      });
+    if (this.level.stage < 2 || this.currentStatus !== 'playing') return [];
+    const item = pickRareMomItem(this.level.items, this.cardList.map(card => card.kind), this.random);
+    const slotKinds = this.slotList.map(card => card.kind);
+    let chosen: StackCard[] | undefined;
+    let fallback: StackCard[] | undefined;
+    for (let attempt = 0; attempt < MOM_PLACEMENT_ATTEMPTS && !chosen; attempt++) {
+      const added = this.momPlacement(item, attempt);
+      fallback ??= added;
+      const check = solveStackState([...this.cardList, ...added], slotKinds, {maxNodes: MOM_SOLVE_NODES});
+      if (check.solvable) chosen = added;
     }
+    const added = chosen ?? fallback ?? [];
     this.momEvents++;
+    this.lastMomSolvable = !!chosen;
     this.cardList.push(...added);
     this.history = undefined;
     return added;
   }
 
+  /** Whether the last mom insertion was verified solvable (false only if every candidate failed). */
+  get momVerified(): boolean { return this.lastMomSolvable; }
+
+  private momPlacement(item: {key: string; name: string}, attempt: number): StackCard[] {
+    const hosts = this.cardList.filter(card => card.source === 'pile' || card.source === 'side-left' || card.source === 'side-right');
+    const free = shuffle(hosts.filter(card => !isBlocked(card, this.cardList)), this.random);
+    const covered = shuffle(hosts.filter(card => isBlocked(card, this.cardList)), this.random);
+    const spots: StackCard[] = [];
+    const farEnough = (card: StackCard) => spots.every(spot => Math.abs(spot.x - card.x) + Math.abs(spot.y - card.y) >= card.w * 1.5);
+    const take = (pool: StackCard[], count: number) => {
+      for (const card of pool) {
+        if (count <= 0) break;
+        if (!spots.includes(card) && farEnough(card)) { spots.push(card); count--; }
+      }
+    };
+    // Late in a level there may be nothing covered left: fall back to reachable spots.
+    const coveredWanted = attempt < MOM_PLACEMENT_ATTEMPTS - 2 ? 2 : 1;
+    take(free, 1);
+    take(covered, coveredWanted);
+    take(free, PACK_SIZE - spots.length);
+    take(covered, PACK_SIZE - spots.length);
+    take([...free, ...covered], PACK_SIZE - spots.length);
+    const positions = spots.length
+      ? spots
+      : this.level.momPositions.map(p => ({x: p.x, y: p.y, w: this.level.cardW, h: this.level.cardH, layer: 1999}) as StackCard);
+    return Array.from({length: PACK_SIZE}, (_, i) => {
+      const host = positions[i % positions.length];
+      this.maxCardId++;
+      const nudge = (this.random() - .5) * 12;
+      return {
+        id: this.maxCardId,
+        kind: item.key,
+        name: item.name,
+        x: Math.round(host.x + nudge),
+        y: Math.round(host.y - nudge),
+        w: host.w,
+        h: host.h,
+        // Half a layer above its host: it hides the host card but stays under the host's own covers.
+        layer: host.layer + 0.5 + i * 0.01,
+        source: 'mom' as const,
+      };
+    });
+  }
+
   tickMom(now: number): readonly StackCard[] {
-    if (this.level.stage !== 2 || this.currentStatus !== 'playing' || now < this.nextMomAt) return [];
+    if (this.level.stage < 2 || this.currentStatus !== 'playing' || now < this.nextMomAt) return [];
     this.nextMomAt = now + MOM_INTERVAL_MS;
     return this.triggerMom();
   }
 
   private maybeMomByGroups(now: number): void {
-    if (this.level.stage === 2 && this.groupsCleared - this.lastMomGroup >= 10) {
+    if (this.level.stage >= 2 && this.groupsCleared - this.lastMomGroup >= 10) {
       this.lastMomGroup = this.groupsCleared;
       this.triggerMom();
       this.nextMomAt = now + MOM_INTERVAL_MS;
