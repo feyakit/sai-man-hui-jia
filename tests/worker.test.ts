@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import worker, { d1Store } from '../worker/src/index';
+import worker, { d1Store, d1TestStore } from '../worker/src/index';
+import { STAGE1_CARDS, STAGE2_CARDS } from '../client/assets/scripts/core/stack/stack-generator';
+import { MOM_INTERVAL_MS as CLIENT_MOM_INTERVAL_MS } from '../client/assets/scripts/core/stack/stack-rules';
 import {
-  ALLOWED_ORIGIN, MIN_MS, POSTS_PER_MINUTE, handle, parseClear, provinceRank, shanghaiDay, sortCounts,
-  type ClearRow, type ProvinceCount, type RankStore,
+  ALLOWED_ORIGIN, MIN_MS, MOM_INTERVAL_MS, POSTS_PER_MINUTE, STAGE_CARDS, TEST_HEADER, checkBoxes, handle, parseClear,
+  provinceRank, sameSecret, shanghaiDay, sortCounts, type ClearRow, type ProvinceCount, type RankStore, type TestStore,
 } from '../worker/src/rank';
 
 class MemoryStore implements RankStore {
@@ -37,7 +39,24 @@ function post(body: unknown, {ip = '1.2.3.4', origin = ALLOWED_ORIGIN as string 
   if (origin) headers.Origin = origin;
   return new Request(`${base}/api/clear`, {method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body)});
 }
-const clear = (over: Partial<Record<string, unknown>> = {}) => ({province: '广东', stage: 2, ms: 90_000, sessionId: 'device-abc-123', ...over});
+const clear = (over: Partial<Record<string, unknown>> = {}) => ({
+  province: '广东', stage: 2, ms: 90_000, sessionId: 'device-abc-123', boxes: over.stage === 1 ? 6 : 50, momBoxes: 0, ...over,
+});
+
+class MemoryTestStore extends MemoryStore implements TestStore {
+  async reset(): Promise<{clears: number; rate: number}> {
+    const result = {clears: this.rows.length, rate: this.hits.size};
+    this.rows.length = 0;
+    this.hits.clear();
+    return result;
+  }
+}
+const TEST_KEY = 'unit-test-key-0123456789';
+function withTest(request: Request, key = TEST_KEY): Request {
+  const copy = new Request(request);
+  copy.headers.set(TEST_HEADER, key);
+  return copy;
+}
 
 describe('province leaderboard worker', () => {
   it('uses the Shanghai calendar day', () => {
@@ -45,7 +64,11 @@ describe('province leaderboard worker', () => {
   });
 
   it('validates clear payloads', () => {
-    expect(parseClear(clear())).toEqual({province: '广东', stage: 2, ms: 90_000, sessionId: 'device-abc-123'});
+    expect(parseClear(clear())).toEqual({province: '广东', stage: 2, ms: 90_000, sessionId: 'device-abc-123', boxes: 50, momBoxes: 0});
+    expect(parseClear({...clear(), momBoxes: undefined})).toMatchObject({momBoxes: 0});
+    expect(parseClear(clear({boxes: undefined}))).toBe('invalid boxes');
+    expect(parseClear(clear({boxes: 49.5}))).toBe('invalid boxes');
+    expect(parseClear(clear({momBoxes: -1}))).toBe('invalid momBoxes');
     expect(parseClear(null)).toBe('body must be a JSON object');
     expect(parseClear(clear({province: '火星'}))).toBe('unknown province');
     expect(parseClear(clear({stage: 3}))).toBe('stage must be 1 or 2');
@@ -106,6 +129,69 @@ describe('province leaderboard worker', () => {
     expect(store.rows).toHaveLength(0);
   });
 
+  it('keeps the stage card counts in sync with the client levels', () => {
+    expect(STAGE_CARDS).toEqual({1: STAGE1_CARDS, 2: STAGE2_CARDS});
+    expect(MOM_INTERVAL_MS).toBe(CLIENT_MOM_INTERVAL_MS);
+  });
+
+  it('only accepts a run whose boxes equal the stage cards / 3 (plus mom packs)', async () => {
+    const parsed = (over: Record<string, unknown>) => parseClear(clear(over)) as Exclude<ReturnType<typeof parseClear>, string>;
+    expect(checkBoxes(parsed({}))).toBeNull();
+    expect(checkBoxes(parsed({stage: 1, ms: 9_000}))).toBeNull();
+    expect(checkBoxes(parsed({boxes: 53, momBoxes: 3}))).toBeNull();
+    expect(checkBoxes(parsed({boxes: 0}))).toBe('boxes do not match the stage');
+    expect(checkBoxes(parsed({boxes: 49}))).toBe('boxes do not match the stage');
+    expect(checkBoxes(parsed({stage: 1, ms: 9_000, boxes: 50}))).toBe('boxes do not match the stage');
+    expect(checkBoxes(parsed({stage: 1, ms: 9_000, boxes: 7, momBoxes: 1}))).toBe('stage 1 has no mom packs');
+    expect(checkBoxes(parsed({ms: 50_000, boxes: 80, momBoxes: 30}))).toBe('too many mom packs');
+    const store = new MemoryStore();
+    const zero = await handle(post(clear({boxes: 0})), store, NOW);
+    expect(zero.status).toBe(422);
+    expect(await zero.json()).toEqual({ok: false, error: 'boxes do not match the stage'});
+    expect((await handle(post(clear({stage: 1, ms: 9_000, boxes: 5})), store, NOW)).status).toBe(422);
+    expect((await handle(post(clear({boxes: undefined})), store, NOW)).status).toBe(400);
+    expect(store.rows).toHaveLength(0);
+    expect((await handle(post(clear({boxes: 52, momBoxes: 2})), store, NOW)).status).toBe(200);
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it('routes test-key requests to the isolated test tables only', async () => {
+    const live = new MemoryStore();
+    const testStore = new MemoryTestStore();
+    const test = {key: TEST_KEY, store: testStore};
+    const written = await handle(withTest(post(clear())), live, NOW, test);
+    expect(written.status).toBe(200);
+    expect(await written.json()).toEqual({ok: true, duplicate: false, province: '广东', rank: 1, total: 1, test: true});
+    expect(live.rows).toHaveLength(0);
+    expect(live.hits.size).toBe(0);
+    expect(testStore.rows).toHaveLength(1);
+    const testRank = await (await handle(withTest(new Request(`${base}/api/rank`)), live, NOW, test)).json();
+    expect(testRank).toMatchObject({provinces: [{province: '广东', total: 1, today: 1}], test: true});
+    const liveRank = await (await handle(new Request(`${base}/api/rank`), live, NOW, test)).json();
+    expect(liveRank).toEqual({ok: true, provinces: [], totalClears: 0, todayClears: 0, updatedAt: NOW});
+    // Validation still applies on the test path.
+    expect((await handle(withTest(post(clear({boxes: 0, sessionId: 'device-t2-000'}))), live, NOW, test)).status).toBe(422);
+    const reset = await handle(withTest(new Request(`${base}/api/test/reset`, {method: 'POST'})), live, NOW, test);
+    expect(await reset.json()).toEqual({ok: true, test: true, deleted: {clears: 1, rate: 1}});
+    expect(testStore.rows).toHaveLength(0);
+  });
+
+  it('refuses a wrong or unconfigured test key and hides reset from the public', async () => {
+    const live = new MemoryStore();
+    const testStore = new MemoryTestStore();
+    expect((await handle(withTest(post(clear()), 'wrong'), live, NOW, {key: TEST_KEY, store: testStore})).status).toBe(403);
+    expect((await handle(withTest(post(clear())), live, NOW, {key: undefined, store: testStore})).status).toBe(403);
+    expect((await handle(withTest(post(clear())), live, NOW)).status).toBe(403);
+    expect((await handle(new Request(`${base}/api/test/reset`, {method: 'POST'}), live, NOW, {key: TEST_KEY, store: testStore})).status).toBe(404);
+    expect(live.rows).toHaveLength(0);
+    expect(testStore.rows).toHaveLength(0);
+    expect(sameSecret('abc', 'abc')).toBe(true);
+    expect(sameSecret('abc', 'abd')).toBe(false);
+    expect(sameSecret('abc', 'abcd')).toBe(false);
+    const preflight = await handle(new Request(`${base}/api/clear`, {method: 'OPTIONS', headers: {Origin: ALLOWED_ORIGIN}}), live, NOW);
+    expect(preflight.headers.get('Access-Control-Allow-Headers')).toContain(TEST_HEADER);
+  });
+
   it('rate-limits each IP per minute', async () => {
     const store = new MemoryStore();
     for (let i = 0; i < POSTS_PER_MINUTE; i++) {
@@ -157,6 +243,16 @@ describe('province leaderboard worker', () => {
     expect(await store.insertClear({sessionId: 'device-abc-123', stage: 2, province: '广东', ms: 1, day: 'd', createdAt: 1})).toEqual({inserted: true, province: '广东'});
     expect(await store.insertClear({sessionId: 'device-old-456', stage: 2, province: '广东', ms: 1, day: 'd', createdAt: 1})).toEqual({inserted: false, province: '四川'});
     expect(await store.stage2Counts('d')).toEqual([{province: '广东', total: 2, today: 1}]);
+    const testCalls = calls.length;
+    const testStore = d1TestStore(db);
+    await testStore.insertClear({sessionId: 'device-abc-123', stage: 2, province: '广东', ms: 1, day: 'd', createdAt: 1});
+    expect(await testStore.reset()).toEqual({clears: 0, rate: 0});
+    const testSql = calls.slice(testCalls).map(c => c.sql);
+    expect(testSql).toEqual([
+      expect.stringContaining('INSERT OR IGNORE INTO test_clears'),
+      'DELETE FROM test_clears',
+      'DELETE FROM test_rate',
+    ]);
     const failing = {prepare() { throw new Error('db down'); }};
     const response = await worker.fetch(new Request(`${base}/api/rank`), {DB: failing as never});
     expect(response.status).toBe(500);

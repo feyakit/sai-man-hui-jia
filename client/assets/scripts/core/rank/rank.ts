@@ -15,6 +15,7 @@ export const RANK_EMPTY_TEXT = `还没有人${GAME_TITLE}，你来当第一个`;
 export const RANK_LOADING_TEXT = '排行加载中…';
 export const RANK_ERROR_TEXT = '排行暂时连不上';
 export const RANK_RETRY_TEXT = '重试';
+export const RANK_DEBUG_TEXT = '调试模式不计入排行';
 
 export type Province = typeof PROVINCES[number];
 export type RankStage = 1 | 2;
@@ -44,6 +45,10 @@ export interface ClearReport {
   readonly stage: RankStage;
   readonly ms: number;
   readonly sessionId: string;
+  /** Boxes actually packed this run (one per cleared triple, mom's packs included). */
+  readonly boxes: number;
+  /** How many 3-card packs mom added this run. */
+  readonly momBoxes: number;
 }
 
 export interface PendingClear extends ClearReport {
@@ -99,7 +104,14 @@ export function isValidClearReport(value: unknown): value is ClearReport {
   return isProvince(report.province)
     && isRankStage(report.stage)
     && isPositiveFinite(report.ms)
-    && isValidSessionId(report.sessionId);
+    && isValidSessionId(report.sessionId)
+    && isCount(report.boxes)
+    && isCount(report.momBoxes);
+}
+
+/** Any `debug` URL parameter (win/fail/mom/…) marks a run that must never reach the leaderboard. */
+export function isDebugRun(search: string): boolean {
+  return new URLSearchParams(search).has('debug');
 }
 
 /** Creates a device id that satisfies the server's 8–64 character session rule. */
@@ -313,6 +325,10 @@ function normalizeApiBase(raw: string): string | undefined {
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
     return url.href.replace(/\/+$/,'');
   } catch { return undefined; }
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isPositiveFinite(value: unknown): value is number {
