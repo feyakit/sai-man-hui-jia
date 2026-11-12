@@ -217,8 +217,12 @@ export class StackFinishView {
 
   get statsLine(): string { return this.statsText(); }
 
-  buttonPoints(): {action: FinishAction | 'share' | 'rank'; rect: Rect}[] {
-    return this.buttons.map(button => ({action:button.action,rect:{...button.rect}}));
+  buttonPoints(): {action: FinishAction | 'share' | 'rank'; title: string; rect: Rect}[] {
+    return this.buttons.map(button => ({
+      action:button.action,
+      title:button.label.getComponent(Label)?.string ?? '',
+      rect:{...button.rect},
+    }));
   }
 
   private imageNode(name: string, parent: Node): Sprite {

@@ -1531,13 +1531,13 @@ export class StackPage {
   }
 
   private debugFinishButtons(): {
-    action:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
+    action:string;title:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
     screenTop:number;screenBottom:number;screenW:number;screenH:number;
   }[] {
     if (!this.finishView) return [];
     const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
     const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
-    return this.finishView.buttonPoints().map(button => this.debugRect(button.action,button.rect,screenWidth,screenHeight));
+    return this.finishView.buttonPoints().map(button => ({...this.debugRect(button.action,button.rect,screenWidth,screenHeight),title:button.title}));
   }
 
   private debugModalButtons(): {
