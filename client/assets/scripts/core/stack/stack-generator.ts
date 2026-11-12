@@ -61,6 +61,14 @@ const HALF = GRID / 2;
 const GRID_X0 = Math.round((750 - (5 * GRID + STAGE2_CARD)) / 2);
 const GRID_Y0 = 150;
 /**
+ * Rows sit 100 apart (cards are 108), slightly tighter than the 112 columns, so the 150-card
+ * mound fits a 390×844 phone at full card size (≥56px) above the vehicle.
+ */
+export const STACK_ROW_STEP = 100;
+/** Top of the two bottom side fans and of the side shelf for moved-out cards. */
+export const STACK_SIDE_FAN_Y = GRID_Y0 + 6 * STACK_ROW_STEP + STAGE2_CARD + 76;
+export const STACK_SHELF_Y = STACK_SIDE_FAN_Y - 70;
+/**
  * Bottom-to-top layers of the hard mound. Odd layers sit half a card right and down, so every
  * card is pinned by up to four cards above; upper layers shrink towards the centre and the
  * base loses its top corners, giving a hill silhouette instead of a wall. The cap zig-zags six
@@ -75,8 +83,8 @@ const MAIN_LAYERS: readonly {cols: readonly [number, number]; rows: readonly [nu
   {cols: [2, 2], rows: [0, 5], half: true, wave: 40},
 ];
 const SIDE_STACKS = [
-  {source: 'side-left', x: 36, y: 1006, count: 12, step: 13},
-  {source: 'side-right', x: 606, y: 1006, count: 12, step: -13},
+  {source: 'side-left', x: 36, y: STACK_SIDE_FAN_Y, count: 12, step: 13},
+  {source: 'side-right', x: 606, y: STACK_SIDE_FAN_Y, count: 12, step: -13},
 ] as const;
 
 export function layoutStageTwo(random: () => number): StackCard[] {
@@ -90,7 +98,7 @@ export function layoutStageTwo(random: () => number): StackCard[] {
         if (layer.skip?.includes(`${col},${row}`)) continue;
         const jitterX = Math.round((random() - .5) * 4);
         const jitterY = Math.round((random() - .5) * 4);
-        cards.push(pileCard(++id, GRID_X0 + offset + wave + col * GRID + jitterX, GRID_Y0 + offset + row * GRID + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
+        cards.push(pileCard(++id, GRID_X0 + offset + wave + col * GRID + jitterX, GRID_Y0 + offset * STACK_ROW_STEP / GRID + row * STACK_ROW_STEP + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
       }
     }
   });
@@ -102,14 +110,14 @@ export function layoutStageTwo(random: () => number): StackCard[] {
   return cards;
 }
 
-export function stackReservePositions(cardW: number, cardH: number, count: number): StackPoint[] {
+export function stackReservePositions(cardW: number, cardH: number, count: number, top = 936): StackPoint[] {
   const gap = 8, columns = 6;
   const reserveW = Math.round(cardW * .72);
   const total = columns * reserveW + (columns - 1) * gap;
   const start = Math.round((750 - total) / 2);
   return Array.from({length: count}, (_, index) => ({
     x: start + (index % columns) * (reserveW + gap),
-    y: 936 + Math.floor(index / columns) * (Math.round(cardH * .72) + 8),
+    y: top + Math.floor(index / columns) * (Math.round(cardH * .72) + 8),
   }));
 }
 
@@ -262,7 +270,7 @@ function attemptLevel(stage: number, baseSeed: string, attempt: number): {level:
     cardH: built.h,
     items: built.items,
     cards: assigned.cards,
-    reservePositions: stackReservePositions(built.w, built.h, 12),
+    reservePositions: stackReservePositions(built.w, built.h, 12, stage === 2 ? STACK_SHELF_Y : 936),
     momPositions: stackMomPositions(built.w),
     solution: assigned.solution,
     slotCapacity: capacity,

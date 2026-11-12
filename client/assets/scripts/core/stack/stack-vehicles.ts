@@ -123,6 +123,11 @@ export function vehicleForLevel(level: number): LevelVehicle {
   return {def, lap, tint, displayName: `${colour}${def.name}`};
 }
 
+/** Short phones (page under 1450 design units tall) shrink the ride so the board keeps ~44px cards. */
+export function vehicleScaleForPage(pageHeight: number): number {
+  return pageHeight < 1450 ? .76 : 1;
+}
+
 export function vehicleSlotLabel(def: VehicleDef, capacity: number): string {
   return `${def.container} · ${capacity} 格`;
 }
@@ -131,8 +136,8 @@ export function vehicleSlotLabel(def: VehicleDef, capacity: number): string {
  * The art is bottom-anchored so its wheels tuck behind the prop buttons (starting at `actionY`),
  * but never so low that a cargo cell slips under them.
  */
-export function vehicleArtRect(def: VehicleDef, actionY: number, designWidth = 750): StackRect {
-  const h = def.height;
+export function vehicleArtRect(def: VehicleDef, actionY: number, designWidth = 750, scale = 1): StackRect {
+  const h = def.height * scale;
   const w = h * def.artSize.w / def.artSize.h * (def.stretchX ?? 1);
   const lowestCargo = Math.max(0, ...def.regions.map(region => region.y + region.h));
   const bottom = Math.min(actionY + 80, actionY - 12 + (1 - lowestCargo) * h);
