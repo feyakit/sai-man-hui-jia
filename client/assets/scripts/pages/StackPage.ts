@@ -257,7 +257,7 @@ export class StackPage {
     this.drawActions();
     this.drawFailButtons();
     this.refresh();
-    this.finishView?.layout(this.height,this.finishBoard());
+    this.finishView?.layout(this.height,this.finishBoard(),220);
   }
 
   private layoutBackground(): void {
@@ -594,7 +594,7 @@ export class StackPage {
     fill(g,new Color(79,24,30),-310,-214,620,432,30);
     fill(g,new Color(246,195,67),-302,-206,604,416,26);
     fill(g,new Color(176,34,42),-293,-197,586,398,21);
-    fill(g,new Color(255,233,192),-266,-162,532,66,18);
+    fill(g,new Color(255,233,192),-266,100,532,66,18);
     label(layer,'OverflowTitle','后备箱塞爆了',44,0,145).color = red;
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,86);
     hint.color = cream;
@@ -654,7 +654,7 @@ export class StackPage {
       ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
       : [{title:'再来一次',action:'replay' as const},{title:'回第 1 关',action:'first' as const}];
     this.finishView = new FinishView(this.node,this.level.stage,action => this.mapFinish(action),choices);
-    this.finishView.layout(this.height,this.finishBoard());
+    this.finishView.layout(this.height,this.finishBoard(),220);
     this.finishView.render(this.finish.state);
   }
 
