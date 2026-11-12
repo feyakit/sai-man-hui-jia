@@ -2,26 +2,26 @@ import type { StackItemDef } from './stack-types';
 
 /** A deliberately distinct subset keeps the dense second pile readable at phone size. */
 export const STAGE1_ITEMS: readonly StackItemDef[] = [
-  {key: 'fish', name: '鱼'},
-  {key: 'couplets', name: '春联'},
-  {key: 'hongbao', name: '红包'},
+  {key: 'mandarin', name: '砂糖橘'},
+  {key: 'duck', name: '烤鸭'},
+  {key: 'fruitbasket', name: '果篮'},
 ];
 
 export const STAGE2_ITEMS: readonly StackItemDef[] = [
-  {key: 'fish', name: '鱼'},
-  {key: 'couplets', name: '春联'},
-  {key: 'hongbao', name: '红包'},
-  {key: 'duck', name: '腊鸭'},
-  {key: 'crab', name: '大闸蟹'},
-  {key: 'milk', name: '牛奶箱'},
-  {key: 'lanterns', name: '红灯笼'},
-  {key: 'sausage', name: '腊肠'},
-  {key: 'ricecooker', name: '电饭煲'},
-  {key: 'teabox', name: '茶叶礼盒'},
-  {key: 'tv', name: '电视'},
-  {key: 'firecracker', name: '鞭炮'},
+  {key: 'mandarin', name: '砂糖橘'},
+  {key: 'duck', name: '烤鸭'},
   {key: 'fruitbasket', name: '果篮'},
-  {key: 'eggs', name: '土鸡蛋'},
+  {key: 'fish', name: '鱼'},
+  {key: 'kumquat', name: '金桔树'},
+  {key: 'milk', name: '牛奶箱'},
+  {key: 'oven', name: '烤箱'},
+  {key: 'suitcase_l', name: '大行李箱'},
+  {key: 'woven', name: '编织袋'},
+  {key: 'toycar', name: '玩具车'},
+  {key: 'snacks', name: '零食大礼包'},
+  {key: 'ham', name: '火腿'},
+  {key: 'thermos', name: '保温壶'},
+  {key: 'crab', name: '大闸蟹'},
 ];
 
 export function stackItems(stage: number): readonly StackItemDef[] {

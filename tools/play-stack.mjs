@@ -135,7 +135,9 @@ try {
   await screenshot(fail, '05-fail-popup.png');
   const failed = await state(fail);
   if (failed.slot.length !== 7) throw new Error(`fail preview has ${failed.slot.length} slots`);
-  await fail.touchscreen.tap(195, 419);
+  const revive = await fail.evaluate(() => window.__stack.getModalButtons().find(button => button.action === 'revive'));
+  if (!revive) throw new Error('fail preview did not expose a revive button');
+  await fail.touchscreen.tap(revive.screenX, revive.screenY);
   await fail.waitForFunction(
     () => {
       const current = window.__stack.getState();

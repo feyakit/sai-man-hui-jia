@@ -74,8 +74,13 @@ describe('stack level generation', () => {
   it('exposes the requested item catalog', () => {
     expect(stackItems(1)).toBe(STAGE1_ITEMS);
     expect(stackItems(2)).toBe(STAGE2_ITEMS);
+    expect(STAGE1_ITEMS.map(item => item.key)).toEqual(['mandarin', 'duck', 'fruitbasket']);
+    expect(STAGE2_ITEMS.map(item => item.key)).toEqual([
+      'mandarin', 'duck', 'fruitbasket', 'fish', 'kumquat', 'milk', 'oven',
+      'suitcase_l', 'woven', 'toycar', 'snacks', 'ham', 'thermos', 'crab',
+    ]);
     expect(stackItemByName(STAGE2_ITEMS, 'fish').name).toBe('鱼');
-    expect(stackItemByName(STAGE2_ITEMS, 'missing').key).toBe('fish');
+    expect(stackItemByName(STAGE2_ITEMS, 'missing').key).toBe('mandarin');
   });
 });
 
