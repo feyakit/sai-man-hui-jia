@@ -141,7 +141,12 @@ try {
           shot = true;
         }
       }
-      await page.waitForFunction(() => !window.__stack.getState().busy, undefined, { timeout: 5_000 });
+      await page.waitForFunction(() => {
+        const current = window.__stack.getState();
+        return !current.busy || current.status !== 'playing' || current.finishing;
+      }, undefined, { timeout: 5_000 }).catch(async error => {
+        throw new Error(`slot never settled: ${JSON.stringify(await state(page))} (${error.message})`);
+      });
       await page.waitForTimeout(260);
     }
     const samples = await stopSampler(page);
