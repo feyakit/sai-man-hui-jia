@@ -159,6 +159,8 @@ export class StackPage {
   private vehicleFrame?: SpriteFrame;
   private artRect: Rect = {x:0,y:0,w:0,h:0};
   private introShown = false;
+  /** Province rank returned by the last stage-2 clear, for the share card. */
+  private lastProvinceRank: number | null = null;
   private readonly actions: ActionButton[] = [];
   private readonly failButtons: FailButton[] = [];
   private readonly touchWorld = new Vec3();
@@ -1316,6 +1318,7 @@ export class StackPage {
       outcome = {ok:false,reason:'network'};
     }
     if (!this.node.isValid || stage !== 2) return;
+    if (outcome.ok) this.lastProvinceRank = outcome.result.rank;
     this.finishView?.setRankStatus(
       outcome.ok ? formatContributionResult(province,outcome.result) : formatContributionFailure(),
     );
@@ -1343,7 +1346,23 @@ export class StackPage {
           boxes:this.finishStats?.boxes ?? this.game.clearedGroups,
         }
       : {victory:false as const,remaining:this.game.pileRemaining};
-    void showStackShareImage({stage:this.level.stage,result});
+    const def = this.vehicle.def;
+    void showStackShareImage({
+      stage:this.level.stage,
+      result,
+      province:this.rankApi.province,
+      rank:victory ? this.lastProvinceRank : null,
+      counted:this.level.stage <= 2 && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
+      ride:{
+        name:this.vehicle.displayName,
+        art:def.art,
+        w:def.artSize.w,
+        h:def.artSize.h,
+        stretchX:def.stretchX,
+        region:def.regions[0],
+        tint:this.vehicle.tint,
+      },
+    });
   }
 
   private onMomAdded(added: readonly StackCard[]): void {
