@@ -145,7 +145,7 @@ export class StackFinishView {
   render(state: FinishState): void {
     this.state = state;
     const drive = Math.max(0, Math.min(1, (state.time - 1050) / (FINISH_DURATION - 1050)));
-    const carScale = .98 - .20 * drive;
+    const carScale = .98 - .12 * drive;
     this.car.setScale(carScale, carScale, 1);
     this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive);
     this.lidImage.node.setPosition(0, this.lidClosedY);
