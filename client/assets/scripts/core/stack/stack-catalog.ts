@@ -31,3 +31,18 @@ export function stackItems(stage: number): readonly StackItemDef[] {
 export function stackItemByName(items: readonly StackItemDef[], key: string): StackItemDef {
   return items.find(item => item.key === key) ?? items[0];
 }
+
+/** The mother event uses instantly legible goods that already appear in the stage. */
+export const MOM_ITEM_KEYS = [
+  'mandarin', 'duck', 'fruitbasket', 'suitcase_l', 'toycar', 'milk', 'oven',
+] as const;
+
+export function pickMomItem(items: readonly StackItemDef[], random: () => number = Math.random): StackItemDef {
+  const preferredKeys = new Set<string>(MOM_ITEM_KEYS);
+  const candidates = items.filter(item => preferredKeys.has(item.key));
+  const pool = candidates.length ? candidates : items;
+  if (!pool.length) return {key: 'mandarin', name: '砂糖橘'};
+  const drawn = random();
+  const value = Number.isFinite(drawn) ? Math.max(0, Math.min(0.999999, drawn)) : 0;
+  return pool[Math.floor(value * pool.length)];
+}

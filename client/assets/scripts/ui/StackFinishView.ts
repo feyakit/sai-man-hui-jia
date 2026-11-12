@@ -18,7 +18,7 @@ export interface StackFinishStats {
 }
 
 interface FinishButton {
-  readonly action: FinishAction;
+  readonly action: FinishAction | 'share';
   readonly rect: Rect;
   readonly label: Node;
 }
@@ -32,7 +32,6 @@ export class StackFinishView {
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
   private readonly bodyImage: Sprite;
-  private readonly lidImage: Sprite;
   private readonly headline: Node;
   private readonly statsLabel: Node;
   private readonly actions: Node;
@@ -41,13 +40,14 @@ export class StackFinishView {
   private height = 1334;
   private state?: FinishState;
   private ready = false;
-  private lidClosedY = -39;
+  private trunkY = -39;
 
   constructor(
     parent: Node,
     private readonly choices: readonly {title: string; action: FinishAction}[],
     private readonly stats: StackFinishStats,
     private readonly onAction: (action: FinishAction) => void,
+    private readonly onShare: () => void = () => undefined,
   ) {
     this.node = uiNode('StackFinish', parent, 750, 1334);
     this.backdrop = uiNode('NightBackdrop', this.node, 750, 1334).addComponent(Sprite);
@@ -66,16 +66,13 @@ export class StackFinishView {
     this.carFallback = uiNode('CarFallback', this.car, 760, 520).addComponent(Graphics);
     this.trunkImage = this.imageNode('TrunkWell', this.car);
     this.bodyImage = this.imageNode('CarBody', this.car);
-    this.lidImage = this.imageNode('TrunkLid', this.car);
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
-      loadArt('vehicles/sedan_v1_lid'),
-    ]).then(([body, trunk, lid]) => {
+    ]).then(([body, trunk]) => {
       if (!this.node.isValid) return;
       if (trunk) { this.trunkImage.spriteFrame = trunk; this.trunkImage.enabled = true; }
       if (body) { this.bodyImage.spriteFrame = body; this.bodyImage.enabled = true; this.carFallback.enabled = false; }
-      if (lid) { this.lidImage.spriteFrame = lid; this.lidImage.enabled = true; }
       this.ready = true;
       this.layout(this.height);
       if (this.state) this.render(this.state);
@@ -99,8 +96,12 @@ export class StackFinishView {
 
     this.actions = uiNode('FinishActions', this.node, 750, 320);
     this.actionArt = this.actions.addComponent(Graphics);
-    for (let index = 0; index < choices.length; index++) {
-      const choice = choices[index];
+    const choicesWithShare: readonly {title: string; action: FinishAction | 'share'}[] = [
+      ...choices,
+      {title:'生成分享图',action:'share'},
+    ];
+    for (let index = 0; index < choicesWithShare.length; index++) {
+      const choice = choicesWithShare[index];
       const text = label(this.actions, `FinishButton${index}`, choice.title, 30, 0, 0);
       text.color = index === 0 ? ink : gold;
       this.buttons.push({ action: choice.action, rect: {x:125,y:0,w:500,h:74}, label: text.node });
@@ -120,7 +121,7 @@ export class StackFinishView {
     this.drawCarFallback();
     this.headline.setPosition(0, height / 2 - 207);
     this.statsLabel.setPosition(0, height / 2 - 380);
-    const actionsY = -height / 2 + 450;
+    const actionsY = -height / 2 + 300;
     this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
     const baseY = 68;
@@ -137,7 +138,7 @@ export class StackFinishView {
         this.actionArt.stroke();
       }
     }
-    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 118);
+    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 86);
     this.setupCar();
     if (this.state) this.render(this.state);
   }
@@ -148,8 +149,6 @@ export class StackFinishView {
     const carScale = .98 - .12 * drive;
     this.car.setScale(carScale, carScale, 1);
     this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive);
-    this.lidImage.node.setPosition(0, this.lidClosedY);
-    this.lidImage.node.setScale(1, 1, 1);
     this.headline.active = state.celebration;
     this.statsLabel.active = state.celebration;
     this.actions.active = state.buttons;
@@ -159,8 +158,15 @@ export class StackFinishView {
   press(x: number, y: number): void {
     if (!this.state?.buttons) return;
     for (const button of this.buttons) {
-      if (inRect({x, y}, button.rect)) { this.onAction(button.action); return; }
+      if (!inRect({x, y}, button.rect)) continue;
+      if (button.action === 'share') this.onShare();
+      else this.onAction(button.action);
+      return;
     }
+  }
+
+  buttonPoints(): {action: FinishAction | 'share'; rect: Rect}[] {
+    return this.buttons.map(button => ({action:button.action,rect:{...button.rect}}));
   }
 
   private imageNode(name: string, parent: Node): Sprite {
@@ -177,11 +183,9 @@ export class StackFinishView {
     const holeY = Math.round(BODY_HOLE.top / 640 * bodyH - bodyH / 2);
     const holeW = Math.round((BODY_HOLE.right - BODY_HOLE.left) / 1024 * bodyW);
     const holeH = Math.round((BODY_HOLE.bottom - BODY_HOLE.top) / 640 * bodyH);
-    this.lidClosedY = holeY + holeH / 2;
+    this.trunkY = holeY + holeH / 2;
     this.show(this.bodyImage, 0, 0, bodyW, bodyH);
-    this.show(this.trunkImage, 0, this.lidClosedY, holeW, holeH);
-    this.show(this.lidImage, 0, this.lidClosedY, holeW + 24, holeH + 20);
-    this.lidImage.node.setScale(1, 1, 1);
+    this.show(this.trunkImage, 0, this.trunkY, holeW, holeH);
     this.car.setScale(.98, .98, 1);
     this.car.setPosition(0, -this.height * .035);
   }

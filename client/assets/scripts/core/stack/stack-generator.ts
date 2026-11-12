@@ -1,6 +1,7 @@
 import { createRng, shuffle } from '../rng';
 import { stackItemByName, stackItems } from './stack-catalog';
 import { freeCards } from './stack-rules';
+import { STACK_CARD_SIZE } from './stack-layout';
 import { solveStackLevel } from './stack-solver';
 import type { StackCard, StackItemDef, StackLevel, StackPoint } from './stack-types';
 
@@ -45,18 +46,18 @@ function layoutStageOne(): StackCard[] {
   return cards;
 }
 
-const STAGE2_CARD = 112;
+const STAGE2_CARD = STACK_CARD_SIZE;
 const MAIN_LAYER_COUNTS = [22, 20, 18, 16, 14, 12, 10, 8] as const;
 const MAIN_LAYER_COLUMNS = [6, 6, 5, 5, 4, 3, 3, 3] as const;
-const MAIN_STEP_X = 78;
-const MAIN_STEP_Y = 54;
-const MAIN_BASE_Y = 590;
-const MAIN_LAYER_STEP = 48;
+const MAIN_STEP_X = 58;
+const MAIN_STEP_Y = 62;
+const MAIN_BASE_Y = 812;
+const MAIN_LAYER_STEP = 100;
 const SIDE_STACKS = [
-  {source: 'side-left', x: 8, baseY: 300, count: 8},
-  {source: 'side-left', x: 8, baseY: 520, count: 7},
-  {source: 'side-right', x: 646, baseY: 325, count: 7},
-  {source: 'side-right', x: 646, baseY: 545, count: 8},
+  {source: 'side-left', x: 18, baseY: 300, count: 8},
+  {source: 'side-left', x: 18, baseY: 710, count: 7},
+  {source: 'side-right', x: 624, baseY: 320, count: 7},
+  {source: 'side-right', x: 624, baseY: 730, count: 8},
 ] as const;
 
 function centeredRow(count: number, columns: number): number[] {
@@ -79,7 +80,7 @@ function layoutStageTwo(random: () => number): StackCard[] {
       const rowWidth = (rowCount - 1) * MAIN_STEP_X + STAGE2_CARD;
       const startX = Math.round((750 - rowWidth) / 2);
       for (let column = 0; column < rowCount; column++) {
-        const jitterX = Math.round((random() - .5) * 7);
+        const jitterX = Math.round((random() - .5) * 8);
         const jitterY = Math.round((random() - .5) * 4);
         const x = startX + column * MAIN_STEP_X + jitterX;
         const y = Math.round(layerY + row * MAIN_STEP_Y + jitterY);
@@ -87,7 +88,7 @@ function layoutStageTwo(random: () => number): StackCard[] {
       }
     }
   }
-  const sideSize = 96;
+  const sideSize = STAGE2_CARD;
   for (const stack of SIDE_STACKS) {
     for (let index = 0; index < stack.count; index++) {
       cards.push(pileCard(++id, stack.x, stack.baseY + index * 4, sideSize, sideSize, 20 + index, stack.source));

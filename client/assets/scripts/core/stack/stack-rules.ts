@@ -1,4 +1,5 @@
 import { shuffle } from '../rng';
+import { pickMomItem } from './stack-catalog';
 import type {
   StackCard, StackLevel, StackPoint, StackProps, StackStatus, StackTapResult,
 } from './stack-types';
@@ -158,7 +159,7 @@ export class StackGame {
 
   triggerMom(): readonly StackCard[] {
     if (this.level.stage !== 2 || this.currentStatus !== 'playing') return [];
-    const item = this.level.items[Math.floor(this.random() * this.level.items.length)];
+    const item = pickMomItem(this.level.items, this.random);
     const added: StackCard[] = [];
     for (let i = 0; i < PACK_SIZE; i++) {
       const pos = this.level.momPositions[i % this.level.momPositions.length];

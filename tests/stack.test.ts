@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { STAGE1_ITEMS, STAGE2_ITEMS, stackItemByName, stackItems } from '../client/assets/scripts/core/stack/stack-catalog';
+import { MOM_ITEM_KEYS, STAGE1_ITEMS, STAGE2_ITEMS, pickMomItem, stackItemByName, stackItems } from '../client/assets/scripts/core/stack/stack-catalog';
+import { createStackPageLayout, stackCardBounds, stackCardsAreVisible, stackPageHeight } from '../client/assets/scripts/core/stack/stack-layout';
 import { generateStackLevel, STACK_SEEDS } from '../client/assets/scripts/core/stack/stack-generator';
 import {
   freeCards, isBlocked, rectsOverlap, SLOT_CAPACITY, slotInsertIndex, StackGame, topCardAt,
@@ -79,12 +80,19 @@ describe('stack level generation', () => {
       }
     }
 
+    expect(level.cardW).toBeGreaterThanOrEqual(108);
+    expect(level.cardH).toBeGreaterThanOrEqual(108);
     for (const item of level.cards) {
-      expect(item.x).toBeGreaterThanOrEqual(0);
-      expect(item.x + item.w).toBeLessThanOrEqual(750);
-      expect(item.y).toBeGreaterThanOrEqual(150);
-      expect(item.y + item.h).toBeLessThanOrEqual(900);
+      expect(item.w).toBeGreaterThanOrEqual(108);
+      expect(item.h).toBeGreaterThanOrEqual(108);
     }
+    const pageLayout = createStackPageLayout(stackPageHeight(390, 844), 65);
+    expect(pageLayout.stackRatio).toBeGreaterThan(0.55);
+    expect(stackCardsAreVisible(level.cards, pageLayout)).toBe(true);
+    const bounds = stackCardBounds(level.cards);
+    expect(bounds.top).toBeGreaterThanOrEqual(pageLayout.stackTop);
+    expect(bounds.bottom).toBeLessThanOrEqual(pageLayout.stackBottom);
+    expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(190);
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
   });
 
@@ -215,6 +223,9 @@ describe('stack props, failure and mother event', () => {
     const added = game.tickMom(25_000);
     expect(added).toHaveLength(3);
     expect(new Set(added.map(item => item.kind)).size).toBe(1);
+    expect(MOM_ITEM_KEYS).toContain(added[0].kind);
+    expect(pickMomItem(STAGE2_ITEMS, () => 0.999).key).toBe('toycar');
+    expect(pickMomItem(STAGE2_ITEMS, () => Number.NaN).key).toBe('mandarin');
     expect(game.remaining).toBe(153);
     for (const item of added) expect(game.canTap(item.id)).toBe(true);
 

@@ -3,6 +3,10 @@ import {
   UITransform, Vec2, Vec3, game, sys, tween, view,
 } from 'cc';
 import { STACK_SEEDS, generateStackLevel } from '../core/stack/stack-generator';
+import {
+  STACK_ACTION_HEIGHT, STACK_BODY_HOLE, STACK_BODY_SIZE, STACK_BODY_SLICE, STACK_CAR_SCALE_Y,
+  createStackPageLayout, stackCardBounds, stackPageHeight,
+} from '../core/stack/stack-layout';
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import { createRng } from '../core/rng';
@@ -10,8 +14,9 @@ import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
 import { loadArt } from '../services/OptionalResources';
 import { StackSound } from '../services/StackSound';
+import { showStackShareImage } from '../services/StackShareImage';
 import { fill, label, uiNode } from '../ui/UIKit';
-import { StackFinishView } from '../ui/StackFinishView';
+import { StackFinishView, type StackFinishStats } from '../ui/StackFinishView';
 
 const ink = new Color(74,44,26);
 const red = new Color(184,27,43);
@@ -21,12 +26,9 @@ const gold = new Color(246,195,67);
 const paleGold = new Color(255,219,145);
 const deep = new Color(61,24,32);
 const shadow = new Color(27,14,18,95);
-const blockedShade = new Color(30,22,28,154);
+const blockedShade = new Color(30,22,28,102);
 const dimText = new Color(91,74,62);
 const gray = new Color(126,117,109);
-const BODY_SIZE = {w:1024,h:640};
-const BODY_HOLE = {left:159,right:878,top:104,bottom:425};
-const BODY_SLICE = {top:150,bottom:380};
 const ITEM_CROPS: Readonly<Record<string,{x:number;y:number;w:number;h:number}>> = {
   mandarin:{x:6,y:6,w:244,h:244},
   duck:{x:6,y:6,w:372,h:244},
@@ -65,7 +67,7 @@ interface ActionButton {
 }
 
 interface FailButton {
-  readonly action: 'revive' | 'restart';
+  readonly action: 'revive' | 'restart' | 'share';
   readonly title: string;
   readonly rect: Rect;
   readonly label: Label;
@@ -81,6 +83,8 @@ interface StackDebugCard {
   readonly screenRight: number;
   readonly screenTop: number;
   readonly screenBottom: number;
+  readonly screenW: number;
+  readonly screenH: number;
 }
 
 export type StackPageAction = 'next' | 'replay' | 'first';
@@ -100,7 +104,7 @@ export class StackPage {
   private readonly lidImage: Sprite;
   private readonly carFrames: {body?: SpriteFrame; trunk?: SpriteFrame; lid?: SpriteFrame} = {};
   private carRect: Rect = {x:30,y:940,w:690,h:420};
-  private carScaleY = .74;
+  private carScaleY = STACK_CAR_SCALE_Y;
   private readonly hud: Node;
   private readonly stageLabel: Label;
   private readonly remainingLabel: Label;
@@ -144,8 +148,10 @@ export class StackPage {
   private trunk: Rect = {x:16,y:1174,w:718,h:116};
   private slotY = 1185;
   private slotCell = 96;
+  private safeBottom = 0;
   private actionY = 1527;
-  private readonly actionH = 68;
+  private readonly actionH = STACK_ACTION_HEIGHT;
+  private finishStats?: StackFinishStats;
   private readonly slotTitle: Label;
   private readonly reserveTitle: Label;
   private readonly debugHook: object;
@@ -244,6 +250,7 @@ export class StackPage {
       getSolution: () => [...this.level.solution],
       getModalButtons: () => this.debugModalButtons(),
       getActions: () => this.debugActions(),
+      getFinishButtons: () => this.debugFinishButtons(),
       getBoard: () => this.game.cards.map(card => ({
         id:card.id, kind:card.kind, source:card.source, layer:card.layer,
         x:card.x, y:card.y, w:card.w, h:card.h,
@@ -274,7 +281,7 @@ export class StackPage {
     const size = view.getVisibleSize();
     if (size.width !== this.layoutWidth || size.height !== this.layoutHeight) {
       this.layoutWidth = size.width; this.layoutHeight = size.height;
-      this.height = Math.max(1334,size.height/size.width*750);
+      this.height = stackPageHeight(size.width,size.height);
       const scale = Math.min(size.width/750,size.height/this.height);
       this.node.setScale(scale,scale,1);
       this.node.getComponent(UITransform)!.setContentSize(750,this.height);
@@ -298,19 +305,17 @@ export class StackPage {
   }
 
   private layout(bottom: number): void {
+    this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
-    this.actionY = this.height - bottom - 20 - this.actionH;
-    const bodyH = Math.round(BODY_SIZE.h*this.carScaleY);
-    const carBottom = this.actionY-52;
-    const carTop = carBottom-bodyH;
-    const holeW = BODY_HOLE.right-BODY_HOLE.left;
-    this.trunk = {
-      x:Math.round((BODY_HOLE.left-BODY_SIZE.w/2)+375),
-      y:carTop+Math.round(BODY_HOLE.top*this.carScaleY),
-      w:holeW,
-      h:Math.round((BODY_HOLE.bottom-BODY_HOLE.top)*this.carScaleY),
+    const metrics = createStackPageLayout(this.height,bottom);
+    this.actionY = metrics.actionY;
+    this.trunk = {...metrics.trunk};
+    this.carRect = {
+      x:375-STACK_BODY_SIZE.w/2,
+      y:metrics.carTop,
+      w:STACK_BODY_SIZE.w,
+      h:metrics.bodyHeight,
     };
-    this.carRect = {x:375-BODY_SIZE.w/2,y:carTop,w:BODY_SIZE.w,h:bodyH};
     this.slotCell = 96;
     const gap = 3;
     const slotWidth = SLOT_CAPACITY*this.slotCell + (SLOT_CAPACITY-1)*gap;
@@ -372,9 +377,9 @@ export class StackPage {
     this.rect(g,new Color(255,222,161,150),95,110,560,2,1);
     this.rect(g,new Color(255,224,165),302,25,146,4,2);
     // A soft night-market wash makes the pile read as one cargo mountain without boxing it in.
-    this.rect(g,new Color(21,14,28,42),34,148,682,782,42);
-    this.rect(g,new Color(255,194,102,24),74,792,602,190,44);
-    this.rect(g,new Color(246,195,67,62),132,906,486,2,1);
+    this.rect(g,new Color(21,14,28,42),34,136,682,982,42);
+    this.rect(g,new Color(255,194,102,24),74,912,602,206,44);
+    this.rect(g,new Color(246,195,67,62),132,1032,486,2,1);
 
     if (!this.carFrames.body) {
       this.rect(g,new Color(34,22,29,210),car.x,car.y,car.w,Math.min(430,car.h),54);
@@ -419,7 +424,7 @@ export class StackPage {
     if (trunk) this.showImage(this.trunkImage,trunk,this.trunk.x+this.trunk.w/2,this.trunk.y+this.trunk.h/2,this.trunk.w,this.trunk.h);
     if (body) {
       const frame = body.clone();
-      frame.insetTop = BODY_SLICE.top; frame.insetBottom = BODY_SLICE.bottom;
+      frame.insetTop = STACK_BODY_SLICE.top; frame.insetBottom = STACK_BODY_SLICE.bottom;
       frame.insetLeft = 0; frame.insetRight = 0;
       this.bodyImage.type = Sprite.Type.SLICED;
       this.showImage(
@@ -427,13 +432,13 @@ export class StackPage {
         frame,
         this.carRect.x+this.carRect.w/2,
         this.carRect.y+this.carRect.h/2,
-        BODY_SIZE.w,
-        BODY_SIZE.h,
+        STACK_BODY_SIZE.w,
+        STACK_BODY_SIZE.h,
       );
       this.bodyImage.node.setScale(1,this.carScaleY,1);
     }
     if (lid) {
-      const lidW = 642, lidH = 132;
+      const lidW = 642, lidH = 82;
       this.showImage(this.lidImage,lid,375,this.carRect.y-34,lidW,lidH);
       this.lidImage.node.setScale(1,1,1);
       this.lidImage.node.angle = -3;
@@ -645,6 +650,7 @@ export class StackPage {
       for (const button of this.failButtons) {
         if (!contains(button.rect,p.x,p.y)) continue;
         if (button.action === 'revive') this.revive();
+        else if (button.action === 'share') this.openShare(false);
         else this.onAction('replay');
         return;
       }
@@ -793,9 +799,10 @@ export class StackPage {
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);
     hint.color = cream;
     this.drawOverflowCar(layer);
-    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-126);
-    const restart = this.failButton(layer,'restart','重来',-218);
-    this.failButtons.push(revive,restart);
+    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-96);
+    const share = this.failButton(layer,'share','生成分享图',-174);
+    const restart = this.failButton(layer,'restart','重来',-252);
+    this.failButtons.push(revive,share,restart);
     this.sounds.play('fail');
     this.refreshFailButtons();
   }
@@ -901,11 +908,13 @@ export class StackPage {
       ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
       : [{title:'再来一次',action:'replay' as const},{title:'回第 1 关',action:'first' as const}];
     const elapsedSec = Math.max(1,Math.round((Date.now()-this.startedAt)/1000));
+    this.finishStats = {elapsedSec,boxes:this.game.clearedGroups};
     this.finishView = new StackFinishView(
       this.node,
       choices,
-      {elapsedSec,boxes:this.game.clearedGroups},
+      this.finishStats,
       action => this.mapFinish(action),
+      () => this.openShare(true),
     );
     this.finishView.layout(this.height);
     this.finishView.render(this.finish.state);
@@ -915,6 +924,17 @@ export class StackPage {
     if (action === 'next') this.onAction('next');
     else if (action === 'first') this.onAction('first');
     else this.onAction('replay');
+  }
+
+  private openShare(victory: boolean): void {
+    const result = victory
+      ? {
+          victory:true as const,
+          elapsedSec:this.finishStats?.elapsedSec ?? Math.max(1,Math.round((Date.now()-this.startedAt)/1000)),
+          boxes:this.finishStats?.boxes ?? this.game.clearedGroups,
+        }
+      : {victory:false as const,remaining:this.game.pileRemaining};
+    void showStackShareImage({stage:this.level.stage,result});
   }
 
   private onMomAdded(added: readonly StackCard[]): void {
@@ -944,6 +964,8 @@ export class StackPage {
         screenRight:(card.x+card.w)/750*screenWidth,
         screenTop:card.y/this.height*screenHeight,
         screenBottom:(card.y+card.h)/this.height*screenHeight,
+        screenW:card.w/750*screenWidth,
+        screenH:card.h/this.height*screenHeight,
       }));
   }
 
@@ -962,20 +984,27 @@ export class StackPage {
     const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
     const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
     const cards = this.game.cards;
-    const left = Math.min(...cards.map(card => card.x));
-    const right = Math.max(...cards.map(card => card.x+card.w));
-    const top = Math.min(...cards.map(card => card.y));
-    const bottom = Math.max(...cards.map(card => card.y+card.h));
+    const bounds = stackCardBounds(cards);
+    const layout = createStackPageLayout(this.height,this.safeBottom);
     return {
       viewport:{width:screenWidth,height:screenHeight},
+      cardSize:{
+        width:this.level.cardW/750*screenWidth,
+        height:this.level.cardH/this.height*screenHeight,
+      },
       cardBounds:{
-        left:left/750*screenWidth,
-        right:right/750*screenWidth,
-        top:top/this.height*screenHeight,
-        bottom:bottom/this.height*screenHeight,
+        left:bounds.left/750*screenWidth,
+        right:bounds.right/750*screenWidth,
+        top:bounds.top/this.height*screenHeight,
+        bottom:bounds.bottom/this.height*screenHeight,
       },
       hudBottom:140/this.height*screenHeight,
       trunkTop:this.trunk.y/this.height*screenHeight,
+      stackRegion:{
+        top:140/this.height*screenHeight,
+        bottom:this.trunk.y/this.height*screenHeight,
+        ratio:layout.stackRatio,
+      },
       sideCounts:{
         left:cards.filter(card => card.source === 'side-left').length,
         right:cards.filter(card => card.source === 'side-right').length,
@@ -1003,6 +1032,17 @@ export class StackPage {
       kindCounts,
       clickable:this.debugClickable(),
     };
+  }
+
+  private debugFinishButtons(): {action:string;screenX:number;screenY:number}[] {
+    if (!this.finishView) return [];
+    const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
+    const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
+    return this.finishView.buttonPoints().map(button => ({
+      action:button.action,
+      screenX:(button.rect.x+button.rect.w/2)/750*screenWidth,
+      screenY:(button.rect.y+button.rect.h/2)/this.height*screenHeight,
+    }));
   }
 
   private debugModalButtons(): {action:string;screenX:number;screenY:number}[] {
