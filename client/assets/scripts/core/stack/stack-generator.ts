@@ -21,6 +21,12 @@ export interface AssignTriplesOptions {
   /** Prefer this many picks between finishing one group and starting another of the same kind. */
   readonly minGap?: number;
   readonly maxOpenGroups?: number;
+  /**
+   * Chance (0..1) that a newly started group is finished on the very next picks. Higher values
+   * keep matching cards close together in the removal order, which makes the board friendlier.
+   * Zero (the default) leaves the random stream untouched for the approved stage 1/2 seeds.
+   */
+  readonly rushRate?: number;
 }
 
 function pileCard(
@@ -171,6 +177,8 @@ export function assignTriples(
   const capacity = slotCapacityOf({slotCapacity: options.capacity ?? SLOT_CAPACITY});
   const minGap = options.minGap ?? 7;
   const maxOpenGroups = options.maxOpenGroups ?? 3;
+  const rushRate = options.rushRate ?? 0;
+  if (!(rushRate >= 0 && rushRate <= 1)) throw new Error('invalid stack rush rate');
   if (!Number.isInteger(minGap) || minGap < 0) throw new Error('invalid stack triple gap');
   if (!Number.isInteger(maxOpenGroups) || maxOpenGroups < 1) throw new Error('invalid stack in-flight groups');
   if (cards.length % PACK_SIZE !== 0) return undefined;
@@ -184,6 +192,7 @@ export function assignTriples(
   const solution: number[] = [];
   const open: {item: StackItemDef; picks: number}[] = [];
   let pending = 0;
+  let rush: {item: StackItemDef; picks: number} | undefined;
 
   const pickOpen = (wanted: number): {item: StackItemDef; picks: number} | undefined => {
     const matches = open.filter(group => group.picks === wanted);
@@ -226,7 +235,9 @@ export function assignTriples(
     let group: {item: StackItemDef; picks: number} | undefined;
     const pair = pickOpen(2);
     const single = pickOpen(1);
-    if (pending >= 5) {
+    if (rush) {
+      group = rush;
+    } else if (pending >= 5) {
       if (!pair) return undefined;
       group = pair;
     } else if (pending <= 2) {
@@ -238,8 +249,11 @@ export function assignTriples(
       group ??= single;
     }
     if (!group) return undefined;
-    if (group.picks === 2) completeGroup(group);
-    else continueGroup(group);
+    if (rushRate > 0 && !rush && group.picks === 0 && pending <= capacity - 3 && random() < rushRate) rush = group;
+    if (group.picks === 2) {
+      if (group === rush) rush = undefined;
+      completeGroup(group);
+    } else continueGroup(group);
     if (pending > capacity) return undefined;
     const card = available[Math.floor(random() * available.length)];
     card.kind = group.item.key;
