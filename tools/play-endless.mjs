@@ -79,7 +79,7 @@ try {
   const homeButtons = await home.evaluate(() => window.__home.getButtons());
   const best = await home.evaluate(() => localStorage.getItem('smhj.bestLevel'));
   report.home = { best, buttons: homeButtons.map(b => b.key) };
-  if (best !== '4') fail(`best level stored ${best}`);
+  if (best !== '5') fail(`best level stored ${best}`);
   const daily = homeButtons.find(b => b.key === 'daily');
   if (!daily) fail('no daily button');
   await home.screenshot({ path: path.join(outDir, '390x844-home.png') });
