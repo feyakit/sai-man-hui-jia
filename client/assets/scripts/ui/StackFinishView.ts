@@ -43,6 +43,7 @@ export class StackFinishView {
   private height = 1334;
   private state?: FinishState;
   private ready = false;
+  private squeeze = 0;
   private trunkY = -39;
   private hole = {x: 0, y: -39, w: 506, h: 226};
 
@@ -137,9 +138,11 @@ export class StackFinishView {
     this.wash.clear();
     fill(this.wash, night, -375, -height / 2, 750, height, 0);
     this.drawCarFallback();
-    this.headline.setPosition(0, height / 2 - 207);
-    this.statsLabel.setPosition(0, height / 2 - 380);
-    const actionsY = -height / 2 + 300;
+    // Tall phones leave a gap between the car and the buttons; pull both halves towards it.
+    this.squeeze = Math.min(110, Math.max(0, (height - 1334) * .35));
+    this.headline.setPosition(0, height / 2 - 207 - this.squeeze);
+    this.statsLabel.setPosition(0, height / 2 - 380 - this.squeeze);
+    const actionsY = -height / 2 + 300 + this.squeeze;
     this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
     const baseY = 68;
@@ -166,7 +169,7 @@ export class StackFinishView {
     const drive = Math.max(0, Math.min(1, (state.time - 1050) / (FINISH_DURATION - 1050)));
     const carScale = .98 - .12 * drive;
     this.car.setScale(carScale, carScale, 1);
-    this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive);
+    this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive - this.squeeze);
     this.headline.active = state.celebration;
     this.statsLabel.active = state.celebration;
     this.actions.active = state.buttons;
@@ -207,12 +210,12 @@ export class StackFinishView {
     this.show(this.trunkImage, 0, this.trunkY, holeW, holeH);
     this.layoutCargo();
     this.car.setScale(.98, .98, 1);
-    this.car.setPosition(0, -this.height * .035);
+    this.car.setPosition(0, -this.height * .035 - this.squeeze);
   }
 
   private layoutCargo(): void {
     const {x, y, w, h} = this.hole;
-    const max = Math.min(w * .24, h * .48, 164);
+    const max = Math.min(w * .26, h * .55, 180);
     for (let index = 0; index < this.cargoSprites.length && index < STACK_CARGO_POSITIONS.length; index++) {
       const sprite = this.cargoSprites[index];
       const frame = sprite.spriteFrame;
@@ -222,7 +225,8 @@ export class StackFinishView {
       const width = ratio >= 1 ? max : max * ratio;
       const height = ratio >= 1 ? max / ratio : max;
       sprite.node.getComponent(UITransform)!.setContentSize(width, height);
-      sprite.node.setPosition(x + (px - .5) * w, y + (.5 - py) * h);
+      // The body art hides the lower part of the hole, so lift the cargo into the visible opening.
+      sprite.node.setPosition(x + (px - .5) * w, y + (.5 - (py * .8 - .15)) * h);
       sprite.node.angle = -angle * 180 / Math.PI;
       sprite.enabled = true;
     }
