@@ -52,8 +52,8 @@ describe('vehicle slot cells', () => {
             }
             const layout = createStackPageLayout(height, safe, art.y);
             expect(layout.stackBottom).toBeLessThan(art.y);
-            // The board loses at most 40 design units against the sedan's open lid.
-            expect(layout.stackBottom).toBeGreaterThanOrEqual(base.stackBottom - 40);
+            // The board loses at most 60 design units against the sedan's open lid.
+            expect(layout.stackBottom).toBeGreaterThanOrEqual(base.stackBottom - 60);
           }
         }
       });

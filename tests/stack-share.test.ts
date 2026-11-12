@@ -43,3 +43,26 @@ describe('stack share copy', () => {
     expect(stackShareFileName(2, false)).toBe('塞满回家-第2关-差一点.png');
   });
 });
+
+import {formatStackShareProvince, formatStackShareVehicle, STACK_SHARE_LINK} from '../client/assets/scripts/core/stack/stack-share';
+
+describe('share card province and ride lines', () => {
+  it('claims +1 and the rank on a counted win', () => {
+    expect(formatStackShareProvince('四川', true)).toBe('我为四川省塞满回家 +1');
+    expect(formatStackShareProvince('北京', true, 3)).toBe('我为北京市塞满回家 +1，北京市排第 3');
+  });
+  it('taunts the province on a loss', () => {
+    expect(formatStackShareProvince('广东', false, null, () => 0)).toBe('广东省还差我一箱');
+    expect(formatStackShareProvince('广东', false, null, () => .99)).toContain('广东省');
+  });
+  it('prints nothing without a province and never claims +1 for uncounted levels', () => {
+    expect(formatStackShareProvince(null, true)).toBeNull();
+    expect(formatStackShareProvince(undefined, false)).toBeNull();
+    expect(formatStackShareProvince('河南', true, 2, Math.random, false)).not.toContain('+1');
+  });
+  it('names the ride and carries the trial link', () => {
+    expect(formatStackShareVehicle('摩托车')).toBe('本关座驾：摩托车');
+    expect(formatStackShareVehicle(null)).toBeNull();
+    expect(STACK_SHARE_LINK).toBe('feyakit.github.io/smhj-play');
+  });
+});
