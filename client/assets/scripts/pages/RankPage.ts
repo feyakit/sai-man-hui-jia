@@ -196,8 +196,8 @@ export class RankPage {
     g.lineWidth = 1.5;
     g.roundRect(26 - 375,top - 74,108,46,15);
     g.stroke();
-    label(this.node,'RankBackArrow','‹',32,26 - 375,top - 49).color = gold;
-    label(this.node,'RankBack','返回',21,43 - 375,top - 49).color = paleGold;
+    label(this.node,'RankBackArrow','‹',32,44 - 375,top - 49).color = gold;
+    label(this.node,'RankBack','返回',21,90 - 375,top - 49).color = paleGold;
 
     rect(new Color(25,7,15,190),60,78,630,134,30);
     rect(new Color(99,22,29,248),66,84,618,122,26);
@@ -404,7 +404,7 @@ export class RankPage {
       enabled ? new Color(255,218,145,190) : new Color(136,119,109,130),
       13,
     );
-    const item = this.contentLabel(`RankPager-${text}`,text,21,375,rect.y + rect.h / 2,enabled ? paleGold : new Color(160,145,137));
+    const item = this.contentLabel(`RankPager-${text}`,text,21,rect.x + rect.w / 2,rect.y + rect.h / 2,enabled ? paleGold : new Color(160,145,137));
     item.node.getComponent(UITransform)!.setContentSize(rect.w - 24,rect.h - 4);
     item.overflow = Label.Overflow.SHRINK;
   }
@@ -454,12 +454,12 @@ export class RankPage {
       this.contentArt.roundRect(rect.x + 2 - 375,this.height / 2 - rect.y - rect.h + 2,rect.w - 4,rect.h - 4,22);
       this.contentArt.stroke();
     }
-    const title = this.contentLabel(`RankButton-${text}`,text,size,375,rect.y + rect.h / 2 - (subtext ? 9 : 0),textColor);
+    const title = this.contentLabel(`RankButton-${text}`,text,size,rect.x + rect.w / 2,rect.y + rect.h / 2 - (subtext ? 9 : 0),textColor);
     title.isBold = primary;
     title.node.getComponent(UITransform)!.setContentSize(rect.w - 28,rect.h - 10);
     title.overflow = Label.Overflow.SHRINK;
     if (subtext) {
-      const sub = this.contentLabel(`RankButton-${text}-sub`,subtext,15,375,rect.y + rect.h / 2 + 23,new Color(122,65,25));
+      const sub = this.contentLabel(`RankButton-${text}-sub`,subtext,15,rect.x + rect.w / 2,rect.y + rect.h / 2 + 23,new Color(122,65,25));
       sub.node.getComponent(UITransform)!.setContentSize(rect.w - 30,22);
       sub.overflow = Label.Overflow.SHRINK;
     }
