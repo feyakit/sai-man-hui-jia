@@ -54,15 +54,16 @@ const GRID_Y0 = 150;
 /**
  * Bottom-to-top layers of the hard mound. Odd layers sit half a card right and down, so every
  * card is pinned by up to four cards above; upper layers shrink towards the centre and the
- * base loses its top corners, giving a hill silhouette instead of a wall.
+ * base loses its top corners, giving a hill silhouette instead of a wall. The cap zig-zags six
+ * reachable cards across the crown so the opening choices are broader without flattening the pile.
  */
-const MAIN_LAYERS: readonly {cols: readonly [number, number]; rows: readonly [number, number]; half: boolean; skip?: readonly string[]}[] = [
-  {cols: [0, 5], rows: [0, 6], half: false, skip: ['0,0', '5,0', '0,1', '5,1']},
+const MAIN_LAYERS: readonly {cols: readonly [number, number]; rows: readonly [number, number]; half: boolean; wave?: number; skip?: readonly string[]}[] = [
+  {cols: [0, 5], rows: [0, 6], half: false, skip: ['0,0', '5,0', '0,1', '5,1', '2,6', '3,6']},
   {cols: [0, 4], rows: [0, 5], half: true, skip: ['0,0', '4,0']},
   {cols: [1, 4], rows: [0, 6], half: false},
   {cols: [1, 3], rows: [0, 5], half: true},
   {cols: [2, 3], rows: [1, 5], half: false},
-  {cols: [2, 2], rows: [1, 4], half: true},
+  {cols: [2, 2], rows: [0, 5], half: true, wave: 40},
 ];
 const SIDE_STACKS = [
   {source: 'side-left', x: 36, y: 1006, count: 12, step: 13},
@@ -75,11 +76,12 @@ function layoutStageTwo(random: () => number): StackCard[] {
   MAIN_LAYERS.forEach((layer, index) => {
     const offset = layer.half ? HALF : 0;
     for (let row = layer.rows[0]; row <= layer.rows[1]; row++) {
+      const wave = layer.wave ? (row % 2 ? layer.wave : -layer.wave) : 0;
       for (let col = layer.cols[0]; col <= layer.cols[1]; col++) {
         if (layer.skip?.includes(`${col},${row}`)) continue;
         const jitterX = Math.round((random() - .5) * 4);
         const jitterY = Math.round((random() - .5) * 4);
-        cards.push(pileCard(++id, GRID_X0 + offset + col * GRID + jitterX, GRID_Y0 + offset + row * GRID + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
+        cards.push(pileCard(++id, GRID_X0 + offset + wave + col * GRID + jitterX, GRID_Y0 + offset + row * GRID + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
       }
     }
   });

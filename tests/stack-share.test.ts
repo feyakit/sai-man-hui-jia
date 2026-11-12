@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STACK_SHARE_BACKLOG_THRESHOLD,
   STACK_SHARE_CAPTIONS,
   STACK_SHARE_HEIGHT,
   STACK_SHARE_TITLE,
@@ -15,7 +16,10 @@ describe('stack share copy', () => {
   it('formats victory and failure statistics without browser state', () => {
     expect(formatStackShareStats({victory:true,elapsedSec:18,boxes:6})).toBe('用时 18 秒 · 打包 6 箱');
     expect(formatStackShareStats({victory:true,elapsedSec:NaN,boxes:-3})).toBe('用时 1 秒 · 打包 0 箱');
+    expect(STACK_SHARE_BACKLOG_THRESHOLD).toBe(30);
     expect(formatStackShareStats({victory:false,remaining:17})).toBe('差 17 件就塞满');
+    expect(formatStackShareStats({victory:false,remaining:30})).toBe('差 30 件就塞满');
+    expect(formatStackShareStats({victory:false,remaining:31})).toBe('后备箱塞爆了，年货还剩一大堆');
     expect(formatStackShareStats({victory:false,remaining:NaN})).toBe('差 0 件就塞满');
     expect(formatStackShareStage(2)).toBe('第 2 关');
     expect(formatStackShareStage(-1)).toBe('第 1 关');
