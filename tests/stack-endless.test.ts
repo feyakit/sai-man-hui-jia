@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dailyGreedyRate, dailySeed, generateDailyLevel } from '../client/assets/scripts/core/stack/stack-daily';
+import { calibrateDaily, dailyGreedyRate, dailySeed, dailyTableAttempt, generateDailyLevel } from '../client/assets/scripts/core/stack/stack-daily';
 import {
   ENDLESS_MAX_CARDS, ENDLESS_REMIX_POOL, ENDLESS_TUNED_UNTIL, ROUTE_TITLES, endlessTuning, moundHeights, moundTemplateFor, capacityForLevel, endlessCardCount, endlessKindCount,
   generateEndlessLevel, routeTitleForLevel,
@@ -68,14 +68,14 @@ describe('endless stack levels', () => {
     expect(heights[0]).toBeGreaterThan(heights[heights.length - 1]);
   });
 
-  it('remixes calibrated late boards past the tuned range and keeps them solvable', () => {
+  it('replays calibrated late boards past the tuned range and keeps them solvable', () => {
     const late = generateEndlessLevel(ENDLESS_TUNED_UNTIL + 1);
     const base = generateEndlessLevel(ENDLESS_REMIX_POOL[0]);
     expect(late.stage).toBe(ENDLESS_TUNED_UNTIL + 1);
     expect(late.cards).toHaveLength(base.cards.length);
     expect(late.items).toHaveLength(base.items.length);
     expect(late.cards.map(card => card.x)).toEqual(base.cards.map(card => card.x));
-    expect(late.items.map(item => item.key)).not.toEqual(base.items.map(item => item.key));
+    expect(late.cards.map(card => card.kind)).toEqual(base.cards.map(card => card.kind));
     expect(solveStackLevel(late, {maxNodes: 240_000}).solvable).toBe(true);
     expect(endlessTuning(40)).toEqual(endlessTuning(ENDLESS_TUNED_UNTIL));
   });
@@ -97,7 +97,7 @@ describe('daily stack levels', () => {
     expect(() => dailySeed(new Date('invalid'))).toThrow('invalid daily stack date');
   });
 
-  it('generates deterministic, solvable four-layer levels at stage-one difficulty', () => {
+  it('generates deterministic, solvable four-layer levels at stage-one difficulty', {timeout: 60_000}, () => {
     for (const key of ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']) {
       const level = generateDailyLevel(key);
       expect(level).toEqual(generateDailyLevel(key));
@@ -114,6 +114,12 @@ describe('daily stack levels', () => {
       expect(rate).toBeLessThanOrEqual(.7);
       expect(solveStackLevel(level, {maxNodes: 1_000}).solvable).toBe(true);
     }
+    // The shipped table matches runtime calibration and skips re-simulation on phones.
+    for (const key of ['2026-11-12', '2027-03-01', '2028-12-31']) {
+      expect(dailyTableAttempt(key)).toBe(calibrateDaily(key).attempt);
+    }
+    expect(dailyTableAttempt('2026-10-31')).toBeUndefined();
+    expect(dailyTableAttempt('2040-01-01')).toBeUndefined();
     expect(() => generateDailyLevel('2026-02-30')).toThrow('invalid daily stack date key');
     expect(() => generateDailyLevel('not-a-date')).toThrow('invalid daily stack date key');
   });
