@@ -128,6 +128,14 @@ export function vehicleScaleForPage(pageHeight: number): number {
   return pageHeight < 1450 ? .76 : 1;
 }
 
+/**
+ * The code-built sedan is wider and taller than the sprite rides, so short pages shrink it a bit
+ * more (whole car, lid and trunk uniformly) to keep ≥44px cards on 375×667.
+ */
+export function sedanScaleForPage(pageHeight: number): number {
+  return pageHeight < 1450 ? .7 : 1;
+}
+
 export function vehicleSlotLabel(def: VehicleDef, capacity: number): string {
   return `${def.container} · ${capacity} 格`;
 }

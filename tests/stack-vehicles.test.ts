@@ -68,3 +68,24 @@ describe('vehicle slot cells', () => {
     expect(nine[8].x + nine[8].w).toBeLessThanOrEqual(trunk.x + trunk.w);
   });
 });
+
+describe('sedan on short pages', () => {
+  it('shrinks the whole sedan so 375x667 keeps ≥44px stage cards', async () => {
+    const {createStackPageLayout, fitStackBoard, stackContentBounds, stackPageHeight} = await import('../client/assets/scripts/core/stack/stack-layout');
+    const {sedanScaleForPage} = await import('../client/assets/scripts/core/stack/stack-vehicles');
+    const {generateEndlessLevel} = await import('../client/assets/scripts/core/stack/stack-endless');
+    const height = stackPageHeight(375, 667);
+    const scale = sedanScaleForPage(height);
+    expect(scale).toBeLessThan(1);
+    expect(sedanScaleForPage(stackPageHeight(390, 844))).toBe(1);
+    const full = createStackPageLayout(height, 0);
+    const small = createStackPageLayout(height, 0, undefined, scale);
+    expect(small.carBottom).toBe(full.carBottom);
+    expect(small.trunk.w).toBeLessThan(full.trunk.w);
+    expect(small.trunk.x + small.trunk.w / 2 - 375).toBeCloseTo((full.trunk.x + full.trunk.w / 2 - 375) * scale, 0);
+    expect(small.stackBottom).toBeGreaterThan(full.stackBottom);
+    const level = generateEndlessLevel(3);
+    const fit = fitStackBoard(stackContentBounds(level), small);
+    expect(108 * fit.scale * 375 / 750).toBeGreaterThanOrEqual(44);
+  });
+});
