@@ -4,7 +4,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8767/';
-const outDir = process.argv[3] ?? '/workspace/play-check/match3-v3';
+const outDir = process.argv[3] ?? '/workspace/play-check/match3-v4';
 const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 const browserErrors = [];
 const screenshots = [];
@@ -22,16 +22,45 @@ const context = await browser.newContext({
   deviceScaleFactor: 2,
 });
 
-async function open(query) {
+async function newPage(query) {
   const page = await context.newPage();
   page.on('pageerror', error => browserErrors.push(`pageerror: ${error.message}`));
   page.on('console', message => {
     if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
   });
   await page.goto(new URL(query, root).href, { waitUntil: 'domcontentloaded' });
+  return page;
+}
+
+async function open(query) {
+  const page = await newPage(query);
   await page.waitForFunction(() => !!window.__stack, undefined, { timeout: 20_000 });
   await page.waitForTimeout(700);
   return page;
+}
+
+async function openHome(query = '') {
+  const page = await newPage(query);
+  await page.waitForFunction(() => !!window.__home, undefined, { timeout: 20_000 });
+  await page.waitForTimeout(700);
+  return page;
+}
+
+async function homeButton(page, key) {
+  const buttons = await page.evaluate(() => window.__home?.getButtons() ?? []);
+  const button = buttons.find(candidate => candidate.key === key);
+  if (!button) throw new Error(`home button ${key} is not exposed: ${JSON.stringify(buttons)}`);
+  if (button.screenLeft < 0 || button.screenRight > 390
+    || button.screenTop < 0 || button.screenBottom > 844) {
+    throw new Error(`home button ${key} is outside the 390x844 viewport: ${JSON.stringify(button)}`);
+  }
+  return button;
+}
+
+async function tapHomeButton(page, key) {
+  const button = await homeButton(page, key);
+  await page.touchscreen.tap(button.screenX, button.screenY);
+  return button;
 }
 
 async function waitForPlayable(page) {
@@ -132,12 +161,18 @@ async function tapSolutionCard(page, id) {
 }
 
 try {
-  const stage1 = await open('?mode=stack');
-  await waitForPlayable(stage1);
-  const initial = await state(stage1);
+  const startPage = await openHome('');
+  const startButton = await homeButton(startPage, 'start');
+  if (startButton.screenW < 300) throw new Error(`home start button is too narrow: ${JSON.stringify(startButton)}`);
+  await screenshot(startPage, '00-home.png');
+  await tapHomeButton(startPage, 'start');
+  await startPage.waitForFunction(() => !!window.__stack, undefined, { timeout: 10_000 });
+  await waitForPlayable(startPage);
+  const initial = await state(startPage);
   if (initial.stage !== 1 || initial.remaining !== 18 || initial.totalRemaining !== 18) {
-    throw new Error(`unexpected stage 1 start: ${JSON.stringify(initial)}`);
+    throw new Error(`home start did not open stage 1: ${JSON.stringify(initial)}`);
   }
+  const stage1 = startPage;
   await screenshot(stage1, '01-stage1-start.png');
 
   const solution = await stage1.evaluate(() => window.__stack.getSolution());
@@ -192,7 +227,23 @@ try {
   await waitForShareOverlay(stage1);
   await screenshot(stage1, '09-share-win.png');
   await saveShareImage(stage1, '11-share-image-win.png');
-  await closeShareOverlay(stage1);
+  // Replaying after a win must rebuild a playable board with its goods art (textures survive the finish view).
+  const replay = finishButtons.find(button => button.action === 'replay');
+  if (replay) {
+    if (await stage1.locator('#stack-share-close').count()) {
+      await stage1.locator('#stack-share-close').click();
+      await stage1.waitForFunction(() => !document.querySelector('#stack-share-overlay'), undefined, {timeout: 3_000});
+    }
+    await stage1.touchscreen.tap(replay.screenX, replay.screenY);
+    await stage1.waitForFunction(() => {
+      const current = window.__stack?.getState();
+      return current && current.status === 'playing' && current.remaining === 18;
+    }, undefined, { timeout: 8_000 });
+    await stage1.waitForTimeout(1_500);
+    await screenshot(stage1, '14-replay-stage1.png');
+  } else {
+    await closeShareOverlay(stage1);
+  }
   await stage1.close();
 
   const stage2 = await open('?mode=stack&stage=2');
@@ -283,8 +334,24 @@ try {
   await screenshot(mom, '08-mom-event.png');
   await mom.close();
 
+  const homeAgain = await openHome('');
+  await screenshot(homeAgain, '00-home.png');
+  await tapHomeButton(homeAgain, 'classic');
+  await homeAgain.waitForFunction(() => !window.__home, undefined, { timeout: 6_000 });
+  await homeAgain.waitForTimeout(900);
+  const classicState = await homeAgain.evaluate(() => ({
+    home: !!window.__home,
+    stack: !!window.__stack,
+  }));
+  if (classicState.home || classicState.stack) {
+    throw new Error(`classic entry did not leave the home/match-three pages: ${JSON.stringify(classicState)}`);
+  }
+  await screenshot(homeAgain, '13-home-to-pack.png');
+  await homeAgain.close();
+
   if (browserErrors.length) throw new Error(browserErrors.join('\n'));
   const ordered = [
+    '00-home.png',
     '01-stage1-start.png',
     '02-stage1-tapped.png',
     '03-stage1-win.png',
@@ -297,6 +364,7 @@ try {
     '10-share-fail.png',
     '11-share-image-win.png',
     '12-share-image-fail.png',
+    '13-home-to-pack.png',
   ];
   console.log(JSON.stringify({
     ok: true,

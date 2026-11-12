@@ -4,6 +4,7 @@ import { GAME_SUBTITLE, GAME_TITLE } from './config/brand';
 import { shanghaiDate } from './core/date';
 import { stage1 } from './core/stage1';
 import type { Level } from './core/types';
+import { HomePage } from './pages/HomePage';
 import { StagePage } from './pages/StagePage';
 import { StackPage, type StackPageAction } from './pages/StackPage';
 import { WebPlatform } from './platform/WebPlatform';
@@ -17,21 +18,40 @@ const {ccclass} = _decorator;
 export class Bootstrap extends Component {
   private stage?: StagePage;
   private stack?: StackPage;
+  private home?: HomePage;
   private readonly platform = new WebPlatform();
   private readonly api = new Api(this.platform);
 
   start(): void {
-    if (this.platform.isStackMode()) this.startStack(this.platform.stackStage());
-    else if (this.platform.isMomMode()) void this.startMomMode();
-    else if (this.platform.hasLevelOverride()) void this.challenge();
-    else this.show(stage1(shanghaiDate()));
+    const route = this.platform.route();
+    if (route === 'stack') this.startStack(this.platform.stackStage());
+    else if (route === 'mom') void this.startMomMode();
+    else if (route === 'pack') this.startPack();
+    else if (route === 'level') void this.challenge();
+    else this.showHome();
   }
 
-  update(): void { this.stage?.tick(); this.stack?.tick(); }
+  update(): void { this.stage?.tick(); this.stack?.tick(); this.home?.tick(); }
+
+  private showHome(): void {
+    this.node.destroyAllChildren();
+    this.stage = undefined;
+    this.stack = undefined;
+    this.home = new HomePage(this.node,{
+      onStart:() => this.startStack(1),
+      onClassic:() => this.startPack(),
+    });
+  }
+
+  private startPack(): void {
+    if (this.platform.hasLevelOverride()) void this.challenge();
+    else this.show(stage1(shanghaiDate()));
+  }
 
   private show(level: Level): void {
     this.node.destroyAllChildren();
     this.stack = undefined;
+    this.home = undefined;
     this.stage = new StagePage(this.node,level,() => this.platform.now(),action => {
       if (action === 'next') void this.challenge();
       else if (action === 'mom') void this.startMomMode();
@@ -43,6 +63,7 @@ export class Bootstrap extends Component {
   private startStack(stage: 1 | 2): void {
     this.node.destroyAllChildren();
     this.stage = undefined;
+    this.home = undefined;
     this.stack = new StackPage(this.node,stage,(action: StackPageAction) => {
       if (action === 'next') this.startStack(2);
       else if (action === 'first') this.startStack(1);
@@ -51,6 +72,7 @@ export class Bootstrap extends Component {
   }
 
   private async startMomMode(): Promise<void> {
+    this.home = undefined;
     try {
       const level = await this.api.loadMom();
       if (this.node.isValid) this.show(level);
@@ -60,6 +82,7 @@ export class Bootstrap extends Component {
   }
 
   private async challenge(): Promise<void> {
+    this.home = undefined;
     this.message('年货装上车，准备跑最后一程');
     try {
       const level = await this.api.loadChallenge();
@@ -72,6 +95,7 @@ export class Bootstrap extends Component {
   private message(text: string, onTap?: () => void): void {
     this.stage = undefined;
     this.stack = undefined;
+    this.home = undefined;
     this.node.destroyAllChildren();
     const size = view.getVisibleSize();
     const width = 750;

@@ -1,4 +1,4 @@
-import type { SpriteFrame } from 'cc';
+import { assetManager, ImageAsset, resources, type SpriteFrame } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import {
   STACK_BODY_HOLE,
@@ -52,6 +52,32 @@ function frameDrawable(frame: SpriteFrame | undefined): FrameDrawable | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Cocos may drop an image's DOM element after uploading it to the GPU (for example once the finish
+ * view has drawn the same goods), so reload the original file from its URL and only fall back to
+ * the cached element when that is impossible.
+ */
+async function freshDrawable(path: string, frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
+  try {
+    const info = resources.getInfoWithPath(path, ImageAsset);
+    const url = info
+      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: '.png', bundle: 'resources'} as never)
+      : (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+    if (url && typeof Image !== 'undefined') {
+      const image = await new Promise<HTMLImageElement | null>(resolve => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => resolve(null);
+        element.src = url;
+      });
+      if (image && image.naturalWidth > 0) {
+        return {image, width: image.naturalWidth, height: image.naturalHeight};
+      }
+    }
+  } catch { /* fall back to the cached element */ }
+  return frameDrawable(frame);
 }
 
 function roundedRect(
@@ -141,7 +167,6 @@ function drawLantern(context: CanvasRenderingContext2D, x: number, y: number, sc
   context.ellipse(0, 0, 54, 67, 0, 0, Math.PI * 2);
   context.stroke();
   context.fillStyle = '#ffd77f';
-  fillRounded(context, '#ffd77f', -43, -7, 86, 14, 7);
   fillRounded(context, '#ffd77f', -36, -86, 72, 13, 6);
   context.fillStyle = '#a81b23';
   fillRounded(context, '#a81b23', -30, -79, 60, 11, 5);
@@ -332,6 +357,10 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
       loadArt('vehicles/sedan_v1_trunk'),
       ...STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`)),
     ]);
+    const paths = ['art/vehicles/sedan_v1_body', 'art/vehicles/sedan_v1_trunk', ...STACK_SHARE_ITEM_KEYS.map(key => `art/items/${key}`)];
+    const [bodyArt, trunkArt, ...itemArt] = await Promise.all(
+      [bodyFrame, trunkFrame, ...itemFrames].map((frame, index) => freshDrawable(paths[index], frame)),
+    );
     const canvas = document.createElement('canvas');
     canvas.width = STACK_SHARE_WIDTH;
     canvas.height = STACK_SHARE_HEIGHT;
@@ -340,13 +369,13 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     drawBackground(context);
     const copy = drawTexts(context, scene);
     const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
-    const body = frameDrawable(bodyFrame);
+    const body = bodyArt;
     if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
     else drawFallbackCar(context);
     drawCargo(
       context,
-      frameDrawable(trunkFrame),
-      itemFrames.map(frameDrawable),
+      trunkArt,
+      itemArt,
       bodyX,
       bodyY,
       bodyWidth,
