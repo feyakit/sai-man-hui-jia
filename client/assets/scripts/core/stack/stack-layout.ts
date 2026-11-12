@@ -45,7 +45,11 @@ export function stackPageHeight(screenWidth: number, screenHeight: number): numb
 }
 
 /** Shared, renderer-independent geometry for the board, car and bottom action row. */
-export function createStackPageLayout(height: number, safeBottom = 0): StackPageLayout {
+/**
+ * `vehicleTop` (design y of the top of a non-sedan ride's art) replaces the sedan's lid as the
+ * lowest line the board may reach.
+ */
+export function createStackPageLayout(height: number, safeBottom = 0, vehicleTop?: number): StackPageLayout {
   safeBottom = Math.max(STACK_MIN_SAFE_BOTTOM, safeBottom);
   const actionY = height - safeBottom - 20 - STACK_ACTION_HEIGHT;
   const bodyHeight = Math.round(STACK_BODY_SIZE.h * STACK_CAR_SCALE_Y);
@@ -59,7 +63,7 @@ export function createStackPageLayout(height: number, safeBottom = 0): StackPage
   };
   const stackTop = STACK_HUD_BOTTOM;
   // Cards must stay above the open lid, not merely above the trunk hole.
-  const stackBottom = carTop - STACK_LID_RISE - STACK_BOARD_GAP;
+  const stackBottom = (vehicleTop ?? carTop - STACK_LID_RISE) - STACK_BOARD_GAP;
   return {
     height,
     safeBottom,
