@@ -14,7 +14,7 @@ import {
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import {
-  sedanSlotCells, vehicleArtRect, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
   type LevelVehicle, type Rgb,
 } from '../core/stack/stack-vehicles';
 import { createRng } from '../core/rng';
@@ -394,7 +394,7 @@ export class StackPage {
     this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
     const base = createStackPageLayout(this.height,bottom);
-    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY);
+    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY,750,vehicleScaleForPage(this.height));
     const metrics = this.isSedan ? base : createStackPageLayout(this.height,bottom,this.artRect.y);
     this.safeBottom = metrics.safeBottom;
     this.board = fitStackBoard(stackContentBounds(this.level),metrics);

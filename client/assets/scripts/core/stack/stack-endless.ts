@@ -1,6 +1,8 @@
 import { createRng } from '../rng';
 import { ENDLESS_ITEMS } from './stack-catalog';
-import { assignTriples, layoutStageTwo, stackMomPositions, stackReservePositions } from './stack-generator';
+import {
+  STACK_ROW_STEP, STACK_SHELF_Y, STACK_SIDE_FAN_Y, assignTriples, layoutStageTwo, stackMomPositions, stackReservePositions,
+} from './stack-generator';
 import { STACK_CARD_SIZE } from './stack-layout';
 import { solveStackLevel } from './stack-solver';
 import type { StackCard, StackLevel } from './stack-types';
@@ -55,7 +57,7 @@ function addExtraLayer(cards: StackCard[], index: number, random: () => number):
     for (let col = 1; col <= 4; col++) {
       const jitterX = Math.round((random() - .5) * 4);
       const jitterY = Math.round((random() - .5) * 4);
-      cards.push(card(++id, 92 + half + wave + col * 112 + jitterX, 150 + half + row * 112 + jitterY, layer, 'pile'));
+      cards.push(card(++id, 92 + half + wave + col * 112 + jitterX, 150 + half * STACK_ROW_STEP / 112 + row * STACK_ROW_STEP + jitterY, layer, 'pile'));
     }
   }
 }
@@ -65,10 +67,10 @@ function addSideFan(cards: StackCard[], count: number): void {
   const right = count - left;
   let id = Math.max(...cards.map(item => item.id));
   for (let index = 0; index < left; index++) {
-    cards.push(card(++id, 36 + index * 13, 1006, 40 + index, 'side-left'));
+    cards.push(card(++id, 36 + index * 13, STACK_SIDE_FAN_Y, 40 + index, 'side-left'));
   }
   for (let index = 0; index < right; index++) {
-    cards.push(card(++id, 606 - index * 13, 1006, 40 + index, 'side-right'));
+    cards.push(card(++id, 606 - index * 13, STACK_SIDE_FAN_Y, 40 + index, 'side-right'));
   }
 }
 
@@ -108,7 +110,7 @@ function attemptEndless(n: number, baseSeed: string, attempt: number): StackLeve
     cardH: STACK_CARD_SIZE,
     items,
     cards: assigned.cards,
-    reservePositions: stackReservePositions(STACK_CARD_SIZE, STACK_CARD_SIZE, 12),
+    reservePositions: stackReservePositions(STACK_CARD_SIZE, STACK_CARD_SIZE, 12, STACK_SHELF_Y),
     momPositions: stackMomPositions(STACK_CARD_SIZE),
     solution: assigned.solution,
     slotCapacity: capacity,

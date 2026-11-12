@@ -59,6 +59,9 @@ try {
       if (layout.cardBounds.top < layout.hudBottom - .5) fail('cards overlap the title bar');
       if (layout.cardBounds.left < -.5 || layout.cardBounds.right > width + .5) fail('cards leave the screen');
       if (layout.viewport.height - layout.actionsBottom < 18) fail('bottom buttons too close to the gesture bar');
+      // Card-size floor for the opening boards: 56px on 390x844, 44px on the short 375x667.
+      const floor = width === 390 && height === 844 ? 56 : width === 375 && height === 667 ? 43.5 : 0;
+      if (layout.cardSize.width < floor) fail(`cards ${layout.cardSize.width.toFixed(1)}px < ${floor}px`);
       for (const card of clickable) if (card.screenBottom > layout.lidTop + .5) fail(`card ${card.id} below lid`);
       checkBottom(layout, fail);
       await page.screenshot({ path: path.join(outDir, `${width}x${height}-stage${stage}.png`) });
