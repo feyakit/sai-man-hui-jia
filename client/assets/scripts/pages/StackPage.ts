@@ -777,7 +777,7 @@ export class StackPage {
         view.node.setPosition(center);
       }
       const blocked = isBlocked(card,this.game.cards);
-      view.back.node.active = this.hideCovered && blocked;
+      view.back.node.active = !!card.carton && blocked;
       this.drawDim(view,blocked && !view.back.node.active);
     }
   }
@@ -883,7 +883,7 @@ export class StackPage {
   }
 
   private get hideCovered(): boolean {
-    return !!(this.level as StackLevel & {hideCovered?: boolean}).hideCovered;
+    return this.level.cards.some(card => card.carton);
   }
 
   /** Kraft carton with red tape and a 福 stamp: what a covered card looks like from level 4 on. */
@@ -1517,6 +1517,7 @@ export class StackPage {
       headline:routeHeadline(this.route),
       capacity:this.capacity,
       hideCovered:this.hideCovered,
+      cartonCards:this.game.cards.filter(card => card.carton).length,
       cartonBacks:[...this.cardViews.values()].filter(view => view.node.active && view.back.node.active).length,
       status:this.game.status,
       remaining:this.game.pileRemaining,
