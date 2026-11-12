@@ -107,7 +107,7 @@ export class StackPage {
   private readonly soundButton: Node;
   private readonly soundButtonArt: Graphics;
   private readonly soundButtonLabel: Label;
-  private soundRect: Rect = {x:647,y:62,w:94,h:52};
+  private soundRect: Rect = {x:647,y:162,w:94,h:52};
   private readonly pileLayer: Node;
   private readonly slotLayer: Node;
   private readonly fxLayer: Node;
@@ -324,13 +324,13 @@ export class StackPage {
     }
     this.stageLabel.node.setPosition(-242,this.height/2-61);
     this.remainingLabel.node.setPosition(198,this.height/2-61);
-    this.soundButton.setPosition(319,this.height/2-88);
+    this.soundButton.setPosition(319,this.height/2-188);
     this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-61);
     this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-105);
     this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-17));
     this.reserveTitle.node.setPosition(-235,this.height/2-920);
-    this.momLayer.getChildByName('MomBubble')!.setPosition(-58,this.height/2-204);
-    this.momAvatar.setPosition(285,this.height/2-204);
+    this.momLayer.getChildByName('MomBubble')!.setPosition(40,this.height/2-204);
+    this.momAvatar.setPosition(-250,this.height/2-204);
     for (let i=0;i<this.actions.length;i++) {
       const rect = this.actions[i].rect;
       rect.x = 44 + i*222; rect.y = this.actionY; rect.w = 210; rect.h = this.actionH;
