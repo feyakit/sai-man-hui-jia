@@ -11,8 +11,11 @@ const n = Number(process.argv[2]);
 const target = Number(process.argv[3]);
 const outDir = process.argv[4];
 mkdirSync(outDir, {recursive: true});
-const out = path.join(outDir, `level-${n}.json`);
-const log = path.join(outDir, `level-${n}.log`);
+// Optional 6th arg: JSON {from,to,rush,kd,tag} to search an extra candidate range into level-<n>-<tag>.*
+const spec = process.argv[6] ? JSON.parse(process.argv[6]) as {from: number; to: number; rush: number[]; kd: number[]; tag: string} : undefined;
+const suffix = spec ? `-${spec.tag}` : '';
+const out = path.join(outDir, `level-${n}${suffix}.json`);
+const log = path.join(outDir, `level-${n}${suffix}.log`);
 if (existsSync(out)) process.exit(0);
 const screenTol = Math.max(2, target * .3);
 const confirmTol = Math.max(1.2, target * .15);
@@ -23,8 +26,12 @@ const rate = (tuning: EndlessTuning, runs: number, seed: string): number => {
 };
 let best: {tuning: EndlessTuning; rate: number; miss: number} | undefined;
 const candidates: EndlessTuning[] = [];
+if (spec) {
+  for (const kd of spec.kd) for (let attempt = spec.from; attempt < spec.to; attempt++) for (const rushRate of spec.rush) candidates.push({rushRate, minGap: 6, maxOpenGroups: 3, attempt, ...(kd ? {kindDelta: kd} : {})});
+} else {
 for (let attempt = 0; attempt < 10; attempt++) for (const rushRate of [1, .85, .7, .5]) candidates.push({rushRate, minGap: 6, maxOpenGroups: 3, attempt});
 for (const kindDelta of [2, 4]) for (let attempt = 0; attempt < 8; attempt++) for (const rushRate of [1, .85]) candidates.push({rushRate, minGap: 6, maxOpenGroups: 3, attempt, kindDelta});
+}
 for (const tuning of candidates) {
   let screen: number;
   try { screen = rate(tuning, 150, `cal-${n}`); } catch (error) { appendFileSync(log, `${JSON.stringify(tuning)} gen-fail ${error}\n`); continue; }
