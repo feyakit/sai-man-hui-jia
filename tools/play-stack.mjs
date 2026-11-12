@@ -335,8 +335,13 @@ try {
   const momState = await state(mom);
   const momCards = await mom.evaluate(() => window.__stack.getBoard().filter(card => card.source === 'mom'));
   if (momCards.length !== 3) throw new Error(`mom event added ${momCards.length} cards`);
-  if (!momCards.every(card => momState.clickable.some(clickable => clickable.id === card.id))) {
-    throw new Error('mom cards are not all clickable/visible');
+  // Mom now tucks her goods into the pile: same kind, three separate spots, at least one on top
+  // (tappable) and at least one under other cards.
+  if (new Set(momCards.map(card => card.kind)).size !== 1) throw new Error('mom cards are not one kind');
+  const tappableMom = momCards.filter(card => momState.clickable.some(clickable => clickable.id === card.id)).length;
+  if (tappableMom < 1 || tappableMom > 2) throw new Error(`mom placement should mix top and covered cards, tappable=${tappableMom}`);
+  for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++) {
+    if (Math.abs(momCards[a].x - momCards[b].x) + Math.abs(momCards[a].y - momCards[b].y) < 100) throw new Error('mom cards are clumped together');
   }
   await screenshot(mom, '08-mom-event.png');
   await mom.close();
