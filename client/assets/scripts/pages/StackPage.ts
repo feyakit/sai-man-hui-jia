@@ -10,13 +10,22 @@ import {
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import { createRng } from '../core/rng';
-import { FinishPlayback, type FinishAction } from '../game/FinishTimeline';
+import {
+  formatContributionFailure,
+  formatContributionResult,
+  formatRankProgress,
+  type Province,
+} from '../core/rank/rank';
+import { FINISH_DURATION, FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
 import { loadArt } from '../services/OptionalResources';
+import { RankApi } from '../services/RankApi';
 import { StackSound } from '../services/StackSound';
 import { showStackShareImage } from '../services/StackShareImage';
+import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { StackFinishView, type StackFinishStats } from '../ui/StackFinishView';
+import { RankPage } from './RankPage';
 
 const ink = new Color(74,44,26);
 const red = new Color(184,27,43);
@@ -133,6 +142,9 @@ export class StackPage {
   private readonly momBubble: Label;
   private momHideTimer?: ReturnType<typeof setTimeout>;
   private failLayer?: Node;
+  private provincePicker?: ProvincePicker;
+  private rankPage?: RankPage;
+  private readonly rankApi = new RankApi();
   private finish?: FinishPlayback;
   private finishView?: StackFinishView;
   private finishStarted = 0;
@@ -250,6 +262,7 @@ export class StackPage {
       getModalButtons: () => this.debugModalButtons(),
       getActions: () => this.debugActions(),
       getFinishButtons: () => this.debugFinishButtons(),
+      getFinishRank: () => this.finishView?.rankStatusText ?? null,
       getBoard: () => this.game.cards.map(card => ({
         id:card.id, kind:card.kind, source:card.source, layer:card.layer,
         x:card.x, y:card.y, w:card.w, h:card.h,
@@ -274,6 +287,7 @@ export class StackPage {
       this.refresh();
       if (this.game.status === 'lost') this.openFail();
     }
+    if (debug === 'win' && this.level.stage === 2) this.beginFinish(true);
   }
 
   tick(): void {
@@ -644,6 +658,8 @@ export class StackPage {
   private touch(event: EventTouch): void {
     this.sounds.unlock();
     const p = this.point(event);
+    if (this.rankPage) { this.rankPage.press(p.x,p.y); return; }
+    if (this.provincePicker) { this.provincePicker.press(p.x,p.y); return; }
     if (this.finish) { this.finishView?.press(p.x,p.y); return; }
     if (this.modal === 'fail') {
       for (const button of this.failButtons) {
@@ -888,11 +904,12 @@ export class StackPage {
     this.refresh();
   }
 
-  private beginFinish(): void {
+  private beginFinish(instant = false): void {
     if (this.finish) return;
     this.busy = true;
     this.sounds.play('win');
-    this.finishStarted = Date.now();
+    const elapsedMs = instant ? Math.max(Date.now()-this.startedAt,60_000) : Math.max(0,Date.now()-this.startedAt);
+    this.finishStarted = instant ? Date.now()-FINISH_DURATION : Date.now();
     this.finish = new FinishPlayback(cue => {
       if (cue.sound === 'trunk_slam') this.sounds.play('pack');
       else if (cue.sound === 'horn') this.sounds.play('tap');
@@ -903,7 +920,7 @@ export class StackPage {
     const choices = this.level.stage === 1
       ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
       : [{title:'再来一次',action:'replay' as const},{title:'回第 1 关',action:'first' as const}];
-    const elapsedSec = Math.max(1,Math.round((Date.now()-this.startedAt)/1000));
+    const elapsedSec = instant ? Math.round(elapsedMs/1000) : Math.max(1,Math.round(elapsedMs/1000));
     this.finishStats = {elapsedSec,boxes:this.game.clearedGroups};
     this.finishView = new StackFinishView(
       this.node,
@@ -911,9 +928,62 @@ export class StackPage {
       this.finishStats,
       action => this.mapFinish(action),
       () => this.openShare(true),
+      () => this.openRankPage(),
     );
     this.finishView.layout(this.height);
-    this.finishView.render(this.finish.state);
+    this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
+    if (this.level.stage === 2) this.startRankReporting(elapsedMs);
+    else if (this.rankApi.province) void this.sendClear(1,this.rankApi.province,elapsedMs);
+  }
+
+  private startRankReporting(elapsedMs: number): void {
+    if (!this.rankApi.enabled) {
+      this.finishView?.setRankStatus(formatContributionFailure());
+      return;
+    }
+    const province = this.rankApi.province;
+    if (!province) {
+      this.provincePicker = new ProvincePicker(this.node,this.height,null,{
+        onSelect:selected => {
+          this.rankApi.setProvince(selected);
+          this.provincePicker = undefined;
+          this.sendClear(2,selected,elapsedMs);
+        },
+        onCancel:() => {
+          this.provincePicker = undefined;
+          this.finishView?.setRankStatus('未选择省份，排行未上报');
+        },
+      });
+      return;
+    }
+    this.sendClear(2,province,elapsedMs);
+  }
+
+  private async sendClear(stage: 1 | 2, province: Province, ms: number): Promise<void> {
+    if (stage === 2) this.finishView?.setRankStatus(formatRankProgress(province));
+    let outcome: Awaited<ReturnType<RankApi['submitClear']>>;
+    try {
+      outcome = await this.rankApi.submitClear({
+        province,
+        stage,
+        ms,
+        sessionId:this.rankApi.deviceId,
+      });
+    } catch {
+      outcome = {ok:false,reason:'network'};
+    }
+    if (!this.node.isValid || stage !== 2) return;
+    this.finishView?.setRankStatus(
+      outcome.ok ? formatContributionResult(province,outcome.result) : formatContributionFailure(),
+    );
+  }
+
+  private openRankPage(): void {
+    if (this.rankPage) return;
+    this.rankPage = new RankPage(this.node,this.height,() => {
+      this.rankPage?.node.destroy();
+      this.rankPage = undefined;
+    });
   }
 
   private mapFinish(action: FinishAction): void {
@@ -1027,6 +1097,8 @@ export class StackPage {
       props:this.game.props,
       kindCounts,
       clickable:this.debugClickable(),
+      province:this.rankApi.province,
+      overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
     };
   }
 
