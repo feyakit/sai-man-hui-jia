@@ -198,7 +198,7 @@ try {
   const stage2 = await open('?mode=stack&stage=2');
   await waitForPlayable(stage2);
   const hard = await state(stage2);
-  if (hard.stage !== 2 || hard.remaining !== 78 || hard.totalRemaining !== 78) {
+  if (hard.stage !== 2 || hard.remaining !== 150 || hard.totalRemaining !== 150) {
     throw new Error(`unexpected stage 2 start: ${JSON.stringify(hard)}`);
   }
   const layout = await stage2.evaluate(() => window.__stack.getLayout());
@@ -272,7 +272,7 @@ try {
   const mom = await open('?mode=stack&stage=2&debug=mom');
   await mom.waitForFunction(() => {
     const current = window.__stack.getState();
-    return current.momEvents >= 1 && current.momVisible && current.remaining === 81;
+    return current.momEvents >= 1 && current.momVisible && current.remaining === 153;
   }, undefined, { timeout: 5_000 });
   const momState = await state(mom);
   const momCards = await mom.evaluate(() => window.__stack.getBoard().filter(card => card.source === 'mom'));
