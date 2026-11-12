@@ -1,4 +1,4 @@
-import { Color, Graphics, Node, Sprite, UITransform } from 'cc';
+import { Color, Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { FINISH_DURATION, type FinishAction, type FinishState } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
 import { inRect } from '../game/InteractionGeometry';
@@ -19,7 +19,7 @@ export interface StackFinishStats {
 }
 
 interface FinishButton {
-  readonly action: FinishAction | 'share';
+  readonly action: FinishAction | 'share' | 'rank';
   readonly rect: Rect;
   readonly label: Node;
 }
@@ -37,6 +37,9 @@ export class StackFinishView {
   private readonly bodyImage: Sprite;
   private readonly headline: Node;
   private readonly statsLabel: Node;
+  private readonly rankLabel: Node;
+  private readonly rankTextLabel: Label;
+  private rankText: string | null = null;
   private readonly actions: Node;
   private readonly actionArt: Graphics;
   private readonly buttons: FinishButton[] = [];
@@ -53,6 +56,7 @@ export class StackFinishView {
     private readonly stats: StackFinishStats,
     private readonly onAction: (action: FinishAction) => void,
     private readonly onShare: () => void = () => undefined,
+    private readonly onRank?: () => void,
   ) {
     this.node = uiNode('StackFinish', parent, 750, 1334);
     this.backdrop = uiNode('NightBackdrop', this.node, 750, 1334).addComponent(Sprite);
@@ -112,12 +116,19 @@ export class StackFinishView {
     statsBg.stroke();
     fill(statsBg, new Color(255, 219, 145, 46), -280, -27, 560, 54, 18);
     label(this.statsLabel, 'StatsText', this.statsText(), 26, 0, 0).color = pale;
+    this.rankLabel = uiNode('FinishRank', this.node, 720, 58);
+    const rankBg = this.rankLabel.addComponent(Graphics);
+    fill(rankBg,new Color(49,12,22,168),-306,-24,612,48,18);
+    this.rankTextLabel = label(this.rankLabel, 'FinishRankText', '', 23, 0, 0);
+    this.rankTextLabel.color = pale;
+    this.rankLabel.active = false;
 
     this.actions = uiNode('FinishActions', this.node, 750, 320);
     this.actionArt = this.actions.addComponent(Graphics);
-    const choicesWithShare: readonly {title: string; action: FinishAction | 'share'}[] = [
+    const choicesWithShare: readonly {title: string; action: FinishAction | 'share' | 'rank'}[] = [
       ...choices,
       {title:'生成分享图',action:'share'},
+      ...(this.onRank ? [{title:'看省份排行',action:'rank' as const}] : []),
     ];
     for (let index = 0; index < choicesWithShare.length; index++) {
       const choice = choicesWithShare[index];
@@ -142,6 +153,7 @@ export class StackFinishView {
     this.squeeze = Math.min(110, Math.max(0, (height - 1334) * .38));
     this.headline.setPosition(0, height / 2 - 207 - this.squeeze);
     this.statsLabel.setPosition(0, height / 2 - 380 - this.squeeze);
+    this.rankLabel.setPosition(0, height / 2 - 438 - this.squeeze);
     const actionsY = -height / 2 + 300;
     this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
@@ -172,6 +184,7 @@ export class StackFinishView {
     this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive - this.squeeze * 1.65);
     this.headline.active = state.celebration;
     this.statsLabel.active = state.celebration;
+    this.rankLabel.active = state.celebration && !!this.rankText;
     this.actions.active = state.buttons;
     this.node.getChildByName('SkipHint')!.active = !state.buttons;
   }
@@ -181,12 +194,21 @@ export class StackFinishView {
     for (const button of this.buttons) {
       if (!inRect({x, y}, button.rect)) continue;
       if (button.action === 'share') this.onShare();
+      else if (button.action === 'rank') this.onRank?.();
       else this.onAction(button.action);
       return;
     }
   }
 
-  buttonPoints(): {action: FinishAction | 'share'; rect: Rect}[] {
+  setRankStatus(text: string | null): void {
+    this.rankText = text;
+    this.rankTextLabel.string = text ?? '';
+    this.rankLabel.active = !!text && !!this.state?.celebration;
+  }
+
+  get rankStatusText(): string | null { return this.rankText; }
+
+  buttonPoints(): {action: FinishAction | 'share' | 'rank'; rect: Rect}[] {
     return this.buttons.map(button => ({action:button.action,rect:{...button.rect}}));
   }
 

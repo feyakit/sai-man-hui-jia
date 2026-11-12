@@ -3,7 +3,10 @@ import { GAME_SUBTITLE, GAME_TITLE } from '../config/brand';
 import { STACK_BODY_HOLE, STACK_BODY_SIZE } from '../core/stack/stack-layout';
 import { STACK_CARGO_POSITIONS, STACK_SHARE_ITEM_KEYS } from '../core/stack/stack-share';
 import { loadArt } from '../services/OptionalResources';
+import { RankApi } from '../services/RankApi';
+import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
+import { RankPage } from './RankPage';
 
 const red = new Color(184, 29, 42);
 const deepRed = new Color(84, 18, 27);
@@ -34,7 +37,7 @@ export interface HomePageActions {
 }
 
 interface HomeButtonPoint {
-  readonly key: 'start' | 'classic';
+  readonly key: 'start' | 'classic' | 'province' | 'rank';
   readonly screenX: number;
   readonly screenY: number;
   readonly screenLeft: number;
@@ -61,6 +64,11 @@ export class HomePage {
   private readonly classicLabel: Label;
   private readonly startNode: Node;
   private readonly classicNode: Node;
+  private readonly provinceLabel: Label;
+  private readonly rankLabel: Label;
+  private readonly rankApi = new RankApi();
+  private provincePicker?: ProvincePicker;
+  private rankPage?: RankPage;
   private readonly car: Node;
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
@@ -72,6 +80,8 @@ export class HomePage {
   private readonly debugHook: object;
   private startRect: HomeButtonRect = {x:75,y:0,w:START_WIDTH,h:START_HEIGHT};
   private classicRect: HomeButtonRect = {x:195,y:0,w:CLASSIC_WIDTH,h:CLASSIC_HEIGHT};
+  private provinceRect: HomeButtonRect = {x:185,y:0,w:380,h:56};
+  private rankRect: HomeButtonRect = {x:225,y:0,w:300,h:58};
   private width = 750;
   private height = 1334;
   private layoutWidth = -1;
@@ -149,11 +159,20 @@ export class HomePage {
     this.classicNode = uiNode('HomeClassic', this.node, CLASSIC_WIDTH, CLASSIC_HEIGHT);
     this.classicLabel = label(this.classicNode, 'HomeClassicText', '经典装箱玩法', 24, 0, 0);
     this.classicLabel.color = paleGold;
+    this.provinceLabel = label(this.node, 'HomeProvinceText', '选择你的省份', 25, 0, 0);
+    this.provinceLabel.color = paleGold;
+    this.rankLabel = label(this.node, 'HomeRankText', '省份排行', 24, 0, 0);
+    this.rankLabel.color = paleGold;
+    this.refreshProvinceLabel();
 
     this.node.on(Node.EventType.TOUCH_END, this.touch, this);
     this.debugHook = Object.freeze({
       getButtons: () => this.debugButtons(),
       getLayout: () => ({viewport:{width:this.screenWidth(),height:this.screenHeight()},height:this.height}),
+      getState: () => ({
+        province:this.rankApi.province,
+        overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
+      }),
     });
     if (typeof window !== 'undefined') {
       (window as Window & {__home?: object}).__home = this.debugHook;
@@ -196,6 +215,14 @@ export class HomePage {
     const rulesY = Math.round(this.height * .70);
     this.ruleLineOne.node.setPosition(0, this.height / 2 - rulesY);
     this.ruleLineTwo.node.setPosition(0, this.height / 2 - rulesY - 42);
+
+    const provinceY = Math.max(340, this.carTop - 112);
+    this.provinceRect = {x:(750 - 380) / 2, y:provinceY, w:380, h:56};
+    this.provinceLabel.node.setPosition(0, this.height / 2 - (provinceY + 28));
+
+    const rankY = this.height - 382;
+    this.rankRect = {x:(750 - 300) / 2, y:rankY, w:300, h:58};
+    this.rankLabel.node.setPosition(0, this.height / 2 - (rankY + 29));
 
     const startY = this.height - 272;
     this.startRect = {x:(750 - START_WIDTH) / 2, y:startY, w:START_WIDTH, h:START_HEIGHT};
@@ -254,6 +281,23 @@ export class HomePage {
     g.stroke();
     rect(new Color(255, 214, 126, 160), classic.x + 92, classic.y + classic.h - 11, classic.w - 184, 2, 1);
 
+    const province = this.provinceRect;
+    rect(new Color(25, 8, 15, 180), province.x, province.y, province.w, province.h, 22);
+    rect(new Color(84, 19, 31, 232), province.x + 3, province.y + 3, province.w - 6, province.h - 6, 19);
+    g.strokeColor = new Color(255, 207, 111, 175);
+    g.lineWidth = 1.5;
+    g.roundRect(left + province.x + 2, top - (province.y + province.h) + 2, province.w - 4, province.h - 4, 20);
+    g.stroke();
+    rect(new Color(255, 219, 145, 58), province.x + 22, province.y + 8, province.w - 44, 2, 1);
+
+    const rank = this.rankRect;
+    rect(new Color(45, 10, 20, 214), rank.x, rank.y, rank.w, rank.h, 20);
+    g.strokeColor = new Color(255, 207, 111, 196);
+    g.lineWidth = 2;
+    g.roundRect(left + rank.x + 2, top - (rank.y + rank.h) + 2, rank.w - 4, rank.h - 4, 18);
+    g.stroke();
+    rect(new Color(255, 213, 132, 52), rank.x + 44, rank.y + 10, rank.w - 88, 2, 1);
+
     this.drawCarFallback();
   }
 
@@ -299,6 +343,22 @@ export class HomePage {
 
   private touch(event: {getUILocation(): {x:number;y:number}}): void {
     const point = this.point(event);
+    if (this.provincePicker) {
+      this.provincePicker.press(point.x, point.y);
+      return;
+    }
+    if (this.rankPage) {
+      this.rankPage.press(point.x, point.y);
+      return;
+    }
+    if (contains(this.provinceRect, point.x, point.y)) {
+      this.openProvincePicker();
+      return;
+    }
+    if (contains(this.rankRect, point.x, point.y)) {
+      this.openRankPage();
+      return;
+    }
     if (contains(this.startRect, point.x, point.y)) {
       this.actions.onStart();
       return;
@@ -318,8 +378,11 @@ export class HomePage {
   private debugButtons(): HomeButtonPoint[] {
     const screenWidth = this.screenWidth();
     const screenHeight = this.screenHeight();
-    return (['start', 'classic'] as const).map(key => {
-      const rect = key === 'start' ? this.startRect : this.classicRect;
+    return (['start', 'classic', 'province', 'rank'] as const).map(key => {
+      const rect = key === 'start' ? this.startRect
+        : key === 'classic' ? this.classicRect
+        : key === 'province' ? this.provinceRect
+        : this.rankRect;
       return {
         key,
         screenX:(rect.x + rect.w / 2) / 750 * screenWidth,
@@ -332,6 +395,31 @@ export class HomePage {
         screenH:rect.h / this.height * screenHeight,
       };
     });
+  }
+
+  private openProvincePicker(): void {
+    if (this.provincePicker) return;
+    this.provincePicker = new ProvincePicker(this.node,this.height,this.rankApi.province,{
+      onSelect:province => {
+        this.rankApi.setProvince(province);
+        this.provincePicker = undefined;
+        this.refreshProvinceLabel();
+      },
+      onCancel:() => { this.provincePicker = undefined; },
+    });
+  }
+
+  private openRankPage(): void {
+    if (this.rankPage) return;
+    this.rankPage = new RankPage(this.node,this.height,() => {
+      this.rankPage?.node.destroy();
+      this.rankPage = undefined;
+    });
+  }
+
+  private refreshProvinceLabel(): void {
+    const province = this.rankApi.province;
+    this.provinceLabel.string = province ? `你的省份 · ${province}` : '选择你的省份';
   }
 
   private screenWidth(): number {

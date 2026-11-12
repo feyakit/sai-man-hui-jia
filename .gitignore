@@ -11,3 +11,4 @@ client/build/
 cloudfunctions/
 levels/solutions/
 tools/out/
+worker/.wrangler/

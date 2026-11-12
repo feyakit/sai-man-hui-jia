@@ -5,7 +5,9 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8767/';
 const outDir = process.argv[3] ?? '/workspace/play-check/match3-v4';
-const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+const base = new URL(baseUrl);
+if (!base.pathname.endsWith('/')) base.pathname += '/';
+const root = base.href;
 const browserErrors = [];
 const screenshots = [];
 
@@ -28,7 +30,11 @@ async function newPage(query) {
   page.on('console', message => {
     if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
   });
-  await page.goto(new URL(query, root).href, { waitUntil: 'domcontentloaded' });
+  const url = new URL(query, root);
+  for (const [key, value] of base.searchParams) {
+    if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+  }
+  await page.goto(url.href, { waitUntil: 'domcontentloaded' });
   return page;
 }
 
