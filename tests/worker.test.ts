@@ -162,3 +162,12 @@ describe('province leaderboard worker', () => {
     expect(response.status).toBe(500);
   });
 });
+
+describe('leaderboard freshness', () => {
+  it('never lets browsers cache the leaderboard, so a fresh clear shows at once', async () => {
+    const response = await handle(new Request('https://smhj-api.feyakit.workers.dev/api/rank'), {
+      hit: async () => 1, insertClear: async row => ({inserted: true, province: row.province}), stage2Counts: async () => [],
+    });
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+});
