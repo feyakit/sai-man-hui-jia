@@ -227,7 +227,23 @@ try {
   await waitForShareOverlay(stage1);
   await screenshot(stage1, '09-share-win.png');
   await saveShareImage(stage1, '11-share-image-win.png');
-  await closeShareOverlay(stage1);
+  // Replaying after a win must rebuild a playable board with its goods art (textures survive the finish view).
+  const replay = finishButtons.find(button => button.action === 'replay');
+  if (replay) {
+    if (await stage1.locator('#stack-share-close').count()) {
+      await stage1.locator('#stack-share-close').click();
+      await stage1.waitForFunction(() => !document.querySelector('#stack-share-overlay'), undefined, {timeout: 3_000});
+    }
+    await stage1.touchscreen.tap(replay.screenX, replay.screenY);
+    await stage1.waitForFunction(() => {
+      const current = window.__stack?.getState();
+      return current && current.status === 'playing' && current.remaining === 18;
+    }, undefined, { timeout: 8_000 });
+    await stage1.waitForTimeout(1_500);
+    await screenshot(stage1, '14-replay-stage1.png');
+  } else {
+    await closeShareOverlay(stage1);
+  }
   await stage1.close();
 
   const stage2 = await open('?mode=stack&stage=2');

@@ -10,7 +10,12 @@ export function loadArt(file: string): Promise<SpriteFrame | undefined> {
     pending=new Promise(resolve => {
       try {
         if (!resources.getInfoWithPath(path,SpriteFrame)) { resolve(undefined); return; }
-        resources.load(path,SpriteFrame,(error,frame) => resolve(error ? undefined : frame));
+        resources.load(path,SpriteFrame,(error,frame) => {
+          // Keep goods out of the dynamic atlas: cropped clones share the packed region, and
+          // destroying a page freed it, so replays showed the wrong goods and a missing car body.
+          if (!error && frame) frame.packable = false;
+          resolve(error ? undefined : frame);
+        });
       } catch { resolve(undefined); }
     });
     images.set(path,pending);
