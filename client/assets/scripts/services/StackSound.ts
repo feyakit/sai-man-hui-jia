@@ -1,8 +1,14 @@
-/** Compact Web Audio cues for stack mode. No clips or new resource types are required. */
-export type StackSoundEvent = 'tap' | 'fly' | 'pack' | 'fail' | 'win' | 'mom';
+import { renderBgm } from '../core/audio/stack-music';
+import { renderSfx, type StackSfxEvent } from '../core/audio/stack-sfx';
+
+/** Synthesized cues for stack mode. No clips or new resource types are required. */
+export type StackSoundEvent = StackSfxEvent;
 
 export const STACK_SOUND_STORAGE_KEY = 'stack-sound-enabled';
-export const STACK_SOUND_EVENTS: readonly StackSoundEvent[] = ['tap', 'fly', 'pack', 'fail', 'win', 'mom'];
+export const STACK_MUSIC_STORAGE_KEY = 'stack-music-enabled';
+export const STACK_SOUND_EVENTS: readonly StackSoundEvent[] = [
+  'tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop',
+];
 
 export interface StackSoundProfile {
   readonly label: string;
@@ -10,13 +16,22 @@ export interface StackSoundProfile {
 }
 
 export const STACK_SOUND_PROFILES: Readonly<Record<StackSoundEvent, StackSoundProfile>> = {
-  tap: { label: '短哒', layers: 1 },
-  fly: { label: '轻嗖', layers: 2 },
-  pack: { label: '封箱咔哒与叮', layers: 2 },
-  fail: { label: '下行低音', layers: 2 },
-  win: { label: '上行喜庆音', layers: 4 },
-  mom: { label: '妈妈提示音', layers: 2 },
+  tap: { label: '短哒木鱼', layers: 1 },
+  fly: { label: '飞入轻嗖', layers: 2 },
+  pack: { label: '封箱咔哒与叮', layers: 3 },
+  combo: { label: '连击高音铃', layers: 3 },
+  warn: { label: '槽位告急双音', layers: 2 },
+  mom: { label: '妈妈加塞提示', layers: 3 },
+  swap: { label: '换车机械声', layers: 3 },
+  win: { label: '通关唢呐与鞭炮', layers: 5 },
+  fail: { label: '下行低音', layers: 3 },
+  prop: { label: '道具闪光铃', layers: 3 },
 };
+
+export interface StackSoundPlayOptions {
+  /** Combo level 1..8; higher levels sound higher. */
+  readonly level?: number;
+}
 
 export interface StackSoundStorage {
   getItem(key: string): string | null;
@@ -24,6 +39,12 @@ export interface StackSoundStorage {
 }
 
 type AudioContextCtor = new () => AudioContext;
+
+const SFX_MASTER_LEVEL = 0.65;
+const MUSIC_MASTER_LEVEL = 0.58;
+const RENDER_RATE = 22050;
+const bgmSamples = new Map<number, Float32Array>();
+const sfxSamples = new Map<string, Float32Array>();
 
 export function readStackSoundEnabled(storage: StackSoundStorage | undefined = browserStorage()): boolean {
   try { return storage?.getItem(STACK_SOUND_STORAGE_KEY) !== '0'; } catch { return true; }
@@ -36,8 +57,23 @@ export function writeStackSoundEnabled(
   try { storage?.setItem(STACK_SOUND_STORAGE_KEY, enabled ? '1' : '0'); } catch { /* Private mode: keep in-memory state. */ }
 }
 
+export function readStackMusicEnabled(storage: StackSoundStorage | undefined = browserStorage()): boolean {
+  try { return storage?.getItem(STACK_MUSIC_STORAGE_KEY) !== '0'; } catch { return true; }
+}
+
+export function writeStackMusicEnabled(
+  enabled: boolean,
+  storage: StackSoundStorage | undefined = browserStorage(),
+): void {
+  try { storage?.setItem(STACK_MUSIC_STORAGE_KEY, enabled ? '1' : '0'); } catch { /* Private mode: keep in-memory state. */ }
+}
+
 function browserStorage(): StackSoundStorage | undefined {
   try { return typeof localStorage === 'undefined' ? undefined : localStorage; } catch { return undefined; }
+}
+
+function browserDocument(): Document | undefined {
+  try { return typeof document === 'undefined' ? undefined : document; } catch { return undefined; }
 }
 
 function contextConstructor(): AudioContextCtor | undefined {
@@ -48,139 +84,263 @@ function contextConstructor(): AudioContextCtor | undefined {
   return scope.AudioContext ?? scope.webkitAudioContext;
 }
 
-/** Synthesizes short cues after the first real touch unlocks the browser AudioContext. */
+function comboLevel(level: number | undefined): number {
+  if (level === undefined || !Number.isFinite(level)) return 1;
+  return Math.max(1, Math.min(8, Math.round(level)));
+}
+
+function renderRateFor(context: AudioContext): number {
+  return Math.min(RENDER_RATE, Math.max(8000, Math.round(context.sampleRate)));
+}
+
+function bgmData(rate: number): Float32Array {
+  let data = bgmSamples.get(rate);
+  if (!data) {
+    data = renderBgm(rate);
+    bgmSamples.set(rate, data);
+  }
+  return data;
+}
+
+function sfxData(event: StackSoundEvent, level: number, rate: number): Float32Array {
+  const key = `${event}:${level}:${rate}`;
+  let data = sfxSamples.get(key);
+  if (!data) {
+    data = renderSfx(event, rate, event === 'combo' ? { level } : undefined);
+    sfxSamples.set(key, data);
+  }
+  return data;
+}
+
+/** Synthesizes music and cues after the first real touch unlocks the browser AudioContext. */
 export class StackSound {
   private readonly storage: StackSoundStorage | undefined;
-  private soundEnabled: boolean;
+  private readonly visibilityListener = (): void => {
+    const doc = browserDocument();
+    if (!doc) return;
+    if (doc.hidden) this.pause();
+    else this.resume();
+  };
+  private _soundEnabled: boolean;
+  private _musicEnabled: boolean;
+  private listening = false;
+  private paused = false;
+  private disposed = false;
   private context?: AudioContext;
-  private master?: GainNode;
+  private sfxGain?: GainNode;
+  private musicGain?: GainNode;
+  private musicSource?: AudioBufferSourceNode;
+  private musicBuffer?: AudioBuffer;
+  private readonly sfxBuffers = new Map<string, AudioBuffer>();
 
   constructor(storage: StackSoundStorage | undefined = browserStorage()) {
     this.storage = storage;
-    this.soundEnabled = readStackSoundEnabled(storage);
-  }
-
-  get enabled(): boolean { return this.soundEnabled; }
-
-  toggle(): boolean {
-    this.soundEnabled = !this.soundEnabled;
-    writeStackSoundEnabled(this.soundEnabled, this.storage);
-    if (this.soundEnabled) {
-      this.unlock();
-      this.play('tap');
+    this._soundEnabled = readStackSoundEnabled(storage);
+    this._musicEnabled = readStackMusicEnabled(storage);
+    const doc = browserDocument();
+    if (doc) {
+      try {
+        doc.addEventListener('visibilitychange', this.visibilityListener);
+        this.listening = true;
+      } catch { /* Optional browser integration. */ }
     }
-    return this.soundEnabled;
   }
 
+  /** Backwards-compatible alias for the sound-effects switch. */
+  get enabled(): boolean { return this._soundEnabled; }
+  get soundEnabled(): boolean { return this._soundEnabled; }
+  get musicEnabled(): boolean { return this._musicEnabled; }
+
+  setSoundEnabled(enabled: boolean): void {
+    this._soundEnabled = !!enabled;
+    writeStackSoundEnabled(this._soundEnabled, this.storage);
+    this.updateSfxGain();
+  }
+
+  setMusicEnabled(enabled: boolean): void {
+    this._musicEnabled = !!enabled;
+    writeStackMusicEnabled(this._musicEnabled, this.storage);
+    if (!this._musicEnabled) this.stopMusic();
+    else if (this.context && !this.paused) this.startMusic();
+  }
+
+  toggleSound(): boolean {
+    this.setSoundEnabled(!this._soundEnabled);
+    if (this._soundEnabled) this.unlock();
+    return this._soundEnabled;
+  }
+
+  toggleMusic(): boolean {
+    this.setMusicEnabled(!this._musicEnabled);
+    if (this._musicEnabled) this.unlock();
+    return this._musicEnabled;
+  }
+
+  /** Backwards-compatible alias for the sound-effects toggle. */
+  toggle(): boolean {
+    return this.toggleSound();
+  }
+
+  /** Called from the first real touch. Creates/resumes the AudioContext and starts music. */
   unlock(): void {
+    if (this.disposed) return;
     const Ctor = contextConstructor();
     if (!Ctor) return;
     try {
       if (!this.context) {
-        this.context = new Ctor();
-        this.master = this.context.createGain();
-        this.master.gain.value = .42;
-        this.master.connect(this.context.destination);
+        const context = new Ctor();
+        const sfxGain = context.createGain();
+        const musicGain = context.createGain();
+        sfxGain.gain.value = this._soundEnabled ? SFX_MASTER_LEVEL : 0.0001;
+        musicGain.gain.value = 0.0001;
+        sfxGain.connect(context.destination);
+        musicGain.connect(context.destination);
+        this.context = context;
+        this.sfxGain = sfxGain;
+        this.musicGain = musicGain;
       }
-      if (this.context.state === 'suspended') void this.context.resume().catch(() => undefined);
+      if (this.context.state === 'suspended' && !this.paused) {
+        void this.context.resume().catch(() => undefined);
+      }
+      if (!this.paused) this.startMusic();
     } catch {
-      this.context = undefined;
-      this.master = undefined;
+      this.close();
     }
   }
 
-  play(event: StackSoundEvent): void {
-    if (!this.soundEnabled) return;
+  play(event: StackSoundEvent, options: StackSoundPlayOptions = {}): void {
+    if (!this._soundEnabled || this.paused || this.disposed) return;
     const context = this.context;
-    if (!context || !this.master) return;
+    const output = this.sfxGain;
+    if (!context || !output) return;
     try {
-      if (context.state === 'suspended') void context.resume().catch(() => undefined);
+      if (context.state === 'suspended' && !this.paused) void context.resume().catch(() => undefined);
       if (context.state === 'closed') return;
-      this.synthesize(context, event);
+      const level = comboLevel(options.level);
+      const buffer = this.sfxBuffer(context, event, level);
+      if (!buffer) return;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(output);
+      source.start();
     } catch { /* Device/browser failure: audio is optional. */ }
   }
 
-  private synthesize(context: AudioContext, event: StackSoundEvent): void {
-    const now = context.currentTime + .012;
-    switch (event) {
-      case 'tap':
-        this.tone(context, 'square', 560, 240, now, .052, .13);
-        this.noise(context, now, .022, .045, 1500, 700);
-        break;
-      case 'fly':
-        this.noise(context, now, .14, .09, 480, 1900);
-        this.tone(context, 'sine', 290, 560, now, .11, .035);
-        break;
-      case 'pack':
-        this.noise(context, now, .026, .13, 2400, 500);
-        this.tone(context, 'triangle', 145, 68, now, .085, .18);
-        this.tone(context, 'sine', 880, 880, now + .065, .18, .095);
-        this.tone(context, 'sine', 1318.5, 1318.5, now + .075, .22, .06);
-        break;
-      case 'fail':
-        this.tone(context, 'sawtooth', 245, 82, now, .52, .115);
-        this.tone(context, 'triangle', 164, 62, now + .06, .62, .075);
-        break;
-      case 'win': {
-        const notes = [523.25, 659.25, 783.99, 1046.5];
-        for (let index = 0; index < notes.length; index++) {
-          this.tone(context, 'sine', notes[index], notes[index], now + index * .075, .23, .09);
-          this.tone(context, 'triangle', notes[index] * .5, notes[index] * .5, now + index * .075, .2, .025);
-        }
-        break;
-      }
-      case 'mom':
-        this.tone(context, 'triangle', 659.25, 659.25, now, .16, .11);
-        this.tone(context, 'sine', 880, 880, now + .13, .22, .09);
-        break;
+  /** Pause music and suspend the context while the game is in the background. */
+  pause(): void {
+    if (this.disposed) return;
+    this.paused = true;
+    try {
+      if (this.context?.state === 'running') void this.context.suspend().catch(() => undefined);
+    } catch { /* Optional browser integration. */ }
+  }
+
+  /** Resume music after the game returns to the foreground, if the music switch is on. */
+  resume(): void {
+    if (this.disposed) return;
+    if (browserDocument()?.hidden) { this.paused = true; return; }
+    this.paused = false;
+    const context = this.context;
+    if (!context) return;
+    try {
+      if (context.state === 'suspended') void context.resume().catch(() => undefined);
+      if (this._musicEnabled) this.startMusic();
+    } catch { /* Optional browser integration. */ }
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    const doc = browserDocument();
+    if (doc && this.listening) {
+      try { doc.removeEventListener('visibilitychange', this.visibilityListener); } catch { /* Optional. */ }
     }
+    this.listening = false;
+    this.stopMusic();
+    this.close();
   }
 
-  private tone(
-    context: AudioContext,
-    type: OscillatorType,
-    startFrequency: number,
-    endFrequency: number,
-    start: number,
-    duration: number,
-    peak: number,
-  ): void {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(Math.max(1, startFrequency), start);
-    oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), start + duration);
-    gain.gain.setValueAtTime(.0001, start);
-    gain.gain.linearRampToValueAtTime(peak, start + .012);
-    gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
-    oscillator.connect(gain); gain.connect(this.master!);
-    oscillator.start(start); oscillator.stop(start + duration + .02);
+  private updateSfxGain(): void {
+    const context = this.context;
+    const gain = this.sfxGain?.gain;
+    if (!context || !gain) return;
+    try {
+      const now = context.currentTime;
+      gain.cancelScheduledValues(now);
+      gain.setTargetAtTime(this._soundEnabled ? SFX_MASTER_LEVEL : 0.0001, now, 0.01);
+    } catch { /* Optional browser integration. */ }
   }
 
-  private noise(
-    context: AudioContext,
-    start: number,
-    duration: number,
-    peak: number,
-    startFrequency: number,
-    endFrequency: number,
-  ): void {
-    const frameCount = Math.max(1, Math.ceil(context.sampleRate * duration));
-    const buffer = context.createBuffer(1, frameCount, context.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let index = 0; index < data.length; index++) data[index] = Math.random() * 2 - 1;
-    const source = context.createBufferSource();
-    const filter = context.createBiquadFilter();
-    const gain = context.createGain();
-    source.buffer = buffer;
-    filter.type = 'bandpass';
-    filter.Q.value = .85;
-    filter.frequency.setValueAtTime(startFrequency, start);
-    filter.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), start + duration);
-    gain.gain.setValueAtTime(.0001, start);
-    gain.gain.linearRampToValueAtTime(peak, start + .008);
-    gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
-    source.connect(filter); filter.connect(gain); gain.connect(this.master!);
-    source.start(start); source.stop(start + duration + .02);
+  private startMusic(): void {
+    const context = this.context;
+    const output = this.musicGain;
+    if (!context || !output || !this._musicEnabled || this.paused || this.disposed) return;
+    if (this.musicSource) return;
+    try {
+      const buffer = this.musicBuffer ?? this.createMusicBuffer(context);
+      this.musicBuffer = buffer;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(output);
+      const now = context.currentTime;
+      const gain = output.gain;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(0.0001, now);
+      gain.exponentialRampToValueAtTime(MUSIC_MASTER_LEVEL, now + 0.18);
+      source.start();
+      this.musicSource = source;
+    } catch { /* Device/browser failure: audio is optional. */ }
+  }
+
+  private stopMusic(): void {
+    const context = this.context;
+    const gain = this.musicGain?.gain;
+    const source = this.musicSource;
+    this.musicSource = undefined;
+    if (!context || !source) return;
+    try {
+      const now = context.currentTime;
+      if (gain) {
+        gain.cancelScheduledValues(now);
+        gain.setValueAtTime(Math.max(0.0001, gain.value), now);
+        gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      }
+      source.stop(now + 0.12);
+    } catch { /* The source may already have stopped. */ }
+  }
+
+  private createMusicBuffer(context: AudioContext): AudioBuffer {
+    const rate = renderRateFor(context);
+    const data = bgmData(rate);
+    const buffer = context.createBuffer(1, data.length, rate);
+    buffer.getChannelData(0).set(data);
+    return buffer;
+  }
+
+  private sfxBuffer(context: AudioContext, event: StackSoundEvent, level: number): AudioBuffer {
+    const rate = renderRateFor(context);
+    const key = `${event}:${level}:${rate}`;
+    const cached = this.sfxBuffers.get(key);
+    if (cached) return cached;
+    const data = sfxData(event, level, rate);
+    const buffer = context.createBuffer(1, data.length, rate);
+    buffer.getChannelData(0).set(data);
+    this.sfxBuffers.set(key, buffer);
+    return buffer;
+  }
+
+  private close(): void {
+    const context = this.context;
+    this.context = undefined;
+    this.sfxGain = undefined;
+    this.musicGain = undefined;
+    this.musicSource = undefined;
+    this.musicBuffer = undefined;
+    this.sfxBuffers.clear();
+    if (!context) return;
+    try {
+      if (context.state !== 'closed') void context.close().catch(() => undefined);
+    } catch { /* Optional browser integration. */ }
   }
 }
