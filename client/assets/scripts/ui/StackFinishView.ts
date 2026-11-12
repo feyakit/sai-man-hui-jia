@@ -3,6 +3,7 @@ import { FINISH_DURATION, type FinishAction, type FinishState } from '../game/Fi
 import type { Rect } from '../game/InteractionGeometry';
 import { inRect } from '../game/InteractionGeometry';
 import { loadArt } from '../services/OptionalResources';
+import { STACK_CARGO_POSITIONS, STACK_SHARE_ITEM_KEYS } from '../core/stack/stack-share';
 import { fill, label, uiNode } from './UIKit';
 
 const red = new Color(188, 34, 43);
@@ -31,6 +32,8 @@ export class StackFinishView {
   private readonly car: Node;
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
+  private readonly cargo: Node;
+  private readonly cargoSprites: Sprite[] = [];
   private readonly bodyImage: Sprite;
   private readonly headline: Node;
   private readonly statsLabel: Node;
@@ -41,6 +44,7 @@ export class StackFinishView {
   private state?: FinishState;
   private ready = false;
   private trunkY = -39;
+  private hole = {x: 0, y: -39, w: 506, h: 226};
 
   constructor(
     parent: Node,
@@ -65,6 +69,10 @@ export class StackFinishView {
     this.car = uiNode('HomewardCar', this.node, 760, 520);
     this.carFallback = uiNode('CarFallback', this.car, 760, 520).addComponent(Graphics);
     this.trunkImage = this.imageNode('TrunkWell', this.car);
+    this.cargo = uiNode('TrunkCargo', this.car, 720, 450);
+    for (let index = 0; index < STACK_SHARE_ITEM_KEYS.length; index++) {
+      this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
+    }
     this.bodyImage = this.imageNode('CarBody', this.car);
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
@@ -76,6 +84,16 @@ export class StackFinishView {
       this.ready = true;
       this.layout(this.height);
       if (this.state) this.render(this.state);
+    });
+    void Promise.all(STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`))).then(frames => {
+      if (!this.node.isValid) return;
+      for (let index = 0; index < frames.length && index < this.cargoSprites.length; index++) {
+        const frame = frames[index];
+        if (!frame) continue;
+        this.cargoSprites[index].spriteFrame = frame;
+        this.cargoSprites[index].enabled = true;
+      }
+      this.layoutCargo();
     });
 
     this.headline = uiNode('HomeBanner', this.node, 750, 230);
@@ -179,15 +197,35 @@ export class StackFinishView {
 
   private setupCar(): void {
     const bodyW = 720, bodyH = 450;
-    const holeX = Math.round(BODY_HOLE.left / 1024 * bodyW);
-    const holeY = Math.round(BODY_HOLE.top / 640 * bodyH - bodyH / 2);
+    const holeX = Math.round((BODY_HOLE.left + BODY_HOLE.right) / 2 / 1024 * bodyW - bodyW / 2);
+    const holeY = Math.round((BODY_HOLE.top + BODY_HOLE.bottom) / 2 / 640 * bodyH - bodyH / 2);
     const holeW = Math.round((BODY_HOLE.right - BODY_HOLE.left) / 1024 * bodyW);
     const holeH = Math.round((BODY_HOLE.bottom - BODY_HOLE.top) / 640 * bodyH);
-    this.trunkY = holeY + holeH / 2;
+    this.hole = {x: holeX, y: holeY, w: holeW, h: holeH};
+    this.trunkY = holeY;
     this.show(this.bodyImage, 0, 0, bodyW, bodyH);
     this.show(this.trunkImage, 0, this.trunkY, holeW, holeH);
+    this.layoutCargo();
     this.car.setScale(.98, .98, 1);
     this.car.setPosition(0, -this.height * .035);
+  }
+
+  private layoutCargo(): void {
+    const {x, y, w, h} = this.hole;
+    const max = Math.min(w * .24, h * .48, 164);
+    for (let index = 0; index < this.cargoSprites.length && index < STACK_CARGO_POSITIONS.length; index++) {
+      const sprite = this.cargoSprites[index];
+      const frame = sprite.spriteFrame;
+      if (!frame) continue;
+      const [px, py, angle] = STACK_CARGO_POSITIONS[index];
+      const ratio = frame.rect.width / Math.max(1, frame.rect.height);
+      const width = ratio >= 1 ? max : max * ratio;
+      const height = ratio >= 1 ? max / ratio : max;
+      sprite.node.getComponent(UITransform)!.setContentSize(width, height);
+      sprite.node.setPosition(x + (px - .5) * w, y + (.5 - py) * h);
+      sprite.node.angle = -angle * 180 / Math.PI;
+      sprite.enabled = true;
+    }
   }
 
   private drawCarFallback(): void {

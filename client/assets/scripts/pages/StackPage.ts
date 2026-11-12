@@ -43,7 +43,7 @@ const ITEM_CROPS: Readonly<Record<string,{x:number;y:number;w:number;h:number}>>
   snacks:{x:6,y:6,w:244,h:372},
   ham:{x:6,y:6,w:244,h:500},
   thermos:{x:6,y:6,w:244,h:372},
-  crab:{x:6,y:6,w:371,h:369},
+  firecracker:{x:6,y:6,w:372,h:116},
   ricecooker:{x:6,y:6,w:244,h:244},
 };
 
@@ -790,18 +790,18 @@ export class StackPage {
     this.failLayer = layer;
     const g = layer.addComponent(Graphics);
     fill(g,new Color(20,12,18,176),-375,-this.height/2,750,this.height);
-    fill(g,new Color(61,18,26,245),-300,-300,600,600,34);
-    fill(g,gold,-292,-292,584,584,29);
-    fill(g,new Color(176,34,42),-284,-284,568,568,24);
-    fill(g,new Color(199,48,47,170),-260,-218,520,170,22);
+    fill(g,new Color(61,18,26,245),-300,-320,600,640,34);
+    fill(g,gold,-292,-312,584,624,29);
+    fill(g,new Color(176,34,42),-284,-304,568,608,24);
+    fill(g,new Color(199,48,47,170),-260,-238,520,170,22);
     const title = label(layer,'OverflowTitle','后备箱塞爆了',46,0,236);
     title.color = gold;
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);
     hint.color = cream;
     this.drawOverflowCar(layer);
-    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-96);
-    const share = this.failButton(layer,'share','生成分享图',-174);
-    const restart = this.failButton(layer,'restart','重来',-252);
+    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-100);
+    const share = this.failButton(layer,'share','生成分享图',-180);
+    const restart = this.failButton(layer,'restart','重来',-260);
     this.failButtons.push(revive,share,restart);
     this.sounds.play('fail');
     this.refreshFailButtons();
@@ -810,7 +810,7 @@ export class StackPage {
   private drawOverflowCar(parent: Node): void {
     parent.getChildByName('OverflowCar')?.destroy();
     const car = uiNode('OverflowCar',parent,290,200);
-    car.setPosition(0,30);
+    car.setPosition(0,45);
     const fallbackNode = uiNode('OverflowFrame',car,290,200);
     const fallback = fallbackNode.addComponent(Graphics);
     fill(fallback,new Color(30,14,18,80),-132,-88,264,166,28);

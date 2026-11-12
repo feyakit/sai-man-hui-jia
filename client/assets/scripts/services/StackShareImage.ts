@@ -6,7 +6,9 @@ import {
 } from '../core/stack/stack-layout';
 import {
   createStackShareCopy,
+  STACK_CARGO_POSITIONS,
   STACK_SHARE_HEIGHT,
+  STACK_SHARE_ITEM_KEYS,
   STACK_SHARE_WIDTH,
   stackShareFileName,
   type StackShareResult,
@@ -24,9 +26,6 @@ interface FrameDrawable {
   readonly height: number;
 }
 
-const SHARE_ITEMS = [
-  'mandarin', 'duck', 'fruitbasket', 'milk', 'suitcase_l', 'toycar', 'oven',
-] as const;
 const FONT = '"Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 const gold = '#ffd27a';
 const pale = '#fff2cf';
@@ -278,14 +277,10 @@ function drawCargo(
     }
   }
 
-  const positions = [
-    [0.18, 0.34, 0.12], [0.39, 0.29, -0.1], [0.61, 0.34, 0.09], [0.82, 0.28, -0.12],
-    [0.28, 0.72, -0.08], [0.52, 0.78, 0.06], [0.76, 0.72, -0.06],
-  ] as const;
-  for (let index = 0; index < positions.length && index < items.length; index++) {
+  for (let index = 0; index < STACK_CARGO_POSITIONS.length && index < items.length; index++) {
     const item = items[index];
     if (!item) continue;
-    const [px, py, angle] = positions[index];
+    const [px, py, angle] = STACK_CARGO_POSITIONS[index];
     const max = Math.min(hole.w * .24, hole.h * .48, 164);
     const ratio = item.width / item.height;
     const width = ratio >= 1 ? max : max * ratio;
@@ -335,7 +330,7 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     const [bodyFrame, trunkFrame, ...itemFrames] = await Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
-      ...SHARE_ITEMS.map(key => loadArt(`items/${key}`)),
+      ...STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`)),
     ]);
     const canvas = document.createElement('canvas');
     canvas.width = STACK_SHARE_WIDTH;

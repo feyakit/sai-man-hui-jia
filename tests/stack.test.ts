@@ -44,11 +44,11 @@ describe('stack level generation', () => {
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
   });
 
-  it('generates a narrowing hard-stage mound with four covered side stacks', () => {
+  it('generates a wide pyramid hard-stage mound with two fanned side stacks', () => {
     const level = generateStackLevel(2, STACK_SEEDS[1]).level;
     const kinds = new Map<string, number>();
     for (const item of level.cards) kinds.set(item.kind, (kinds.get(item.kind) ?? 0) + 1);
-    expect(level.cards).toHaveLength(150);
+    expect(level.cards).toHaveLength(78);
     expect(level.items.length).toBeGreaterThanOrEqual(12);
     expect(level.items.length).toBeLessThanOrEqual(14);
     expect(kinds.size).toBe(level.items.length);
@@ -56,28 +56,29 @@ describe('stack level generation', () => {
 
     const main = level.cards.filter(item => item.source === 'pile');
     const layerNumbers = [...new Set(main.map(item => item.layer))].sort((a, b) => a - b);
-    expect(layerNumbers).toHaveLength(8);
+    expect(layerNumbers).toHaveLength(6);
     const layerSpans = layerNumbers.map(layer => {
       const cards = main.filter(item => item.layer === layer);
       return Math.max(...cards.map(item => item.x + item.w)) - Math.min(...cards.map(item => item.x));
     });
     for (let index = 1; index < layerSpans.length; index++) {
-      expect(layerSpans[index]).toBeLessThanOrEqual(layerSpans[index - 1] + 12);
+      expect(layerSpans[index]).toBeGreaterThanOrEqual(layerSpans[index - 1] - 12);
     }
 
     for (const side of ['side-left', 'side-right'] as const) {
       const cards = level.cards.filter(item => item.source === side);
-      expect(cards.length).toBeGreaterThanOrEqual(12);
-      expect(cards.length).toBeLessThanOrEqual(20);
+      expect(cards.length).toBe(8);
       const stacks = sideStacks(cards);
-      expect(stacks).toHaveLength(2);
-      for (const stack of stacks) {
-        expect(stack.length).toBeGreaterThanOrEqual(6);
-        expect(stack.length).toBeLessThanOrEqual(10);
-        const free = stack.filter(item => !isBlocked(item, level.cards));
-        expect(free).toHaveLength(1);
-        expect(free[0].layer).toBe(Math.max(...stack.map(item => item.layer)));
+      expect(stacks).toHaveLength(1);
+      const [stack] = stacks;
+      expect(new Set(stack.map(item => item.y)).size).toBe(1);
+      const sorted = [...stack].sort((a, b) => a.layer - b.layer);
+      for (let index = 1; index < sorted.length; index++) {
+        expect(Math.abs(sorted[index].x - sorted[index - 1].x)).toBe(12);
       }
+      const free = stack.filter(item => !isBlocked(item, level.cards));
+      expect(free).toHaveLength(1);
+      expect(free[0].layer).toBe(Math.max(...stack.map(item => item.layer)));
     }
 
     expect(level.cardW).toBeGreaterThanOrEqual(108);
@@ -92,7 +93,9 @@ describe('stack level generation', () => {
     const bounds = stackCardBounds(level.cards);
     expect(bounds.top).toBeGreaterThanOrEqual(pageLayout.stackTop);
     expect(bounds.bottom).toBeLessThanOrEqual(pageLayout.stackBottom);
-    expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(190);
+    expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(330);
+    expect(bounds.left / 750 * 390).toBeGreaterThanOrEqual(10);
+    expect(bounds.right / 750 * 390).toBeLessThanOrEqual(380);
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
   });
 
@@ -108,7 +111,7 @@ describe('stack level generation', () => {
     expect(STAGE1_ITEMS.map(item => item.key)).toEqual(['mandarin', 'duck', 'fruitbasket']);
     expect(STAGE2_ITEMS.map(item => item.key)).toEqual([
       'mandarin', 'duck', 'fruitbasket', 'fish', 'kumquat', 'milk', 'oven',
-      'suitcase_l', 'woven', 'toycar', 'snacks', 'ham', 'thermos', 'crab',
+      'suitcase_l', 'woven', 'toycar', 'snacks', 'ham', 'thermos', 'firecracker',
     ]);
     expect(stackItemByName(STAGE2_ITEMS, 'fish').name).toBe('鱼');
     expect(stackItemByName(STAGE2_ITEMS, 'missing').key).toBe('mandarin');
@@ -226,7 +229,7 @@ describe('stack props, failure and mother event', () => {
     expect(MOM_ITEM_KEYS).toContain(added[0].kind);
     expect(pickMomItem(STAGE2_ITEMS, () => 0.999).key).toBe('toycar');
     expect(pickMomItem(STAGE2_ITEMS, () => Number.NaN).key).toBe('mandarin');
-    expect(game.remaining).toBe(153);
+    expect(game.remaining).toBe(81);
     for (const item of added) expect(game.canTap(item.id)).toBe(true);
 
     const simpleCards = Array.from({length: 33}, (_, index) => card(index + 1, `k${Math.floor(index / 3)}`, index * 10, 0));

@@ -4,6 +4,17 @@ export const STACK_SHARE_WIDTH = 1080;
 export const STACK_SHARE_HEIGHT = 1440;
 export const STACK_SHARE_TITLE = `《${GAME_TITLE}》`;
 
+/** Goods visible in both the generated share card and the finish-screen trunk. */
+export const STACK_SHARE_ITEM_KEYS = [
+  'mandarin', 'duck', 'fruitbasket', 'milk', 'suitcase_l', 'toycar', 'oven',
+] as const;
+
+/** Normalized cargo layout (x, y, rotation) inside the trunk opening, from top-left. */
+export const STACK_CARGO_POSITIONS = [
+  [0.18, 0.34, 0.12], [0.39, 0.29, -0.10], [0.61, 0.34, 0.09], [0.82, 0.28, -0.12],
+  [0.28, 0.72, -0.08], [0.52, 0.78, 0.06], [0.76, 0.72, -0.06],
+] as const;
+
 export const STACK_SHARE_CAPTIONS = [
   '年货塞满，平安到家',
   '今年的后备箱，装的都是爱',
