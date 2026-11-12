@@ -1,4 +1,4 @@
-import { freeCards, isBlocked, PACK_SIZE, SLOT_CAPACITY, slotInsertIndex } from './stack-rules';
+import { freeCards, isBlocked, PACK_SIZE, slotCapacityOf, slotInsertIndex } from './stack-rules';
 import type { StackCard, StackLevel, StackSolveResult } from './stack-types';
 
 export interface StackSolveOptions {
@@ -32,6 +32,7 @@ export function simulateStackPicks(
   picks: readonly number[],
   maxClicks = picks.length,
 ): {valid: boolean; used: number} {
+  const capacity = slotCapacityOf(level);
   const cards = level.cards.map(card => ({...card}));
   const active = new Map(cards.map(card => [card.id, card]));
   const slot: string[] = [];
@@ -42,7 +43,7 @@ export function simulateStackPicks(
     if (isBlocked(card, current)) return {valid: false, used: index};
     active.delete(card.id);
     insertAndClear(slot, card.kind);
-    if (slot.length >= SLOT_CAPACITY) return {valid: false, used: index + 1};
+    if (slot.length >= capacity) return {valid: false, used: index + 1};
   }
   return {valid: active.size === 0 && slot.length === 0, used: Math.min(picks.length, maxClicks)};
 }
@@ -54,6 +55,7 @@ interface SearchState {
 }
 
 export function solveStackLevel(level: StackLevel, options: StackSolveOptions = {}): StackSolveResult {
+  const capacity = slotCapacityOf(level);
   const maxNodes = options.maxNodes ?? 120_000;
   if (level.solution.length > 0) {
     const certificate = simulateStackPicks(level, level.solution);
@@ -81,7 +83,7 @@ export function solveStackLevel(level: StackLevel, options: StackSolveOptions = 
     for (const card of reachable) byKind.set(card.kind, [...(byKind.get(card.kind) ?? []), card]);
 
     const compound = [...byKind.entries()]
-      .filter(([kind, cardsOfKind]) => cardsOfKind.length >= PACK_SIZE && !state.slot.includes(kind) && state.slot.length <= SLOT_CAPACITY - PACK_SIZE)
+      .filter(([kind, cardsOfKind]) => cardsOfKind.length >= PACK_SIZE && !state.slot.includes(kind) && state.slot.length <= capacity - PACK_SIZE)
       .sort((a, b) => b[1].length - a[1].length);
     for (const [, cardsOfKind] of compound) {
       const picks = cardsOfKind.slice(0, PACK_SIZE).map(card => card.id);
@@ -103,13 +105,13 @@ export function solveStackLevel(level: StackLevel, options: StackSolveOptions = 
       return bPair - aPair || (byKind.get(b.kind)?.length ?? 0) - (byKind.get(a.kind)?.length ?? 0);
     });
     for (const card of singles) {
-      if (state.slot.length >= SLOT_CAPACITY && state.slot.filter(kind => kind === card.kind).length < 2) continue;
+      if (state.slot.length >= capacity && state.slot.filter(kind => kind === card.kind).length < 2) continue;
       const nextActive = [...state.active];
       const index = level.cards.findIndex(candidate => candidate.id === card.id);
       nextActive[index] = false;
       const nextSlot = [...state.slot];
       insertAndClear(nextSlot, card.kind);
-      if (nextSlot.length >= SLOT_CAPACITY) continue;
+      if (nextSlot.length >= capacity) continue;
       const answer = search({active: nextActive, slot: nextSlot, picks: [...state.picks, card.id]});
       if (answer) return answer;
       if (limited) return undefined;
