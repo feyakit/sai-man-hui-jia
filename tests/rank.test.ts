@@ -218,10 +218,12 @@ describe('rank payload parsing', () => {
     expect(formatRankSummary(snapshot)).toBe('全国累计 12 次 · 今日 3 次');
     expect(formatRankToday(3.9)).toBe('今日 +3');
     expect(formatRankToday(-1)).toBe('今日 +0');
-    expect(formatRankProgress('广东')).toBe('正在为 广东 省加油…');
-    expect(formatContributionResult('广东',{duplicate:false,province:'广东',rank:2,total:12})).toBe('你为 广东 省 +1，广东 省排第 2');
-    expect(formatContributionResult('广东',{duplicate:true,province:'广东',rank:2,total:12})).toBe('你已为 广东 省贡献过，广东 省排第 2');
-    expect(formatContributionResult('广东',{duplicate:false,province:'广东',rank:null,total:1})).toBe('你为 广东 省 +1');
+    expect(formatRankProgress('广东')).toBe('正在为广东省加油…');
+    expect(formatContributionResult('广东',{duplicate:false,province:'广东',rank:2,total:12})).toBe('你为广东省 +1，广东省排第 2');
+    expect(formatContributionResult('广东',{duplicate:true,province:'广东',rank:2,total:12})).toBe('你已为广东省贡献过，广东省排第 2');
+    expect(formatContributionResult('广东',{duplicate:false,province:'广东',rank:null,total:1})).toBe('你为广东省 +1');
+    expect(formatContributionResult('北京',{duplicate:false,province:'北京',rank:1,total:3})).toBe('你为北京市 +1，北京市排第 1');
+    expect(formatContributionResult('新疆',{duplicate:false,province:'新疆',rank:null,total:1})).toBe('你为新疆 +1');
     expect(formatContributionFailure()).toBe('排行暂时连不上');
     expect(formatYourProvince(null)).toBe('你的省份：未选择');
     expect(formatYourProvince('广东')).toBe('你的省份：广东 暂无人通关');

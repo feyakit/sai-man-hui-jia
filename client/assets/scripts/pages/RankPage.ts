@@ -126,7 +126,7 @@ export class RankPage {
       g.roundRect(x - 375,this.height/2 - y - h,w,h,radius);
       g.stroke();
     };
-    fill(g,new Color(3,4,14,250),-375,-this.height/2,750,this.height);
+    fill(g,new Color(3,4,14,255),-375,-this.height/2,750,this.height);
     fill(g,new Color(31,9,26,200),-375,this.height/2 - 260,750,260);
     fill(g,new Color(64,12,28,150),-375,-this.height/2,750,220);
     fill(g,new Color(255,207,111,34),-375,this.height/2 - 250,750,2);

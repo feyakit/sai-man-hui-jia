@@ -232,12 +232,12 @@ export function formatRankToday(today: number): string {
 }
 
 export function formatRankProgress(province: Province): string {
-  return `正在为 ${province} 省加油…`;
+  return `正在为${provinceLabel(province)}加油…`;
 }
 
 export function formatContributionResult(province: Province, result: RankClearResult): string {
-  const head = result.duplicate ? `你已为 ${province} 省贡献过` : `你为 ${province} 省 +1`;
-  return result.rank === null ? head : `${head}，${province} 省排第 ${result.rank}`;
+  const head = result.duplicate ? `你已为${provinceLabel(province)}贡献过` : `你为${provinceLabel(province)} +1`;
+  return result.rank === null ? head : `${head}，${provinceLabel(province)}排第 ${result.rank}`;
 }
 
 export function formatContributionFailure(): string {
@@ -281,4 +281,13 @@ function fromBytes(bytes: Uint8Array): string {
   let result = '';
   for (const byte of bytes) result += DEVICE_ALPHABET[byte % DEVICE_ALPHABET.length];
   return result;
+}
+
+const MUNICIPALITIES = ['北京','天津','上海','重庆'];
+const BARE_NAMES = ['内蒙古','广西','西藏','宁夏','新疆','香港','澳门'];
+/** “广东省”“北京市”“新疆”: municipalities, autonomous regions and SARs are not 省. */
+export function provinceLabel(province: string): string {
+  if (MUNICIPALITIES.includes(province)) return `${province}市`;
+  if (BARE_NAMES.includes(province)) return province;
+  return `${province}省`;
 }
