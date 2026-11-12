@@ -43,7 +43,7 @@ describe('stack level generation', () => {
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
   });
 
-  it('generates the fixed hard stage with 150 cards, eight layers and two side piles', () => {
+  it('generates a narrowing hard-stage mound with four covered side stacks', () => {
     const level = generateStackLevel(2, STACK_SEEDS[1]).level;
     const kinds = new Map<string, number>();
     for (const item of level.cards) kinds.set(item.kind, (kinds.get(item.kind) ?? 0) + 1);
@@ -52,15 +52,38 @@ describe('stack level generation', () => {
     expect(level.items.length).toBeLessThanOrEqual(14);
     expect(kinds.size).toBe(level.items.length);
     for (const count of kinds.values()) expect(count % 3).toBe(0);
-    const mainLayers = new Set(level.cards.filter(item => item.source === 'pile').map(item => item.layer));
-    expect(mainLayers.size).toBeGreaterThanOrEqual(6);
-    expect(mainLayers.size).toBeLessThanOrEqual(10);
+
+    const main = level.cards.filter(item => item.source === 'pile');
+    const layerNumbers = [...new Set(main.map(item => item.layer))].sort((a, b) => a - b);
+    expect(layerNumbers).toHaveLength(8);
+    const layerSpans = layerNumbers.map(layer => {
+      const cards = main.filter(item => item.layer === layer);
+      return Math.max(...cards.map(item => item.x + item.w)) - Math.min(...cards.map(item => item.x));
+    });
+    for (let index = 1; index < layerSpans.length; index++) {
+      expect(layerSpans[index]).toBeLessThanOrEqual(layerSpans[index - 1] + 12);
+    }
+
     for (const side of ['side-left', 'side-right'] as const) {
       const cards = level.cards.filter(item => item.source === side);
-      expect(cards).toHaveLength(6);
-      const free = cards.filter(item => !isBlocked(item, level.cards));
-      expect(free).toHaveLength(1);
-      expect(free[0].layer).toBe(Math.max(...cards.map(item => item.layer)));
+      expect(cards.length).toBeGreaterThanOrEqual(12);
+      expect(cards.length).toBeLessThanOrEqual(20);
+      const stacks = sideStacks(cards);
+      expect(stacks).toHaveLength(2);
+      for (const stack of stacks) {
+        expect(stack.length).toBeGreaterThanOrEqual(6);
+        expect(stack.length).toBeLessThanOrEqual(10);
+        const free = stack.filter(item => !isBlocked(item, level.cards));
+        expect(free).toHaveLength(1);
+        expect(free[0].layer).toBe(Math.max(...stack.map(item => item.layer)));
+      }
+    }
+
+    for (const item of level.cards) {
+      expect(item.x).toBeGreaterThanOrEqual(0);
+      expect(item.x + item.w).toBeLessThanOrEqual(750);
+      expect(item.y).toBeGreaterThanOrEqual(150);
+      expect(item.y + item.h).toBeLessThanOrEqual(900);
     }
     expect(solveStackLevel(level, {maxNodes: 500}).solvable).toBe(true);
   });
@@ -124,7 +147,21 @@ describe('stack geometry and slots', () => {
     game.tap(2); game.tap(3); game.tap(1);
     expect(game.status).toBe('won');
     expect(game.remaining).toBe(0);
+    expect(game.pileRemaining).toBe(0);
     expect(game.tap(1)).toMatchObject({ok: false, reason: 'finished'});
+  });
+
+  it('counts only cards still on the pile for the HUD remaining value', () => {
+    const cards = [card(1, 'a', 0, 0), card(2, 'b', 100, 0), card(3, 'c', 200, 0), card(4, 'a', 300, 0)];
+    const game = new StackGame(level(cards));
+    expect(game.pileRemaining).toBe(4);
+    expect(game.remaining).toBe(4);
+    game.tap(1);
+    expect(game.slot).toHaveLength(1);
+    expect(game.pileRemaining).toBe(3);
+    expect(game.remaining).toBe(4);
+    expect(game.useUndo()).toBe(true);
+    expect(game.pileRemaining).toBe(4);
   });
 });
 
@@ -225,5 +262,16 @@ describe('stack solver', () => {
     expect(simulateStackPicks(generated, generated.solution.slice(0, 3))).toEqual({valid: false, used: 3});
   });
 });
+
+function sideStacks(cards: readonly StackCard[]): StackCard[][] {
+  const sorted = [...cards].sort((a, b) => a.y - b.y || a.layer - b.layer);
+  const stacks: StackCard[][] = [];
+  for (const item of sorted) {
+    const last = stacks[stacks.length - 1];
+    if (!last || item.y - last[last.length - 1].y > 12) stacks.push([item]);
+    else last.push(item);
+  }
+  return stacks;
+}
 
 function sorted(values: readonly string[]): string[] { return [...values].sort(); }
