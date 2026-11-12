@@ -14,7 +14,7 @@ import {
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import {
-  sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  sedanScaleForPage, sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
   type LevelVehicle, type Rgb,
 } from '../core/stack/stack-vehicles';
 import { createRng } from '../core/rng';
@@ -127,6 +127,8 @@ export class StackPage {
   private readonly carFrames: {body?: SpriteFrame; trunk?: SpriteFrame; lid?: SpriteFrame} = {};
   private carRect: Rect = {x:30,y:940,w:690,h:420};
   private carScaleY = STACK_CAR_SCALE_Y;
+  /** Uniform sedan shrink on short pages (1 elsewhere and for sprite rides). */
+  private carScale = 1;
   private readonly hud: Node;
   private readonly stageLabel: Label;
   private readonly remainingLabel: Label;
@@ -393,17 +395,19 @@ export class StackPage {
   private layout(bottom: number): void {
     this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
-    const base = createStackPageLayout(this.height,bottom);
-    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY,750,vehicleScaleForPage(this.height));
+    const rideScale = vehicleScaleForPage(this.height);
+    this.carScale = this.isSedan ? sedanScaleForPage(this.height) : 1;
+    const base = createStackPageLayout(this.height,bottom,undefined,this.carScale);
+    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY,750,rideScale);
     const metrics = this.isSedan ? base : createStackPageLayout(this.height,bottom,this.artRect.y);
     this.safeBottom = metrics.safeBottom;
     this.board = fitStackBoard(stackContentBounds(this.level),metrics);
     this.actionY = metrics.actionY;
     this.trunk = {...metrics.trunk};
     this.carRect = {
-      x:375-STACK_BODY_SIZE.w/2,
+      x:375-STACK_BODY_SIZE.w*this.carScale/2,
       y:metrics.carTop,
-      w:STACK_BODY_SIZE.w,
+      w:STACK_BODY_SIZE.w*this.carScale,
       h:metrics.bodyHeight,
     };
     this.slotRects = this.isSedan
@@ -644,11 +648,11 @@ export class StackPage {
         STACK_BODY_SIZE.w,
         STACK_BODY_SIZE.h,
       );
-      this.bodyImage.node.setScale(1,this.carScaleY,1);
+      this.bodyImage.node.setScale(this.carScale,this.carScaleY*this.carScale,1);
     }
     if (lid) {
-      const lidW = 642, lidH = 82;
-      this.showImage(this.lidImage,lid,375,this.carRect.y-34,lidW,lidH);
+      const lidW = 642*this.carScale, lidH = 82*this.carScale;
+      this.showImage(this.lidImage,lid,375,this.carRect.y-34*this.carScale,lidW,lidH);
       this.lidImage.node.setScale(1,1,1);
       this.lidImage.node.angle = -3;
     }
@@ -658,20 +662,23 @@ export class StackPage {
     this.rect(this.carDetail,new Color(14,11,14,82),this.trunk.x-4,this.trunk.y-3,this.trunk.w+8,this.trunk.h+6,18);
     this.stroke(this.carDetail,new Color(255,206,120,120),2,this.trunk.x-2,this.trunk.y-1,this.trunk.w+4,this.trunk.h+2,15);
     this.rect(this.carDetail,new Color(8,6,9,112),this.trunk.x+8,this.trunk.y+6,this.trunk.w-16,20,9);
-    const lidBottom = this.carRect.y+38;
+    const k = this.carScale;
+    const sx = (x: number): number => (x-375)*k;
+    const lidBottom = this.carRect.y+38*k;
+    const hinge = this.height/2-(this.carRect.y+12*k);
     this.carDetail.strokeColor = new Color(30,17,20,220);
-    this.carDetail.lineWidth = 7;
-    this.carDetail.moveTo(97-375,this.height/2-(this.carRect.y+12));
-    this.carDetail.lineTo(157-375,this.height/2-lidBottom);
-    this.carDetail.moveTo(653-375,this.height/2-(this.carRect.y+12));
-    this.carDetail.lineTo(593-375,this.height/2-lidBottom);
+    this.carDetail.lineWidth = 7*k;
+    this.carDetail.moveTo(sx(97),hinge);
+    this.carDetail.lineTo(sx(157),this.height/2-lidBottom);
+    this.carDetail.moveTo(sx(653),hinge);
+    this.carDetail.lineTo(sx(593),this.height/2-lidBottom);
     this.carDetail.stroke();
     this.carDetail.strokeColor = new Color(255,197,101,105);
     this.carDetail.lineWidth = 2;
-    this.carDetail.moveTo(98-375,this.height/2-(this.carRect.y+12));
-    this.carDetail.lineTo(157-375,this.height/2-lidBottom);
-    this.carDetail.moveTo(652-375,this.height/2-(this.carRect.y+12));
-    this.carDetail.lineTo(593-375,this.height/2-lidBottom);
+    this.carDetail.moveTo(sx(98),hinge);
+    this.carDetail.lineTo(sx(157),this.height/2-lidBottom);
+    this.carDetail.moveTo(sx(652),hinge);
+    this.carDetail.lineTo(sx(593),this.height/2-lidBottom);
     this.carDetail.stroke();
   }
 
@@ -1456,10 +1463,10 @@ export class StackPage {
     const origin = this.toScreen(0,0);
     const cards = this.game.cards.map(card => ({...card,...mapStackRect(this.board,card)}));
     const bounds = stackCardBounds(cards);
-    const layout = this.isSedan ? createStackPageLayout(this.height,this.safeBottom) : createStackPageLayout(this.height,this.safeBottom,this.artRect.y);
+    const layout = this.isSedan ? createStackPageLayout(this.height,this.safeBottom,undefined,this.carScale) : createStackPageLayout(this.height,this.safeBottom,this.artRect.y);
     const topLeft = this.toScreen(bounds.left,bounds.top);
     const bottomRight = this.toScreen(bounds.right,bounds.bottom);
-    const lidTop = this.isSedan ? this.carRect.y-75 : this.artRect.y;
+    const lidTop = this.isSedan ? this.carRect.y-75*this.carScale : this.artRect.y;
     const actionsBottom = this.actionY+this.actionH;
     return {
       viewport:{width:typeof window === 'undefined' ? 750 : window.innerWidth,height:typeof window === 'undefined' ? this.height : window.innerHeight},

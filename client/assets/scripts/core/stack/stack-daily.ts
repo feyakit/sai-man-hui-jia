@@ -2,6 +2,8 @@ import { createRng } from '../rng';
 import { STAGE2_ITEMS } from './stack-catalog';
 import { assignTriples, stackMomPositions, stackReservePositions } from './stack-generator';
 import { STACK_CARD_SIZE } from './stack-layout';
+import { DAILY_TABLE, DAILY_TABLE_START } from './stack-daily-table';
+import { simulateStackBatch } from './stack-sim';
 import { solveStackLevel } from './stack-solver';
 import type { StackCard, StackLevel } from './stack-types';
 
@@ -107,15 +109,63 @@ function attemptDaily(dateKey: string, baseSeed: string, attempt: number): Stack
   return solveStackLevel(level, {maxNodes: 120_000}).solvable ? level : undefined;
 }
 
-export function generateDailyLevel(dateKey: string, maxAttempts = 8): StackLevel {
+/** Greedy no-prop win-rate window every shipped daily board is checked against. */
+export const DAILY_TARGET = {low: .42, high: .58, screenRuns: 50, runs: 200} as const;
+
+/** Win rate of the greedy bot without props; deterministic for a given level. */
+export function dailyGreedyRate(level: StackLevel, runs: number = DAILY_TARGET.runs): number {
+  return simulateStackBatch(level, {strategy: 'greedy', itemMode: 'none', seed: 'daily-calibration'}, runs).winRate;
+}
+
+/**
+ * Builds today's board and keeps re-rolling (deterministically) until the greedy no-prop bot wins
+ * 42–58% of the time, so every date lands in the same comfortable 30–70% band. Falls back to the
+ * closest candidate if none of the attempts hits the window.
+ */
+/** Runtime calibration: the first attempt whose greedy rate is in the window (or the closest one). */
+export function calibrateDaily(dateKey: string, maxAttempts = 24): {level: StackLevel; attempt: number} {
   validateDateKey(dateKey);
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new Error('invalid daily generator attempts');
   const seed = `trunk-daily-${dateKey}`;
+  let best: {level: StackLevel; attempt: number; miss: number} | undefined;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const level = attemptDaily(dateKey, seed, attempt);
+    if (!level) continue;
+    // Cheap screen first; only promising boards pay for the precise 200-run check.
+    const screen = dailyGreedyRate(level, DAILY_TARGET.screenRuns);
+    const rate = Math.abs(screen - .5) <= .15 ? dailyGreedyRate(level) : screen;
+    if (rate >= DAILY_TARGET.low && rate <= DAILY_TARGET.high) return {level, attempt};
+    const miss = Math.abs(rate - (DAILY_TARGET.low + DAILY_TARGET.high) / 2);
+    if (!best || miss < best.miss) best = {level, attempt, miss};
+  }
+  if (best) return {level: best.level, attempt: best.attempt};
+  throw new Error(`no solvable daily stack seed after ${maxAttempts} attempts`);
+}
+
+/**
+ * Today's board, re-rolled (deterministically) until the greedy no-prop bot wins 42–58% of the
+ * time so every date lands in the same comfortable 30–70% band. Dates covered by the offline table
+ * (tools/gen-daily-table.ts) jump straight to the calibrated attempt, so phones build one board.
+ */
+export function generateDailyLevel(dateKey: string, maxAttempts = 24): StackLevel {
+  validateDateKey(dateKey);
+  const known = dailyTableAttempt(dateKey);
+  if (known !== undefined) {
+    const level = attemptDaily(dateKey, `trunk-daily-${dateKey}`, known);
     if (level) return level;
   }
-  throw new Error(`no solvable daily stack seed after ${maxAttempts} attempts`);
+  return calibrateDaily(dateKey, maxAttempts).level;
+}
+
+/** Calibrated attempt index for a date in the shipped table, if any. */
+export function dailyTableAttempt(dateKey: string): number | undefined {
+  const [sy, sm, sd] = DAILY_TABLE_START.split('-').map(Number);
+  const start = Date.UTC(sy, sm - 1, sd);
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const index = Math.round((Date.UTC(y, m - 1, d) - start) / 86_400_000);
+  if (index < 0 || index >= DAILY_TABLE.length) return undefined;
+  const value = parseInt(DAILY_TABLE[index], 36);
+  return Number.isNaN(value) ? undefined : value;
 }
 
 export function dailySeedFor(dateKey: string): string {

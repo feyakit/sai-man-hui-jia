@@ -14,8 +14,8 @@ const report = {};
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, screen: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const fail = msg => errors.push(msg);
 
-async function open(query, wait = 2600) {
-  const page = await context.newPage();
+async function open(query, wait = 2600, ctx = context) {
+  const page = await ctx.newPage();
   page.on('pageerror', error => errors.push(`${query}: ${error.message}`));
   const url = new URL(query, base);
   url.searchParams.set('api', 'off');
@@ -28,7 +28,7 @@ async function open(query, wait = 2600) {
 }
 
 try {
-  for (const level of [3, 4]) {
+  for (const level of [3, 4, 5]) {
     const { page, readyMs } = await open(`?mode=stack&stage=${level}`);
     const state = await page.evaluate(() => window.__stack.getState());
     const layout = await page.evaluate(() => window.__stack.getLayout());
@@ -45,6 +45,18 @@ try {
     await page.screenshot({ path: path.join(outDir, `390x844-level${level}-start.png`) });
     await page.close();
   }
+  // Short phone: the sedan (level 3) shrinks so cards stay at least 44px wide.
+  const small = await browser.newContext({ viewport: { width: 375, height: 667 }, screen: { width: 375, height: 667 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  {
+    const { page } = await open('?mode=stack&stage=3', 2600, small);
+    const layout = await page.evaluate(() => window.__stack.getLayout());
+    report.level3Short = { vehicle: layout.vehicle, cardPx: +layout.cardSize.width.toFixed(1) };
+    if (layout.cardSize.width < 44) fail(`375x667 level 3 cards ${layout.cardSize.width.toFixed(1)}px < 44px`);
+    if (layout.cardBounds.bottom > layout.lidTop + .5) fail('375x667 level 3 cards overlap the sedan lid');
+    await page.screenshot({ path: path.join(outDir, '375x667-level3-start.png') });
+    await page.close();
+  }
+  await small.close();
 
   // Stage 2 win → "继续回家路 · 第 3 关" → level 3.
   const { page: win } = await open('?mode=stack&stage=2&debug=win', 1200);
