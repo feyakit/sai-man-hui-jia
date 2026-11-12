@@ -36,6 +36,8 @@ export interface StackPageLayout {
   readonly stackTop: number;
   readonly stackBottom: number;
   readonly stackRatio: number;
+  /** Uniform sedan scale used for this layout (1 = full size). */
+  readonly carScale: number;
 }
 
 /** Converts a phone viewport to the 750-wide design coordinate used by StackPage. */
@@ -49,21 +51,25 @@ export function stackPageHeight(screenWidth: number, screenHeight: number): numb
  * `vehicleTop` (design y of the top of a non-sedan ride's art) replaces the sedan's lid as the
  * lowest line the board may reach.
  */
-export function createStackPageLayout(height: number, safeBottom = 0, vehicleTop?: number): StackPageLayout {
+/**
+ * `carScale` shrinks the sedan uniformly around the page centre on short phones (the lid, hole and
+ * body all follow), freeing board height so 375×667 keeps ≥44px cards.
+ */
+export function createStackPageLayout(height: number, safeBottom = 0, vehicleTop?: number, carScale = 1): StackPageLayout {
   safeBottom = Math.max(STACK_MIN_SAFE_BOTTOM, safeBottom);
   const actionY = height - safeBottom - 20 - STACK_ACTION_HEIGHT;
-  const bodyHeight = Math.round(STACK_BODY_SIZE.h * STACK_CAR_SCALE_Y);
+  const bodyHeight = Math.round(STACK_BODY_SIZE.h * STACK_CAR_SCALE_Y * carScale);
   const carBottom = actionY - 26;
   const carTop = carBottom - bodyHeight;
   const trunk: StackRect = {
-    x: Math.round((STACK_BODY_HOLE.left - STACK_BODY_SIZE.w / 2) + STACK_DESIGN_WIDTH / 2),
-    y: carTop + Math.round(STACK_BODY_HOLE.top * STACK_CAR_SCALE_Y),
-    w: STACK_BODY_HOLE.right - STACK_BODY_HOLE.left,
-    h: Math.round((STACK_BODY_HOLE.bottom - STACK_BODY_HOLE.top) * STACK_CAR_SCALE_Y),
+    x: Math.round((STACK_BODY_HOLE.left - STACK_BODY_SIZE.w / 2) * carScale + STACK_DESIGN_WIDTH / 2),
+    y: carTop + Math.round(STACK_BODY_HOLE.top * STACK_CAR_SCALE_Y * carScale),
+    w: Math.round((STACK_BODY_HOLE.right - STACK_BODY_HOLE.left) * carScale),
+    h: Math.round((STACK_BODY_HOLE.bottom - STACK_BODY_HOLE.top) * STACK_CAR_SCALE_Y * carScale),
   };
   const stackTop = STACK_HUD_BOTTOM;
   // Cards must stay above the open lid, not merely above the trunk hole.
-  const stackBottom = (vehicleTop ?? carTop - STACK_LID_RISE) - STACK_BOARD_GAP;
+  const stackBottom = (vehicleTop ?? carTop - STACK_LID_RISE * carScale) - STACK_BOARD_GAP;
   return {
     height,
     safeBottom,
@@ -75,6 +81,7 @@ export function createStackPageLayout(height: number, safeBottom = 0, vehicleTop
     stackTop,
     stackBottom,
     stackRatio: Math.max(0, stackBottom - stackTop) / height,
+    carScale,
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { dailySeed, generateDailyLevel } from '../client/assets/scripts/core/stack/stack-daily';
+import { calibrateDaily, dailyGreedyRate, dailySeed, dailyTableAttempt, generateDailyLevel } from '../client/assets/scripts/core/stack/stack-daily';
 import {
-  ENDLESS_MAX_CARDS, ROUTE_TITLES, capacityForLevel, endlessCardCount, endlessKindCount,
+  ENDLESS_MAX_CARDS, ENDLESS_REMIX_POOL, ENDLESS_TUNED_UNTIL, ROUTE_TITLES, endlessTuning, moundHeights, moundTemplateFor, capacityForLevel, endlessCardCount, endlessKindCount,
   generateEndlessLevel, routeTitleForLevel,
 } from '../client/assets/scripts/core/stack/stack-endless';
 import { stackCardBounds } from '../client/assets/scripts/core/stack/stack-layout';
@@ -23,12 +23,13 @@ describe('endless stack levels', () => {
     expect(stage3.items).toHaveLength(14);
     expect(stage3.slotCapacity).toBe(7);
     expect(stage3.hideCovered).toBe(false);
-    expect(stage3.seed).toBe('trunk-road-3');
+    expect(stage3.seed.startsWith('trunk-road-3')).toBe(true);
     expect(solveStackLevel(stage3, {maxNodes: 1_000}).solvable).toBe(true);
 
     const stage4 = generateEndlessLevel(4);
     expect(stage4.cards).toHaveLength(180);
-    expect([...new Set(stage4.cards.filter(card => card.source === 'pile').map(card => card.layer))]).toHaveLength(7);
+    // The 20 extra cards form a stepped mound (not a flat grid): at least three heights.
+    expect([...new Set(stage4.cards.filter(card => card.source === 'pile').map(card => card.layer))].length).toBeGreaterThanOrEqual(8);
     expect(stage4.items).toHaveLength(15);
     expect(stage4.slotCapacity).toBe(8);
     expect(stage4.hideCovered).toBe(true);
@@ -51,6 +52,34 @@ describe('endless stack levels', () => {
     expect(() => generateEndlessLevel(2)).toThrow('invalid endless level');
   });
 
+  it('builds stepped mounds from rotating outline templates', () => {
+    expect(new Set([4, 5, 6, 7].map(n => moundTemplateFor(n).key)).size).toBe(4);
+    for (const n of [4, 5, 6, 7, 8]) {
+      const level = generateEndlessLevel(n);
+      const mound = level.cards.filter(card => card.source === 'pile' && card.layer >= 6);
+      expect(mound).toHaveLength(Math.min(5, n - 3) * 20);
+      const xs = new Set(mound.filter(card => card.layer === 6).map(card => card.x));
+      // Staggered rows: far more distinct columns than a 4-wide grid.
+      expect(xs.size).toBeGreaterThan(6);
+      expect(new Set(mound.map(card => card.layer)).size).toBeGreaterThanOrEqual(3);
+    }
+    const heights = moundHeights(10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 20);
+    expect(heights.reduce((sum, height) => sum + height, 0)).toBe(20);
+    expect(heights[0]).toBeGreaterThan(heights[heights.length - 1]);
+  });
+
+  it('replays calibrated late boards past the tuned range and keeps them solvable', () => {
+    const late = generateEndlessLevel(ENDLESS_TUNED_UNTIL + 1);
+    const base = generateEndlessLevel(ENDLESS_REMIX_POOL[0]);
+    expect(late.stage).toBe(ENDLESS_TUNED_UNTIL + 1);
+    expect(late.cards).toHaveLength(base.cards.length);
+    expect(late.items).toHaveLength(base.items.length);
+    expect(late.cards.map(card => card.x)).toEqual(base.cards.map(card => card.x));
+    expect(late.cards.map(card => card.kind)).toEqual(base.cards.map(card => card.kind));
+    expect(solveStackLevel(late, {maxNodes: 240_000}).solvable).toBe(true);
+    expect(endlessTuning(40)).toEqual(endlessTuning(ENDLESS_TUNED_UNTIL));
+  });
+
   it('provides at least twenty unique route titles and cycles them', () => {
     expect(new Set(ROUTE_TITLES).size).toBeGreaterThanOrEqual(20);
     expect(routeTitleForLevel(3)).toBe('第 3 关 · 出城收费站');
@@ -68,7 +97,7 @@ describe('daily stack levels', () => {
     expect(() => dailySeed(new Date('invalid'))).toThrow('invalid daily stack date');
   });
 
-  it('generates deterministic, solvable four-layer levels at stage-one difficulty', () => {
+  it('generates deterministic, solvable four-layer levels at stage-one difficulty', {timeout: 60_000}, () => {
     for (const key of ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']) {
       const level = generateDailyLevel(key);
       expect(level).toEqual(generateDailyLevel(key));
@@ -78,9 +107,19 @@ describe('daily stack levels', () => {
       expect(level.items.length).toBeGreaterThanOrEqual(8);
       expect(level.items.length).toBeLessThanOrEqual(10);
       expect(level.slotCapacity).toBe(7);
-      expect(level.seed).toBe(`trunk-daily-${key}`);
+      expect(level.seed.startsWith(`trunk-daily-${key}`)).toBe(true);
+      // Greedy bot without props lands in the 30–70% band on every date.
+      const rate = dailyGreedyRate(level, 200);
+      expect(rate).toBeGreaterThanOrEqual(.3);
+      expect(rate).toBeLessThanOrEqual(.7);
       expect(solveStackLevel(level, {maxNodes: 1_000}).solvable).toBe(true);
     }
+    // The shipped table matches runtime calibration and skips re-simulation on phones.
+    for (const key of ['2026-11-12', '2027-03-01', '2028-12-31']) {
+      expect(dailyTableAttempt(key)).toBe(calibrateDaily(key).attempt);
+    }
+    expect(dailyTableAttempt('2026-10-31')).toBeUndefined();
+    expect(dailyTableAttempt('2040-01-01')).toBeUndefined();
     expect(() => generateDailyLevel('2026-02-30')).toThrow('invalid daily stack date key');
     expect(() => generateDailyLevel('not-a-date')).toThrow('invalid daily stack date key');
   });
