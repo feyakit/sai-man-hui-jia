@@ -139,7 +139,8 @@ export class StackPage {
   private readonly touchWorld = new Vec3();
   private readonly touchLocal = new Vec3();
   private readonly touchPoint = {x:0,y:0};
-  private readonly onHide = () => { this.busy = false; };
+  private readonly onHide = () => { this.busy = false; this.sounds.pause(); };
+  private readonly onShow = () => this.sounds.resume();
   private readonly momLayer: Node;
   private readonly momAvatar: Node;
   private readonly momBubble: Label;
@@ -260,6 +261,7 @@ export class StackPage {
 
     this.node.on(Node.EventType.TOUCH_END,this.touch,this);
     game.on(Game.EVENT_HIDE,this.onHide);
+    game.on(Game.EVENT_SHOW,this.onShow);
     this.debugHook = {
       getState: () => this.debugState(),
       getClickable: () => this.debugClickable(),
@@ -284,6 +286,8 @@ export class StackPage {
     }
     this.node.once(Node.EventType.NODE_DESTROYED,() => {
       game.off(Game.EVENT_HIDE,this.onHide);
+      game.off(Game.EVENT_SHOW,this.onShow);
+      this.sounds.dispose();
       if (this.momHideTimer) clearTimeout(this.momHideTimer);
       if (typeof window !== 'undefined' && (window as Window & {__stack?: object}).__stack === this.debugHook) {
         delete (window as Window & {__stack?: object}).__stack;
