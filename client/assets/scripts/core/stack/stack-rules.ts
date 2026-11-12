@@ -77,8 +77,11 @@ export class StackGame {
   get cards(): readonly StackCard[] { return this.cardList; }
   get slot(): readonly StackCard[] { return this.slotList; }
   get status(): StackStatus { return this.currentStatus; }
+  /** Cards still on the pile, side stacks, reserve shelf, or newly delivered by mom. */
+  get pileRemaining(): number { return this.cardList.length; }
   get remaining(): number { return this.cardList.length + this.slotList.length; }
   get clearedGroups(): number { return this.groupsCleared; }
+  get momEventCount(): number { return this.momEvents; }
   get props(): StackProps { return this.propState; }
 
   canTap(id: number): boolean {
