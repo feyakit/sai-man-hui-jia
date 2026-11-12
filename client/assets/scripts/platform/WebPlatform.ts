@@ -3,6 +3,12 @@ export class WebPlatform {
 
   isMomMode(): boolean { return new URLSearchParams(window.location.search).get('mode') === 'mom'; }
 
+  isStackMode(): boolean { return new URLSearchParams(window.location.search).get('mode') === 'stack'; }
+
+  stackStage(): 1 | 2 {
+    return new URLSearchParams(window.location.search).get('stage') === '2' ? 2 : 1;
+  }
+
   hasLevelOverride(): boolean { return new URLSearchParams(window.location.search).has('level'); }
 
   levelFilename(): string {
