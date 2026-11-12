@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import {createStackPageLayout} from '../client/assets/scripts/core/stack/stack-layout';
 import {
-  VEHICLES, sedanSlotCells, vehicleArtRect, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  VEHICLES, sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
 } from '../client/assets/scripts/core/stack/stack-vehicles';
 
 describe('vehicle per level', () => {
@@ -33,12 +33,13 @@ describe('vehicle slot cells', () => {
         for (const height of [1334, 1623, 1800]) {
           for (const safe of [0, 34]) {
             const base = createStackPageLayout(height, safe);
-            const art = vehicleArtRect(vehicle, base.actionY);
+            const scale = vehicleScaleForPage(height);
+            const art = vehicleArtRect(vehicle, base.actionY, 750, scale);
             const cells = vehicleSlotCells(vehicle, capacity, art);
             expect(cells).toHaveLength(capacity);
             const regions = vehicleRegionRects(vehicle, art);
             for (const cell of cells) {
-              expect(cell.w).toBeGreaterThanOrEqual(60);
+              expect(cell.w).toBeGreaterThanOrEqual(60 * scale);
               expect(cell.x).toBeGreaterThanOrEqual(0);
               expect(cell.x + cell.w).toBeLessThanOrEqual(750);
               expect(cell.y + cell.h).toBeLessThan(base.actionY);

@@ -262,8 +262,8 @@ try {
   if (layout.cardBounds.left < 0 || layout.cardBounds.right > 390) {
     throw new Error(`stage 2 cards exceed the 390px viewport: ${JSON.stringify(layout.cardBounds)}`);
   }
-  // The whole board now shrinks to fit above the open trunk lid, so the floor is 50px at 390×844.
-  if (layout.cardSize.width < 50 || layout.cardSize.height < 50) {
+  // Stage-2 rows are packed tighter, so the board fits at full card size: floor 56px at 390×844.
+  if (layout.cardSize.width < 56 || layout.cardSize.height < 56) {
     throw new Error(`stage 2 cards are too small on screen: ${JSON.stringify(layout.cardSize)}`);
   }
   if (layout.stackRegion.ratio < .5) {

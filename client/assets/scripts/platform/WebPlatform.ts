@@ -1,3 +1,4 @@
+import { normalizeRoute, type StackRoute } from '../core/stack/stack-progress';
 import { resolveRoute, type AppRoute } from './route';
 
 export class WebPlatform {
@@ -9,8 +10,9 @@ export class WebPlatform {
 
   isStackMode(): boolean { return this.route() === 'stack'; }
 
-  stackStage(): 1 | 2 {
-    return new URLSearchParams(window.location.search).get('stage') === '2' ? 2 : 1;
+  /** ?stage=N (1 and up) or ?stage=daily. */
+  stackStage(): StackRoute {
+    return normalizeRoute(new URLSearchParams(window.location.search).get('stage'));
   }
 
   hasLevelOverride(): boolean { return new URLSearchParams(window.location.search).has('level'); }

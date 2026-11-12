@@ -2,7 +2,10 @@ import {
   Color, EventTouch, Game, Graphics, Label, Node, Rect as SpriteRect, Size, Sprite, SpriteFrame,
   Tween, UIOpacity, UITransform, Vec2, Vec3, game, sys, tween, view,
 } from 'cc';
-import { STACK_SEEDS, generateStackLevel } from '../core/stack/stack-generator';
+import {
+  browserStorage, levelForRoute, markDailyDone, nextRouteTitle, recordLevelReached, routeHeadline, vehicleLevelForRoute,
+  type StackRoute,
+} from '../core/stack/stack-progress';
 import {
   STACK_ACTION_HEIGHT, STACK_BODY_HOLE, STACK_BODY_SIZE, STACK_BODY_SLICE, STACK_CAR_SCALE_Y,
   IDENTITY_BOARD, createStackPageLayout, fitStackBoard, mapStackRect, stackCardBounds, stackContentBounds,
@@ -11,7 +14,7 @@ import {
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import {
-  sedanSlotCells, vehicleArtRect, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
   type LevelVehicle, type Rgb,
 } from '../core/stack/stack-vehicles';
 import { createRng } from '../core/rng';
@@ -70,6 +73,8 @@ interface CardView {
   readonly sprite: Sprite;
   readonly fallback: Label;
   readonly dim: Graphics;
+  /** Carton back shown on covered cards from level 4 on. */
+  readonly back: Graphics;
   size: number;
   kind: string;
   cardId: number;
@@ -202,13 +207,14 @@ export class StackPage {
 
   constructor(
     parent: Node,
-    stage: 1 | 2,
+    private readonly route: StackRoute,
     private readonly onAction: (action: StackPageAction) => void,
   ) {
-    this.level = generateStackLevel(stage, STACK_SEEDS[stage - 1]).level;
+    this.level = levelForRoute(route);
+    if (route !== 'daily') recordLevelReached(browserStorage(),route);
     this.capacity = (this.level as StackLevel & {slotCapacity?: number}).slotCapacity ?? SLOT_CAPACITY;
     const forcedVehicle = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vehicle');
-    const levelVehicle = vehicleForLevel(this.level.stage);
+    const levelVehicle = vehicleForLevel(vehicleLevelForRoute(route));
     const forcedDef = forcedVehicle ? vehicleByKey(forcedVehicle) : undefined;
     this.vehicle = forcedDef ? {def:forcedDef,lap:0,tint:null,displayName:forcedDef.name} : levelVehicle;
     this.game = new StackGame(this.level, createRng(`${this.level.seed}:runtime`), Date.now());
@@ -255,7 +261,8 @@ export class StackPage {
     this.remainingLabel = label(this.hud,'Remaining','剩余 18 件',24,0,0);
     this.remainingLabel.color = paleGold;
     label(this.hud,'ModeTitle','年货三消',38,0,0).color = gold;
-    const subtitle = label(this.hud,'Subtitle','点没被压住的年货 · 三件装一箱',19,0,0);
+    const headline = routeHeadline(route);
+    const subtitle = label(this.hud,'Subtitle',headline.subtitle ?? '点没被压住的年货 · 三件装一箱',headline.subtitle ? 22 : 19,0,0);
     subtitle.color = cream;
     this.soundButton = uiNode('SoundToggle',this.hud,86,40);
     this.soundButtonArt = this.soundButton.addComponent(Graphics);
@@ -387,7 +394,7 @@ export class StackPage {
     this.safeBottom = Math.max(0,bottom);
     this.node.getComponent(UITransform)!.setContentSize(750,this.height);
     const base = createStackPageLayout(this.height,bottom);
-    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY);
+    this.artRect = vehicleArtRect(this.vehicle.def,base.actionY,750,vehicleScaleForPage(this.height));
     const metrics = this.isSedan ? base : createStackPageLayout(this.height,bottom,this.artRect.y);
     this.safeBottom = metrics.safeBottom;
     this.board = fitStackBoard(stackContentBounds(this.level),metrics);
@@ -581,7 +588,7 @@ export class StackPage {
   private showVehicleIntro(): void {
     if (this.introShown) return;
     this.introShown = true;
-    const swap = this.level.stage >= 2;
+    const swap = this.route !== 'daily' && this.route >= 2;
     const banner = uiNode('VehicleIntro',this.fxLayer,520,120);
     const g = banner.addComponent(Graphics);
     const pal = this.vehicle.def.palette;
@@ -732,7 +739,7 @@ export class StackPage {
   }
 
   private updateHud(): void {
-    this.stageLabel.string = `第 ${this.level.stage} 关`;
+    this.stageLabel.string = routeHeadline(this.route).stage;
     this.remainingLabel.string = `剩余 ${this.game.pileRemaining} 件`;
   }
 
@@ -762,7 +769,9 @@ export class StackPage {
       } else if (!this.busy || card.source !== 'mom') {
         view.node.setPosition(center);
       }
-      this.drawDim(view,isBlocked(card,this.game.cards));
+      const blocked = isBlocked(card,this.game.cards);
+      view.back.node.active = this.hideCovered && blocked;
+      this.drawDim(view,blocked && !view.back.node.active);
     }
   }
 
@@ -824,8 +833,10 @@ export class StackPage {
     fallback.color = ink;
     fallback.overflow = Label.Overflow.SHRINK;
     fallback.node.getComponent(UITransform)!.setContentSize(size*.86,size*.7);
+    const back = uiNode('CartonBack',node,size,size).addComponent(Graphics);
+    back.node.active = false;
     const dim = uiNode('PressedShade',node,size,size).addComponent(Graphics);
-    const view: CardView = {node,art,sprite,fallback,dim,size,kind:'',cardId:card.id,born:false};
+    const view: CardView = {node,art,sprite,fallback,dim,back,size,kind:'',cardId:card.id,born:false};
     this.configureCard(view,card,size);
     return view;
   }
@@ -844,6 +855,7 @@ export class StackPage {
     g.roundRect(-size/2+1,-size/2+1,size-2,size-2,radius); g.stroke();
     g.strokeColor = new Color(246,195,67,210); g.lineWidth = 1.3;
     g.roundRect(-size/2+5,-size/2+5,size-10,size-10,radius-3); g.stroke();
+    this.drawCartonBack(view.back,size);
     view.fallback.string = card.name;
     view.fallback.fontSize = Math.max(12,Math.min(18,size*.2));
     view.fallback.lineHeight = view.fallback.fontSize+3;
@@ -861,6 +873,26 @@ export class StackPage {
         for (const candidate of this.slotViews) if (candidate.kind === card.kind) this.showItemFrame(candidate,cropped);
       });
     }
+  }
+
+  private get hideCovered(): boolean {
+    return !!(this.level as StackLevel & {hideCovered?: boolean}).hideCovered;
+  }
+
+  /** Kraft carton with red tape and a 福 stamp: what a covered card looks like from level 4 on. */
+  private drawCartonBack(g: Graphics,size: number): void {
+    g.clear();
+    const radius = Math.max(9,size*.14);
+    fill(g,new Color(120,78,40),-size/2,-size/2,size,size,radius);
+    fill(g,new Color(196,142,82),-size/2+3,-size/2+3,size-6,size-6,radius-2);
+    fill(g,new Color(214,164,104),-size/2+6,-size/2+size*.52,size-12,size*.4,radius-4);
+    // Packing tape across the flaps.
+    fill(g,new Color(186,38,40,235),-size*.12,-size/2+3,size*.24,size-6,2);
+    g.strokeColor = new Color(120,78,40,160); g.lineWidth = Math.max(1.5,size*.02);
+    g.moveTo(-size/2+6,size*.02); g.lineTo(size/2-6,size*.02); g.stroke();
+    fill(g,new Color(246,195,67,230),-size*.13,size*.16,size*.26,size*.22,3);
+    g.strokeColor = new Color(186,38,40); g.lineWidth = Math.max(1.5,size*.025);
+    g.roundRect(-size/2+1,-size/2+1,size-2,size-2,radius); g.stroke();
   }
 
   private showItemFrame(view: CardView,frame: SpriteFrame): void {
@@ -1229,9 +1261,12 @@ export class StackPage {
         try { navigator.vibrate(cue.vibration); } catch { /* Optional vibration: silent. */ }
       }
     });
-    const choices = this.level.stage === 1
-      ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
-      : [{title:'再来一次',action:'replay' as const},{title:'回第 1 关',action:'first' as const}];
+    if (this.route === 'daily') markDailyDone(browserStorage());
+    const choices = this.route === 'daily'
+      ? [{title:'今日已塞满 · 回首页',action:'first' as const},{title:'再来一次',action:'replay' as const}]
+      : this.route === 1
+        ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
+        : [{title:nextRouteTitle(this.route) ?? '下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}];
     const elapsedSec = instant ? Math.round(elapsedMs/1000) : Math.max(1,Math.round(elapsedMs/1000));
     const totalBoxes = Math.floor(this.level.cards.length / 3);
     this.finishStats = {elapsedSec,boxes:instant ? totalBoxes : this.game.clearedGroups};
@@ -1258,8 +1293,9 @@ export class StackPage {
       this.finishView.setRankStatus(RANK_DEBUG_TEXT);
       return;
     }
-    if (this.level.stage === 2) this.startRankReporting(elapsedMs);
-    else this.startStageOneReporting(elapsedMs);
+    // Only the first two levels count for the province board; the endless road and the daily board never report.
+    if (this.route === 2) this.startRankReporting(elapsedMs);
+    else if (this.route === 1) this.startStageOneReporting(elapsedMs);
   }
 
   private startStageOneReporting(elapsedMs: number): void {
@@ -1349,10 +1385,11 @@ export class StackPage {
     const def = this.vehicle.def;
     void showStackShareImage({
       stage:this.level.stage,
+      stageLabel:routeHeadline(this.route).stage,
       result,
       province:this.rankApi.province,
       rank:victory ? this.lastProvinceRank : null,
-      counted:this.level.stage <= 2 && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
+      counted:(this.route === 1 || this.route === 2) && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
       ride:{
         name:this.vehicle.displayName,
         art:def.art,
@@ -1469,6 +1506,11 @@ export class StackPage {
     for (const card of this.game.cards) kindCounts[card.kind] = (kindCounts[card.kind] ?? 0) + 1;
     return {
       stage:this.level.stage,
+      route:this.route,
+      headline:routeHeadline(this.route),
+      capacity:this.capacity,
+      hideCovered:this.hideCovered,
+      cartonBacks:[...this.cardViews.values()].filter(view => view.node.active && view.back.node.active).length,
       status:this.game.status,
       remaining:this.game.pileRemaining,
       pileRemaining:this.game.pileRemaining,
@@ -1489,13 +1531,13 @@ export class StackPage {
   }
 
   private debugFinishButtons(): {
-    action:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
+    action:string;title:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
     screenTop:number;screenBottom:number;screenW:number;screenH:number;
   }[] {
     if (!this.finishView) return [];
     const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
     const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
-    return this.finishView.buttonPoints().map(button => this.debugRect(button.action,button.rect,screenWidth,screenHeight));
+    return this.finishView.buttonPoints().map(button => ({...this.debugRect(button.action,button.rect,screenWidth,screenHeight),title:button.title}));
   }
 
   private debugModalButtons(): {
