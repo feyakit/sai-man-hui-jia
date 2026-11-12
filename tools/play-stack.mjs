@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8767/';
-const outDir = process.argv[3] ?? '/workspace/play-check/match3-v2';
+const outDir = process.argv[3] ?? '/workspace/play-check/match3-v3';
 const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 const browserErrors = [];
 const screenshots = [];
@@ -64,6 +64,37 @@ async function tapAction(page, key) {
   if (!action) throw new Error(`action ${key} is not exposed`);
   await page.touchscreen.tap(action.screenX, action.screenY);
   await page.waitForTimeout(260);
+}
+
+async function waitForShareOverlay(page) {
+  await page.waitForFunction(() => {
+    const image = document.querySelector('#stack-share-image');
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  }, undefined, {timeout: 8_000});
+  await page.waitForTimeout(220);
+}
+
+async function saveShareImage(page, name) {
+  const dataUrl = await page.evaluate(() => document.querySelector('#stack-share-image')?.src ?? '');
+  if (!dataUrl.startsWith('data:image/png;base64,')) {
+    throw new Error('share image is not a PNG data URL');
+  }
+  const dimensions = await page.evaluate(() => {
+    const image = document.querySelector('#stack-share-image');
+    return image instanceof HTMLImageElement ? {width:image.naturalWidth,height:image.naturalHeight} : null;
+  });
+  if (!dimensions || dimensions.width !== 1080 || dimensions.height !== 1440) {
+    throw new Error(`unexpected share image dimensions: ${JSON.stringify(dimensions)}`);
+  }
+  const file = path.join(outDir, name);
+  await writeFile(file, Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64'));
+  screenshots.push(name);
+  return file;
+}
+
+async function closeShareOverlay(page) {
+  await page.locator('#stack-share-close').click();
+  await page.waitForFunction(() => !document.querySelector('#stack-share-overlay'), undefined, {timeout: 3_000});
 }
 
 async function tapSolutionCard(page, id) {
@@ -150,6 +181,18 @@ try {
   }, undefined, { timeout: 8_000 });
   await stage1.waitForTimeout(3_200);
   await screenshot(stage1, '03-stage1-win.png');
+  const finishButtons = await stage1.evaluate(() => window.__stack.getFinishButtons());
+  const shareWin = finishButtons.find(button => button.action === 'share');
+  if (!shareWin) throw new Error(`victory share button is missing: ${JSON.stringify(finishButtons)}`);
+  const shareBottomGap = 844 - (shareWin.screenY + 22);
+  if (shareBottomGap > 844 * .10) {
+    throw new Error(`finish buttons leave too much bottom space: ${JSON.stringify({finishButtons,shareBottomGap})}`);
+  }
+  await stage1.touchscreen.tap(shareWin.screenX, shareWin.screenY);
+  await waitForShareOverlay(stage1);
+  await screenshot(stage1, '09-share-win.png');
+  await saveShareImage(stage1, '11-share-image-win.png');
+  await closeShareOverlay(stage1);
   await stage1.close();
 
   const stage2 = await open('?mode=stack&stage=2');
@@ -162,7 +205,13 @@ try {
   if (layout.cardBounds.left < 0 || layout.cardBounds.right > 390) {
     throw new Error(`stage 2 cards exceed the 390px viewport: ${JSON.stringify(layout.cardBounds)}`);
   }
-  if (layout.sideCounts.left < 12 || layout.sideCounts.right < 12) {
+  if (layout.cardSize.width < 56 || layout.cardSize.height < 56) {
+    throw new Error(`stage 2 cards are too small on screen: ${JSON.stringify(layout.cardSize)}`);
+  }
+  if (layout.stackRegion.ratio < .55) {
+    throw new Error(`stage 2 cargo mound is too short: ${JSON.stringify(layout.stackRegion)}`);
+  }
+  if (layout.sideCounts.left < 8 || layout.sideCounts.right < 8) {
     throw new Error(`stage 2 side piles are missing cards: ${JSON.stringify(layout.sideCounts)}`);
   }
   for (const card of hard.clickable) {
@@ -203,8 +252,16 @@ try {
   await screenshot(fail, '05-fail-popup.png');
   const failed = await state(fail);
   if (failed.slot.length !== 7) throw new Error(`fail preview has ${failed.slot.length} slots`);
-  const revive = await fail.evaluate(() => window.__stack.getModalButtons().find(button => button.action === 'revive'));
+  const modalButtons = await fail.evaluate(() => window.__stack.getModalButtons());
+  const shareFail = modalButtons.find(button => button.action === 'share');
+  const revive = modalButtons.find(button => button.action === 'revive');
+  if (!shareFail) throw new Error(`fail popup did not expose a share button: ${JSON.stringify(modalButtons)}`);
   if (!revive) throw new Error('fail preview did not expose a revive button');
+  await fail.touchscreen.tap(shareFail.screenX, shareFail.screenY);
+  await waitForShareOverlay(fail);
+  await screenshot(fail, '10-share-fail.png');
+  await saveShareImage(fail, '12-share-image-fail.png');
+  await closeShareOverlay(fail);
   await fail.touchscreen.tap(revive.screenX, revive.screenY);
   await fail.waitForFunction(() => {
     const current = window.__stack.getState();
@@ -236,6 +293,10 @@ try {
     '06-undo.png',
     '07-shuffle.png',
     '08-mom-event.png',
+    '09-share-win.png',
+    '10-share-fail.png',
+    '11-share-image-win.png',
+    '12-share-image-fail.png',
   ];
   console.log(JSON.stringify({
     ok: true,

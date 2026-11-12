@@ -3,6 +3,7 @@ import { FINISH_DURATION, type FinishAction, type FinishState } from '../game/Fi
 import type { Rect } from '../game/InteractionGeometry';
 import { inRect } from '../game/InteractionGeometry';
 import { loadArt } from '../services/OptionalResources';
+import { STACK_CARGO_POSITIONS, STACK_SHARE_ITEM_KEYS } from '../core/stack/stack-share';
 import { fill, label, uiNode } from './UIKit';
 
 const red = new Color(188, 34, 43);
@@ -18,7 +19,7 @@ export interface StackFinishStats {
 }
 
 interface FinishButton {
-  readonly action: FinishAction;
+  readonly action: FinishAction | 'share';
   readonly rect: Rect;
   readonly label: Node;
 }
@@ -31,8 +32,9 @@ export class StackFinishView {
   private readonly car: Node;
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
+  private readonly cargo: Node;
+  private readonly cargoSprites: Sprite[] = [];
   private readonly bodyImage: Sprite;
-  private readonly lidImage: Sprite;
   private readonly headline: Node;
   private readonly statsLabel: Node;
   private readonly actions: Node;
@@ -41,13 +43,16 @@ export class StackFinishView {
   private height = 1334;
   private state?: FinishState;
   private ready = false;
-  private lidClosedY = -39;
+  private squeeze = 0;
+  private trunkY = -39;
+  private hole = {x: 0, y: -39, w: 506, h: 226};
 
   constructor(
     parent: Node,
     private readonly choices: readonly {title: string; action: FinishAction}[],
     private readonly stats: StackFinishStats,
     private readonly onAction: (action: FinishAction) => void,
+    private readonly onShare: () => void = () => undefined,
   ) {
     this.node = uiNode('StackFinish', parent, 750, 1334);
     this.backdrop = uiNode('NightBackdrop', this.node, 750, 1334).addComponent(Sprite);
@@ -65,20 +70,31 @@ export class StackFinishView {
     this.car = uiNode('HomewardCar', this.node, 760, 520);
     this.carFallback = uiNode('CarFallback', this.car, 760, 520).addComponent(Graphics);
     this.trunkImage = this.imageNode('TrunkWell', this.car);
+    this.cargo = uiNode('TrunkCargo', this.car, 720, 450);
+    for (let index = 0; index < STACK_SHARE_ITEM_KEYS.length; index++) {
+      this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
+    }
     this.bodyImage = this.imageNode('CarBody', this.car);
-    this.lidImage = this.imageNode('TrunkLid', this.car);
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
-      loadArt('vehicles/sedan_v1_lid'),
-    ]).then(([body, trunk, lid]) => {
+    ]).then(([body, trunk]) => {
       if (!this.node.isValid) return;
       if (trunk) { this.trunkImage.spriteFrame = trunk; this.trunkImage.enabled = true; }
       if (body) { this.bodyImage.spriteFrame = body; this.bodyImage.enabled = true; this.carFallback.enabled = false; }
-      if (lid) { this.lidImage.spriteFrame = lid; this.lidImage.enabled = true; }
       this.ready = true;
       this.layout(this.height);
       if (this.state) this.render(this.state);
+    });
+    void Promise.all(STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`))).then(frames => {
+      if (!this.node.isValid) return;
+      for (let index = 0; index < frames.length && index < this.cargoSprites.length; index++) {
+        const frame = frames[index];
+        if (!frame) continue;
+        this.cargoSprites[index].spriteFrame = frame;
+        this.cargoSprites[index].enabled = true;
+      }
+      this.layoutCargo();
     });
 
     this.headline = uiNode('HomeBanner', this.node, 750, 230);
@@ -99,8 +115,12 @@ export class StackFinishView {
 
     this.actions = uiNode('FinishActions', this.node, 750, 320);
     this.actionArt = this.actions.addComponent(Graphics);
-    for (let index = 0; index < choices.length; index++) {
-      const choice = choices[index];
+    const choicesWithShare: readonly {title: string; action: FinishAction | 'share'}[] = [
+      ...choices,
+      {title:'生成分享图',action:'share'},
+    ];
+    for (let index = 0; index < choicesWithShare.length; index++) {
+      const choice = choicesWithShare[index];
       const text = label(this.actions, `FinishButton${index}`, choice.title, 30, 0, 0);
       text.color = index === 0 ? ink : gold;
       this.buttons.push({ action: choice.action, rect: {x:125,y:0,w:500,h:74}, label: text.node });
@@ -118,9 +138,11 @@ export class StackFinishView {
     this.wash.clear();
     fill(this.wash, night, -375, -height / 2, 750, height, 0);
     this.drawCarFallback();
-    this.headline.setPosition(0, height / 2 - 207);
-    this.statsLabel.setPosition(0, height / 2 - 380);
-    const actionsY = -height / 2 + 450;
+    // Tall phones leave a gap between the car and the bottom buttons; lower the car and banner into it.
+    this.squeeze = Math.min(110, Math.max(0, (height - 1334) * .38));
+    this.headline.setPosition(0, height / 2 - 207 - this.squeeze);
+    this.statsLabel.setPosition(0, height / 2 - 380 - this.squeeze);
+    const actionsY = -height / 2 + 300;
     this.actions.setPosition(0, actionsY);
     this.actionArt.clear();
     const baseY = 68;
@@ -137,7 +159,7 @@ export class StackFinishView {
         this.actionArt.stroke();
       }
     }
-    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 118);
+    this.node.getChildByName('SkipHint')!.setPosition(0, -height / 2 + 86);
     this.setupCar();
     if (this.state) this.render(this.state);
   }
@@ -147,9 +169,7 @@ export class StackFinishView {
     const drive = Math.max(0, Math.min(1, (state.time - 1050) / (FINISH_DURATION - 1050)));
     const carScale = .98 - .12 * drive;
     this.car.setScale(carScale, carScale, 1);
-    this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive);
-    this.lidImage.node.setPosition(0, this.lidClosedY);
-    this.lidImage.node.setScale(1, 1, 1);
+    this.car.setPosition(0, -this.height * .035 + this.height * .055 * drive - this.squeeze * 1.65);
     this.headline.active = state.celebration;
     this.statsLabel.active = state.celebration;
     this.actions.active = state.buttons;
@@ -159,8 +179,15 @@ export class StackFinishView {
   press(x: number, y: number): void {
     if (!this.state?.buttons) return;
     for (const button of this.buttons) {
-      if (inRect({x, y}, button.rect)) { this.onAction(button.action); return; }
+      if (!inRect({x, y}, button.rect)) continue;
+      if (button.action === 'share') this.onShare();
+      else this.onAction(button.action);
+      return;
     }
+  }
+
+  buttonPoints(): {action: FinishAction | 'share'; rect: Rect}[] {
+    return this.buttons.map(button => ({action:button.action,rect:{...button.rect}}));
   }
 
   private imageNode(name: string, parent: Node): Sprite {
@@ -173,17 +200,36 @@ export class StackFinishView {
 
   private setupCar(): void {
     const bodyW = 720, bodyH = 450;
-    const holeX = Math.round(BODY_HOLE.left / 1024 * bodyW);
-    const holeY = Math.round(BODY_HOLE.top / 640 * bodyH - bodyH / 2);
+    const holeX = Math.round((BODY_HOLE.left + BODY_HOLE.right) / 2 / 1024 * bodyW - bodyW / 2);
+    const holeY = Math.round((BODY_HOLE.top + BODY_HOLE.bottom) / 2 / 640 * bodyH - bodyH / 2);
     const holeW = Math.round((BODY_HOLE.right - BODY_HOLE.left) / 1024 * bodyW);
     const holeH = Math.round((BODY_HOLE.bottom - BODY_HOLE.top) / 640 * bodyH);
-    this.lidClosedY = holeY + holeH / 2;
+    this.hole = {x: holeX, y: holeY, w: holeW, h: holeH};
+    this.trunkY = holeY;
     this.show(this.bodyImage, 0, 0, bodyW, bodyH);
-    this.show(this.trunkImage, 0, this.lidClosedY, holeW, holeH);
-    this.show(this.lidImage, 0, this.lidClosedY, holeW + 24, holeH + 20);
-    this.lidImage.node.setScale(1, 1, 1);
+    this.show(this.trunkImage, 0, this.trunkY, holeW, holeH);
+    this.layoutCargo();
     this.car.setScale(.98, .98, 1);
-    this.car.setPosition(0, -this.height * .035);
+    this.car.setPosition(0, -this.height * .035 - this.squeeze * 1.65);
+  }
+
+  private layoutCargo(): void {
+    const {x, y, w, h} = this.hole;
+    const max = Math.min(w * .26, h * .55, 180);
+    for (let index = 0; index < this.cargoSprites.length && index < STACK_CARGO_POSITIONS.length; index++) {
+      const sprite = this.cargoSprites[index];
+      const frame = sprite.spriteFrame;
+      if (!frame) continue;
+      const [px, py, angle] = STACK_CARGO_POSITIONS[index];
+      const ratio = frame.rect.width / Math.max(1, frame.rect.height);
+      const width = ratio >= 1 ? max : max * ratio;
+      const height = ratio >= 1 ? max / ratio : max;
+      sprite.node.getComponent(UITransform)!.setContentSize(width, height);
+      // The body art hides the lower part of the hole, so lift the cargo into the visible opening.
+      sprite.node.setPosition(x + (px - .5) * w, y + (.5 - (py * .8 - .15)) * h);
+      sprite.node.angle = -angle * 180 / Math.PI;
+      sprite.enabled = true;
+    }
   }
 
   private drawCarFallback(): void {
