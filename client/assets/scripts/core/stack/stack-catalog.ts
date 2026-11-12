@@ -21,7 +21,7 @@ export const STAGE2_ITEMS: readonly StackItemDef[] = [
   {key: 'snacks', name: '零食大礼包'},
   {key: 'ham', name: '火腿'},
   {key: 'thermos', name: '保温壶'},
-  {key: 'crab', name: '大闸蟹'},
+  {key: 'firecracker', name: '鞭炮礼盒'},
 ];
 
 export function stackItems(stage: number): readonly StackItemDef[] {
