@@ -195,9 +195,13 @@ export class StackGame {
   private moveOutCards(): StackCard[] {
     const moved = this.slotList.splice(0, PACK_SIZE);
     const offset = this.cardList.filter(card => card.source === 'reserve').length;
+    const reserveSize = Math.round(this.level.cardW * .72);
     const restored = moved.map((card, index) => {
       const pos: StackPoint = this.level.reservePositions[(offset + index) % this.level.reservePositions.length];
-      return {...card, x: pos.x, y: pos.y, layer: 1000 + offset + index, source: 'reserve' as const};
+      return {
+        ...card, x: pos.x, y: pos.y, w: reserveSize, h: reserveSize,
+        layer: 1000 + offset + index, source: 'reserve' as const,
+      };
     });
     this.cardList.push(...restored);
     this.history = undefined;

@@ -28,53 +28,63 @@ function pileCard(
 function layoutStageOne(): StackCard[] {
   const cards: StackCard[] = [];
   let id = 0;
-  const w = 92, h = 92;
-  for (let i = 0; i < 5; i++) cards.push(pileCard(++id, 120 + i * 124, 202, w, h, 0, 'pile'));
-  for (let i = 0; i < 4; i++) cards.push(pileCard(++id, 182 + i * 124, 304, w, h, 0, 'pile'));
-  for (let i = 0; i < 5; i++) cards.push(pileCard(++id, 158 + i * 124, 251, w, h, 1, 'pile'));
-  for (let i = 0; i < 4; i++) cards.push(pileCard(++id, 220 + i * 124, 353, w, h, 1, 'pile'));
+  const w = 136, h = 136;
+  const rows = [
+    {y: 240, layer: 0, xs: [205, 365]},
+    {y: 315, layer: 1, xs: [140, 305, 470]},
+    {y: 395, layer: 0, xs: [125, 300, 475]},
+    {y: 470, layer: 1, xs: [205, 382]},
+    {y: 550, layer: 0, xs: [195, 375]},
+    {y: 625, layer: 1, xs: [115, 465]},
+    {y: 705, layer: 0, xs: [120, 465]},
+    {y: 780, layer: 1, xs: [185, 395]},
+  ] as const;
+  for (const row of rows) {
+    for (const x of row.xs) cards.push(pileCard(++id, x, row.y, w, h, row.layer, 'pile'));
+  }
   return cards;
 }
 
 function layoutStageTwo(random: () => number): StackCard[] {
   const cards: StackCard[] = [];
   let id = 0;
-  const w = 82, h = 82;
+  const w = 136, h = 136;
   const counts = [17, 17, 17, 17, 17, 17, 18, 18];
   for (let layer = 0; layer < counts.length; layer++) {
-    const slots = Array.from({length: 18}, (_, index) => index);
+    const slots = Array.from({length: 24}, (_, index) => index);
     for (const index of shuffle(slots, random).slice(0, counts[layer])) {
-      const col = index % 6, row = Math.floor(index / 6);
-      const x = Math.round(132 + col * 82 + (random() - .5) * 52);
-      const y = Math.round(176 + row * 82 + (random() - .5) * 40);
+      const col = index % 4, row = Math.floor(index / 4);
+      const x = Math.round(82 + col * 152 + (random() - .5) * 18);
+      const y = Math.round(190 + row * 118 + (random() - .5) * 18);
       cards.push(pileCard(++id, x, y, w, h, layer, 'pile'));
     }
   }
-  for (let i = 0; i < 6; i++) cards.push(pileCard(++id, 8, 270, w, h, 20 + i, 'side-left'));
-  for (let i = 0; i < 6; i++) cards.push(pileCard(++id, 660, 270, w, h, 20 + i, 'side-right'));
+  for (let i = 0; i < 6; i++) cards.push(pileCard(++id, 2, 500, w, h, 20 + i, 'side-left'));
+  for (let i = 0; i < 6; i++) cards.push(pileCard(++id, 612, 500, w, h, 20 + i, 'side-right'));
   return cards;
 }
 
 function reservePositions(cardW: number, cardH: number, count: number): StackPoint[] {
   const gap = 8, columns = 6;
-  const total = columns * cardW + (columns - 1) * gap;
+  const reserveW = Math.round(cardW * .72);
+  const total = columns * reserveW + (columns - 1) * gap;
   const start = Math.round((750 - total) / 2);
   return Array.from({length: count}, (_, index) => ({
-    x: start + (index % columns) * (cardW + gap),
-    y: 492 + Math.floor(index / columns) * (cardH + 10),
+    x: start + (index % columns) * (reserveW + gap),
+    y: 936 + Math.floor(index / columns) * (Math.round(cardH * .72) + 8),
   }));
 }
 
 function momPositions(cardW: number): StackPoint[] {
-  return [0, 1, 2].map(index => ({x: Math.round(375 - cardW * 1.5 - 8 + index * (cardW + 8)), y: 148}));
+  return [0, 1, 2].map(index => ({x: Math.round(375 - cardW * 1.5 + index * cardW), y: 170}));
 }
 
 function buildCards(stage: number, random: () => number): {cards: StackCard[]; items: readonly StackItemDef[]; w: number; h: number} {
   if (stage === 1) {
-    return {cards: layoutStageOne(), items: stackItems(1), w: 92, h: 92};
+    return {cards: layoutStageOne(), items: stackItems(1), w: 136, h: 136};
   }
   if (stage === 2) {
-    return {cards: layoutStageTwo(random), items: stackItems(2), w: 82, h: 82};
+    return {cards: layoutStageTwo(random), items: stackItems(2), w: 136, h: 136};
   }
   throw new Error(`unknown stack stage ${stage}`);
 }
