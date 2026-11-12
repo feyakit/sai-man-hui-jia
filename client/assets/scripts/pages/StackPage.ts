@@ -263,6 +263,11 @@ export class StackPage {
       getActions: () => this.debugActions(),
       getFinishButtons: () => this.debugFinishButtons(),
       getFinishRank: () => this.finishView?.rankStatusText ?? null,
+      getFinishStats: () => this.finishStats ? {
+        elapsedSec:this.finishStats.elapsedSec,
+        boxes:this.finishStats.boxes,
+        text:this.finishView?.statsLine ?? '',
+      } : null,
       getBoard: () => this.game.cards.map(card => ({
         id:card.id, kind:card.kind, source:card.source, layer:card.layer,
         x:card.x, y:card.y, w:card.w, h:card.h,
@@ -287,7 +292,7 @@ export class StackPage {
       this.refresh();
       if (this.game.status === 'lost') this.openFail();
     }
-    if (debug === 'win' && this.level.stage === 2) this.beginFinish(true);
+    if (debug === 'win') this.beginFinish(true);
   }
 
   tick(): void {
@@ -921,7 +926,8 @@ export class StackPage {
       ? [{title:'下一关',action:'next' as const},{title:'再来一次',action:'replay' as const}]
       : [{title:'再来一次',action:'replay' as const},{title:'回第 1 关',action:'first' as const}];
     const elapsedSec = instant ? Math.round(elapsedMs/1000) : Math.max(1,Math.round(elapsedMs/1000));
-    this.finishStats = {elapsedSec,boxes:this.game.clearedGroups};
+    const totalBoxes = Math.floor(this.level.cards.length / 3);
+    this.finishStats = {elapsedSec,boxes:instant ? totalBoxes : this.game.clearedGroups};
     this.finishView = new StackFinishView(
       this.node,
       choices,
@@ -1000,7 +1006,7 @@ export class StackPage {
     this.rankPage = new RankPage(this.node,this.height,() => {
       this.rankPage?.node.destroy();
       this.rankPage = undefined;
-    });
+    },() => this.onAction('first'));
   }
 
   private mapFinish(action: FinishAction): void {
@@ -1119,26 +1125,41 @@ export class StackPage {
     };
   }
 
-  private debugFinishButtons(): {action:string;screenX:number;screenY:number}[] {
+  private debugFinishButtons(): {
+    action:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
+    screenTop:number;screenBottom:number;screenW:number;screenH:number;
+  }[] {
     if (!this.finishView) return [];
     const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
     const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
-    return this.finishView.buttonPoints().map(button => ({
-      action:button.action,
-      screenX:(button.rect.x+button.rect.w/2)/750*screenWidth,
-      screenY:(button.rect.y+button.rect.h/2)/this.height*screenHeight,
-    }));
+    return this.finishView.buttonPoints().map(button => this.debugRect(button.action,button.rect,screenWidth,screenHeight));
   }
 
-  private debugModalButtons(): {action:string;screenX:number;screenY:number}[] {
+  private debugModalButtons(): {
+    action:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
+    screenTop:number;screenBottom:number;screenW:number;screenH:number;
+  }[] {
     if (this.modal !== 'fail') return [];
     const screenWidth = typeof window === 'undefined' ? 750 : window.innerWidth;
     const screenHeight = typeof window === 'undefined' ? this.height : window.innerHeight;
-    return this.failButtons.map(button => ({
-      action:button.action,
-      screenX:(button.rect.x+button.rect.w/2)/750*screenWidth,
-      screenY:(button.rect.y+button.rect.h/2)/this.height*screenHeight,
-    }));
+    return this.failButtons.map(button => this.debugRect(button.action,button.rect,screenWidth,screenHeight));
+  }
+
+  private debugRect(action: string,rect: Rect,screenWidth: number,screenHeight: number): {
+    action:string;screenX:number;screenY:number;screenLeft:number;screenRight:number;
+    screenTop:number;screenBottom:number;screenW:number;screenH:number;
+  } {
+    return {
+      action,
+      screenX:(rect.x+rect.w/2)/750*screenWidth,
+      screenY:(rect.y+rect.h/2)/this.height*screenHeight,
+      screenLeft:rect.x/750*screenWidth,
+      screenRight:(rect.x+rect.w)/750*screenWidth,
+      screenTop:rect.y/this.height*screenHeight,
+      screenBottom:(rect.y+rect.h)/this.height*screenHeight,
+      screenW:rect.w/750*screenWidth,
+      screenH:rect.h/this.height*screenHeight,
+    };
   }
 }
 

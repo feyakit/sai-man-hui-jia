@@ -208,6 +208,8 @@ export class StackFinishView {
 
   get rankStatusText(): string | null { return this.rankText; }
 
+  get statsLine(): string { return this.statsText(); }
+
   buttonPoints(): {action: FinishAction | 'share' | 'rank'; rect: Rect}[] {
     return this.buttons.map(button => ({action:button.action,rect:{...button.rect}}));
   }

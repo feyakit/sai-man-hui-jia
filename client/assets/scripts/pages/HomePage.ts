@@ -414,7 +414,7 @@ export class HomePage {
     this.rankPage = new RankPage(this.node,this.height,() => {
       this.rankPage?.node.destroy();
       this.rankPage = undefined;
-    });
+    },this.actions.onStart);
   }
 
   private refreshProvinceLabel(): void {
