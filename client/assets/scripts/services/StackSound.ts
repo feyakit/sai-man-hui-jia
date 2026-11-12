@@ -7,7 +7,7 @@ export type StackSoundEvent = StackSfxEvent;
 export const STACK_SOUND_STORAGE_KEY = 'stack-sound-enabled';
 export const STACK_MUSIC_STORAGE_KEY = 'stack-music-enabled';
 export const STACK_SOUND_EVENTS: readonly StackSoundEvent[] = [
-  'tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop',
+  'tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop', 'home',
 ];
 
 export interface StackSoundProfile {
@@ -26,6 +26,7 @@ export const STACK_SOUND_PROFILES: Readonly<Record<StackSoundEvent, StackSoundPr
   win: { label: '通关唢呐与鞭炮', layers: 5 },
   fail: { label: '下行低音', layers: 3 },
   prop: { label: '道具闪光铃', layers: 3 },
+  home: { label: '到家鞭炮与锣', layers: 4 },
 };
 
 export interface StackSoundPlayOptions {

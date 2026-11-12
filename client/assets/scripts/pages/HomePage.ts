@@ -6,7 +6,7 @@ import { loadArt } from '../services/OptionalResources';
 import { RankApi } from '../services/RankApi';
 import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
-import { browserStorage, isDailyDone, readBestLevel } from '../core/stack/stack-progress';
+import { browserStorage, homeProgressLabel, isDailyDone } from '../core/stack/stack-progress';
 import { RankPage } from './RankPage';
 
 const red = new Color(184, 29, 42);
@@ -171,10 +171,9 @@ export class HomePage {
     const storage = browserStorage();
     this.dailyLabel = label(this.node, 'HomeDailyText', isDailyDone(storage) ? '每日一关 · 今日已塞满' : '每日一关', 24, 0, 0);
     this.dailyLabel.color = paleGold;
-    const best = readBestLevel(storage);
-    this.bestLabel = label(this.startNode, 'HomeBestText', best >= 2 ? `最远到过第 ${best} 关` : '', 19, 0, -26);
+    this.bestLabel = label(this.startNode, 'HomeBestText', homeProgressLabel(storage), 19, 0, -26);
     this.bestLabel.color = new Color(110, 40, 20);
-    if (best >= 2) this.startLabel.node.setPosition(0, 10);
+    if (this.bestLabel.string) this.startLabel.node.setPosition(0, 10);
     this.refreshProvinceLabel();
 
     this.node.on(Node.EventType.TOUCH_END, this.touch, this);
@@ -184,6 +183,7 @@ export class HomePage {
       getState: () => ({
         province:this.rankApi.province,
         overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
+        progress:this.bestLabel?.string ?? '',
       }),
     });
     if (typeof window !== 'undefined') {

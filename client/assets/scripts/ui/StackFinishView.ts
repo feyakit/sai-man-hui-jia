@@ -84,7 +84,6 @@ export class StackFinishView {
     if (ride) {
       // Cargo rides on top of the load area, so it must draw above the vehicle art.
       this.cargo.setSiblingIndex(this.car.children.length - 1);
-      if (ride.tint) this.bodyImage.color = new Color(ride.tint[0], ride.tint[1], ride.tint[2], 255);
     }
     void Promise.all(ride ? [loadArt(ride.art), Promise.resolve(null)] : [
       loadArt('vehicles/sedan_v1_body'),
@@ -313,5 +312,4 @@ export interface FinishRide {
   readonly stretchX?: number;
   /** Main load area in 0..1 art fractions. */
   readonly region: {readonly x: number; readonly y: number; readonly w: number; readonly h: number};
-  readonly tint?: readonly [number, number, number] | null;
 }

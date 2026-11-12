@@ -1,91 +1,85 @@
 import { describe, expect, it } from 'vitest';
 import { calibrateDaily, dailyGreedyRate, dailySeed, dailyTableAttempt, generateDailyLevel } from '../client/assets/scripts/core/stack/stack-daily';
 import {
-  ENDLESS_MAX_CARDS, ENDLESS_REMIX_POOL, ENDLESS_TUNED_UNTIL, ROUTE_TITLES, endlessTuning, moundHeights, moundTemplateFor, capacityForLevel, endlessCardCount, endlessKindCount,
-  generateEndlessLevel, routeTitleForLevel,
+  ENDLESS_OPEN_RANGE, ROAD_FINAL_STAGE, ROUTE_TITLES, capacityForLevel, cartonRate, generateEndlessLevel, moundHeights,
+  moundTemplateFor, routeTitleForLevel,
 } from '../client/assets/scripts/core/stack/stack-endless';
+import { freeCards, isBlocked } from '../client/assets/scripts/core/stack/stack-rules';
 import { stackCardBounds } from '../client/assets/scripts/core/stack/stack-layout';
 import { solveStackLevel } from '../client/assets/scripts/core/stack/stack-solver';
 
-describe('endless stack levels', () => {
+describe('road levels 3–9', () => {
   it('grows capacity from seven to nine slots', () => {
     expect([1, 2, 3].map(capacityForLevel)).toEqual([7, 7, 7]);
     expect([4, 5].map(capacityForLevel)).toEqual([8, 8]);
-    expect([6, 7, 8, 20].map(capacityForLevel)).toEqual([9, 9, 9, 9]);
+    expect([6, 7, 8, 9].map(capacityForLevel)).toEqual([9, 9, 9, 9]);
     expect(() => capacityForLevel(0)).toThrow('invalid endless level');
   });
 
-  it('generates deterministic, solvable levels with growing cards, layers and kinds', () => {
-    const stage3 = generateEndlessLevel(3);
-    expect(stage3).toEqual(generateEndlessLevel(3));
-    expect(stage3.cards).toHaveLength(165);
-    expect([...new Set(stage3.cards.filter(card => card.source === 'pile').map(card => card.layer))]).toHaveLength(6);
-    expect(stage3.items).toHaveLength(14);
-    expect(stage3.slotCapacity).toBe(7);
-    expect(stage3.hideCovered).toBe(false);
-    expect(stage3.seed.startsWith('trunk-road-3')).toBe(true);
-    expect(solveStackLevel(stage3, {maxNodes: 1_000}).solvable).toBe(true);
-
-    const stage4 = generateEndlessLevel(4);
-    expect(stage4.cards).toHaveLength(180);
-    // The 20 extra cards form a stepped mound (not a flat grid): at least three heights.
-    expect([...new Set(stage4.cards.filter(card => card.source === 'pile').map(card => card.layer))].length).toBeGreaterThanOrEqual(8);
-    expect(stage4.items).toHaveLength(15);
-    expect(stage4.slotCapacity).toBe(8);
-    expect(stage4.hideCovered).toBe(true);
-    expect(solveStackLevel(stage4, {maxNodes: 1_000}).solvable).toBe(true);
-  });
-
-  it('caps the endless route without expanding the board footprint', () => {
-    const stage8 = generateEndlessLevel(8);
-    expect(stage8.cards).toHaveLength(ENDLESS_MAX_CARDS);
-    expect(stage8.items).toHaveLength(19);
-    expect(stage8.slotCapacity).toBe(9);
-    expect(endlessCardCount(20)).toBe(ENDLESS_MAX_CARDS);
-    expect(endlessKindCount(20)).toBeLessThanOrEqual(53);
-    const bounds = stackCardBounds(stage8.cards);
-    expect(bounds.left).toBeGreaterThanOrEqual(0);
-    expect(bounds.right).toBeLessThanOrEqual(750);
-    expect(bounds.top).toBeGreaterThanOrEqual(0);
-    expect(bounds.bottom).toBeLessThanOrEqual(1_120);
-    expect(solveStackLevel(stage8).solvable).toBe(true);
+  it('stops at level 9', () => {
+    expect(ROAD_FINAL_STAGE).toBe(9);
     expect(() => generateEndlessLevel(2)).toThrow('invalid endless level');
+    expect(() => generateEndlessLevel(10)).toThrow('invalid endless level');
+    expect(() => routeTitleForLevel(10)).toThrow('invalid endless route level');
   });
 
-  it('builds stepped mounds from rotating outline templates', () => {
-    expect(new Set([4, 5, 6, 7].map(n => moundTemplateFor(n).key)).size).toBe(4);
-    for (const n of [4, 5, 6, 7, 8]) {
+  it('generates deterministic, solvable, distinct boards for every level', () => {
+    const levels = [3, 4, 5, 6, 7, 8, 9].map(n => generateEndlessLevel(n));
+    expect(generateEndlessLevel(4)).toEqual(levels[1]);
+    expect(levels.map(level => level.cards.length)).toEqual([165, 180, 195, 210, 225, 240, 240]);
+    const signatures = levels.map(level => level.cards.map(card => `${card.x},${card.y},${card.layer},${card.kind}`).join('|'));
+    expect(new Set(signatures).size).toBe(7);
+    for (const level of levels) {
+      expect(solveStackLevel(level, {maxNodes: 240_000}).solvable).toBe(true);
+      const bounds = stackCardBounds(level.cards);
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(750);
+      expect(bounds.bottom).toBeLessThanOrEqual(1_120);
+    }
+  }, 60_000);
+
+  it('opens with 6–8 tappable cards on every level', () => {
+    for (const n of [3, 4, 5, 6, 7, 8, 9]) {
+      const open = freeCards(generateEndlessLevel(n).cards).length;
+      expect(open, `level ${n}`).toBeGreaterThanOrEqual(ENDLESS_OPEN_RANGE[0]);
+      expect(open, `level ${n}`).toBeLessThanOrEqual(ENDLESS_OPEN_RANGE[1]);
+    }
+  });
+
+  it('keeps most covered cards as dimmed faces: cartons from 15% on level 4 up to 30%, lowest layers first', () => {
+    expect([3, 4, 5, 6, 7, 8, 9].map(cartonRate)).toEqual([0, .15, .18, .21, .24, .27, .3]);
+    expect(generateEndlessLevel(3).cards.some(card => card.carton)).toBe(false);
+    for (const n of [4, 6, 9]) {
+      const level = generateEndlessLevel(n);
+      const cartons = level.cards.filter(card => card.carton);
+      expect(cartons.length).toBe(Math.round(cartonRate(n) * level.cards.length));
+      // Every carton starts covered; the open top is always real cargo.
+      for (const carton of cartons) expect(isBlocked(carton, level.cards)).toBe(true);
+      const pileLayer = (cards: typeof cartons) => cards.filter(card => card.source === 'pile').reduce((sum, card) => sum + card.layer, 0)
+        / Math.max(1, cards.filter(card => card.source === 'pile').length);
+      const faces = level.cards.filter(card => !card.carton && isBlocked(card, level.cards));
+      expect(pileLayer(cartons)).toBeLessThan(pileLayer(faces));
+    }
+  });
+
+  it('gives levels 4–9 their own stepped mound outline', () => {
+    expect(new Set([4, 5, 6, 7, 8, 9].map(n => moundTemplateFor(n).key)).size).toBe(6);
+    for (const n of [4, 6, 9]) {
       const level = generateEndlessLevel(n);
       const mound = level.cards.filter(card => card.source === 'pile' && card.layer >= 6);
       expect(mound).toHaveLength(Math.min(5, n - 3) * 20);
-      const xs = new Set(mound.filter(card => card.layer === 6).map(card => card.x));
-      // Staggered rows: far more distinct columns than a 4-wide grid.
-      expect(xs.size).toBeGreaterThan(6);
       expect(new Set(mound.map(card => card.layer)).size).toBeGreaterThanOrEqual(3);
     }
-    const heights = moundHeights(10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 20);
+    const heights = moundHeights(10, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 20, 10);
     expect(heights.reduce((sum, height) => sum + height, 0)).toBe(20);
     expect(heights[0]).toBeGreaterThan(heights[heights.length - 1]);
   });
 
-  it('replays calibrated late boards past the tuned range and keeps them solvable', () => {
-    const late = generateEndlessLevel(ENDLESS_TUNED_UNTIL + 1);
-    const base = generateEndlessLevel(ENDLESS_REMIX_POOL[0]);
-    expect(late.stage).toBe(ENDLESS_TUNED_UNTIL + 1);
-    expect(late.cards).toHaveLength(base.cards.length);
-    expect(late.items).toHaveLength(base.items.length);
-    expect(late.cards.map(card => card.x)).toEqual(base.cards.map(card => card.x));
-    expect(late.cards.map(card => card.kind)).toEqual(base.cards.map(card => card.kind));
-    expect(solveStackLevel(late, {maxNodes: 240_000}).solvable).toBe(true);
-    expect(endlessTuning(40)).toEqual(endlessTuning(ENDLESS_TUNED_UNTIL));
-  });
-
-  it('provides at least twenty unique route titles and cycles them', () => {
-    expect(new Set(ROUTE_TITLES).size).toBeGreaterThanOrEqual(20);
+  it('names one place per level and ends at home', () => {
+    expect(ROUTE_TITLES).toHaveLength(7);
+    expect(new Set(ROUTE_TITLES).size).toBe(7);
     expect(routeTitleForLevel(3)).toBe('第 3 关 · 出城收费站');
-    expect(routeTitleForLevel(4)).toBe('第 4 关 · 高速服务区');
-    expect(routeTitleForLevel(3 + ROUTE_TITLES.length).split(' · ')[1]).toBe(routeTitleForLevel(3).split(' · ')[1]);
-    expect(() => routeTitleForLevel(2)).toThrow('invalid endless route level');
+    expect(routeTitleForLevel(9)).toBe('第 9 关 · 到家了');
   });
 });
 

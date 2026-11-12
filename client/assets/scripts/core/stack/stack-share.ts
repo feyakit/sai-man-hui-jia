@@ -79,6 +79,22 @@ export function createStackShareCopy(
   };
 }
 
+const HOMECOMING_CAPTIONS = [
+  '9 关回家路走完了，爸妈就在门口',
+  '一车年货塞满到家，过年好！',
+  '拖拉机开到家门口，鞭炮已经响了',
+] as const;
+
+/** Copy for the level-9 finale card: “到家了！” instead of the usual title, plus a homecoming line. */
+export function createStackHomecomingCopy(result: StackShareResult, random: () => number = Math.random): StackShareCopy {
+  return {
+    title: '到家了！',
+    stageText: '第 9 关 · 到家了',
+    statsText: formatStackShareStats(result),
+    caption: HOMECOMING_CAPTIONS[Math.min(HOMECOMING_CAPTIONS.length - 1, Math.floor(random() * HOMECOMING_CAPTIONS.length))],
+  };
+}
+
 export function stackShareFileName(stage: number, victory: boolean): string {
   return `${GAME_TITLE}-第${safeInteger(stage, 1)}关-${victory ? '胜利' : '差一点'}.png`;
 }
