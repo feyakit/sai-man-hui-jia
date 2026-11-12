@@ -203,6 +203,20 @@ describe('stack props, failure and mother event', () => {
     for (const item of reserve) expect(game.canTap(item.id)).toBe(true);
   });
 
+  it('allows only one revive per game', () => {
+    const cards = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((kind, index) => card(index + 1, kind, index * 90, 0));
+    const game = new StackGame(level(cards));
+    for (let id = 1; id <= 7; id++) game.tap(id);
+    expect(game.status).toBe('lost');
+    expect(game.canRevive).toBe(true);
+    expect(game.revive()).toHaveLength(3);
+    for (let id = 8; id <= 10; id++) game.tap(id);
+    expect(game.status).toBe('lost');
+    expect(game.canRevive).toBe(false);
+    expect(game.revive()).toEqual([]);
+    expect(game.status).toBe('lost');
+  });
+
   it('uses move-out and undo once, restoring the board after a click', () => {
     const cards = [card(1, 'a', 0, 0), card(2, 'b', 90, 0), card(3, 'c', 180, 0), card(4, 'd', 270, 0)];
     const game = new StackGame(level(cards));
