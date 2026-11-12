@@ -933,7 +933,24 @@ export class StackPage {
     this.finishView.layout(this.height);
     this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
     if (this.level.stage === 2) this.startRankReporting(elapsedMs);
-    else if (this.rankApi.province) void this.sendClear(1,this.rankApi.province,elapsedMs);
+    else this.startStageOneReporting(elapsedMs);
+  }
+
+  private startStageOneReporting(elapsedMs: number): void {
+    if (!this.rankApi.enabled) return;
+    const province = this.rankApi.province;
+    if (!province) {
+      this.provincePicker = new ProvincePicker(this.node,this.height,null,{
+        onSelect:selected => {
+          this.rankApi.setProvince(selected);
+          this.provincePicker = undefined;
+          void this.sendClear(1,selected,elapsedMs);
+        },
+        onCancel:() => { this.provincePicker = undefined; },
+      });
+      return;
+    }
+    void this.sendClear(1,province,elapsedMs);
   }
 
   private startRankReporting(elapsedMs: number): void {

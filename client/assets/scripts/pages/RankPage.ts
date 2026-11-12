@@ -66,7 +66,7 @@ export class RankPage {
     this.listLayer = uiNode('RankList',this.node,this.width,this.height);
     this.statusLabel = label(this.node,'RankStatus',RANK_LOADING_TEXT,28,0,0);
     this.statusLabel.color = paleGold;
-    this.summary = label(this.node,'RankSummary','',19,0,this.height/2 - 151);
+    this.summary = label(this.node,'RankSummary','',19,0,this.height/2 - 174);
     this.summary.color = cream;
     this.drawChrome();
     this.debugHook = Object.freeze({
@@ -193,14 +193,14 @@ export class RankPage {
   }
 
   private drawEntries(entries: readonly RankEntry[]): void {
-    const listTop = 226;
+    const listTop = 242;
     const footerTop = this.height - 126;
     const available = Math.max(180,footerTop - listTop - 20);
     const rowH = Math.max(28,Math.min(60,Math.floor(available / entries.length)));
     const rowW = 678;
     const rowX = 36;
     const fontSize = rowH >= 50 ? 24 : rowH >= 40 ? 22 : rowH >= 34 ? 19 : 17;
-    const headerY = 184;
+    const headerY = 210;
     const headerSize = 17;
     const columns = [
       {x:72,label:'名次'},
