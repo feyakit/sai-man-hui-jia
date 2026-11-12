@@ -1,6 +1,7 @@
 import { createRng, shuffle } from '../rng';
 import { stackItemByName, stackItems } from './stack-catalog';
 import { freeCards } from './stack-rules';
+import { STACK_CARD_SIZE } from './stack-layout';
 import { solveStackLevel } from './stack-solver';
 import type { StackCard, StackItemDef, StackLevel, StackPoint } from './stack-types';
 
@@ -45,52 +46,46 @@ function layoutStageOne(): StackCard[] {
   return cards;
 }
 
-const STAGE2_CARD = 112;
-const MAIN_LAYER_COUNTS = [22, 20, 18, 16, 14, 12, 10, 8] as const;
-const MAIN_LAYER_COLUMNS = [6, 6, 5, 5, 4, 3, 3, 3] as const;
-const MAIN_STEP_X = 78;
-const MAIN_STEP_Y = 54;
-const MAIN_BASE_Y = 590;
-const MAIN_LAYER_STEP = 48;
+const STAGE2_CARD = STACK_CARD_SIZE;
+const GRID = 112;
+const HALF = GRID / 2;
+const GRID_X0 = Math.round((750 - (5 * GRID + STAGE2_CARD)) / 2);
+const GRID_Y0 = 150;
+/**
+ * Bottom-to-top layers of the hard mound. Odd layers sit half a card right and down, so every
+ * card is pinned by up to four cards above; upper layers shrink towards the centre and the
+ * base loses its top corners, giving a hill silhouette instead of a wall.
+ */
+const MAIN_LAYERS: readonly {cols: readonly [number, number]; rows: readonly [number, number]; half: boolean; skip?: readonly string[]}[] = [
+  {cols: [0, 5], rows: [0, 6], half: false, skip: ['0,0', '5,0', '0,1', '5,1']},
+  {cols: [0, 4], rows: [0, 5], half: true, skip: ['0,0', '4,0']},
+  {cols: [1, 4], rows: [0, 6], half: false},
+  {cols: [1, 3], rows: [0, 5], half: true},
+  {cols: [2, 3], rows: [1, 5], half: false},
+  {cols: [2, 2], rows: [1, 4], half: true},
+];
 const SIDE_STACKS = [
-  {source: 'side-left', x: 8, baseY: 300, count: 8},
-  {source: 'side-left', x: 8, baseY: 520, count: 7},
-  {source: 'side-right', x: 646, baseY: 325, count: 7},
-  {source: 'side-right', x: 646, baseY: 545, count: 8},
+  {source: 'side-left', x: 36, y: 1006, count: 12, step: 13},
+  {source: 'side-right', x: 606, y: 1006, count: 12, step: -13},
 ] as const;
-
-function centeredRow(count: number, columns: number): number[] {
-  const rows = Math.ceil(count / columns);
-  const base = Math.floor(count / rows);
-  const extra = count % rows;
-  return Array.from({length: rows}, (_, row) => base + (row < extra ? 1 : 0));
-}
 
 function layoutStageTwo(random: () => number): StackCard[] {
   const cards: StackCard[] = [];
   let id = 0;
-  for (let layer = 0; layer < MAIN_LAYER_COUNTS.length; layer++) {
-    const columns = MAIN_LAYER_COLUMNS[layer];
-    const rowCounts = centeredRow(MAIN_LAYER_COUNTS[layer], columns);
-    const halfStepY = layer % 2 === 1 ? MAIN_STEP_Y / 2 : 0;
-    const layerY = MAIN_BASE_Y - layer * MAIN_LAYER_STEP + halfStepY;
-    for (let row = 0; row < rowCounts.length; row++) {
-      const rowCount = rowCounts[row];
-      const rowWidth = (rowCount - 1) * MAIN_STEP_X + STAGE2_CARD;
-      const startX = Math.round((750 - rowWidth) / 2);
-      for (let column = 0; column < rowCount; column++) {
-        const jitterX = Math.round((random() - .5) * 7);
+  MAIN_LAYERS.forEach((layer, index) => {
+    const offset = layer.half ? HALF : 0;
+    for (let row = layer.rows[0]; row <= layer.rows[1]; row++) {
+      for (let col = layer.cols[0]; col <= layer.cols[1]; col++) {
+        if (layer.skip?.includes(`${col},${row}`)) continue;
+        const jitterX = Math.round((random() - .5) * 4);
         const jitterY = Math.round((random() - .5) * 4);
-        const x = startX + column * MAIN_STEP_X + jitterX;
-        const y = Math.round(layerY + row * MAIN_STEP_Y + jitterY);
-        cards.push(pileCard(++id, x, y, STAGE2_CARD, STAGE2_CARD, layer, 'pile'));
+        cards.push(pileCard(++id, GRID_X0 + offset + col * GRID + jitterX, GRID_Y0 + offset + row * GRID + jitterY, STAGE2_CARD, STAGE2_CARD, index, 'pile'));
       }
     }
-  }
-  const sideSize = 96;
+  });
   for (const stack of SIDE_STACKS) {
     for (let index = 0; index < stack.count; index++) {
-      cards.push(pileCard(++id, stack.x, stack.baseY + index * 4, sideSize, sideSize, 20 + index, stack.source));
+      cards.push(pileCard(++id, stack.x + index * stack.step, stack.y, STAGE2_CARD, STAGE2_CARD, 20 + index, stack.source));
     }
   }
   return cards;
