@@ -150,13 +150,14 @@ export class RankApi {
 
   private async request(path: string, init?: RequestInit): Promise<Response> {
     if (!this.config.enabled) throw new Error('rank api disabled');
-    if (!this.fetcher) throw new Error('fetch unavailable');
+    const fetcher = this.fetcher;
+    if (!fetcher) throw new Error('fetch unavailable');
     const controller = typeof AbortController === 'undefined' ? undefined : new AbortController();
     const timer = controller
       ? setTimeout(() => controller.abort(),RANK_REQUEST_TIMEOUT_MS)
       : undefined;
     try {
-      return await this.fetcher(`${this.config.base}${path}`,{
+      return await fetcher(`${this.config.base}${path}`,{
         ...init,
         signal:controller?.signal,
       });
