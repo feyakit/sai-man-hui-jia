@@ -24,7 +24,6 @@ const brightRed = new Color(218,52,43);
 const cream = new Color(255,246,229);
 const gold = new Color(246,195,67);
 const paleGold = new Color(255,219,145);
-const deep = new Color(61,24,32);
 const shadow = new Color(27,14,18,95);
 const blockedShade = new Color(30,22,28,102);
 const dimText = new Color(91,74,62);
@@ -799,9 +798,9 @@ export class StackPage {
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);
     hint.color = cream;
     this.drawOverflowCar(layer);
-    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-100);
+    const revive = this.failButton(layer,'revive','复活 · 移出 3 件',-98);
     const share = this.failButton(layer,'share','生成分享图',-180);
-    const restart = this.failButton(layer,'restart','重来',-260);
+    const restart = this.failButton(layer,'restart','重来',-262);
     this.failButtons.push(revive,share,restart);
     this.sounds.play('fail');
     this.refreshFailButtons();
@@ -861,7 +860,7 @@ export class StackPage {
   private failButton(parent: Node,action: FailButton['action'],title: string,localY: number): FailButton {
     const rect = {x:150,y:this.height/2-localY-35,w:450,h:70};
     const text = label(parent,`Fail-${action}`,title,29,0,localY);
-    text.color = action === 'revive' ? ink : paleGold;
+    text.color = ink;
     return {action,title,rect,label:text};
   }
 
@@ -869,11 +868,9 @@ export class StackPage {
     if (!this.failLayer?.isValid) return;
     const g = this.failLayer.getComponent(Graphics)!;
     for (const button of this.failButtons) {
-      fill(g,button.action === 'revive' ? gold : deep,button.rect.x-375,this.height/2-button.rect.y-button.rect.h,button.rect.w,button.rect.h,20);
-      if (button.action !== 'revive') {
-        g.strokeColor = gold; g.lineWidth = 2;
-        g.roundRect(button.rect.x-375+2,this.height/2-button.rect.y-button.rect.h+2,button.rect.w-4,button.rect.h-4,18); g.stroke();
-      }
+      fill(g,gold,button.rect.x-375,this.height/2-button.rect.y-button.rect.h,button.rect.w,button.rect.h,20);
+      g.strokeColor = new Color(120,52,19); g.lineWidth = 2;
+      g.roundRect(button.rect.x-375+2,this.height/2-button.rect.y-button.rect.h+2,button.rect.w-4,button.rect.h-4,18); g.stroke();
     }
   }
 

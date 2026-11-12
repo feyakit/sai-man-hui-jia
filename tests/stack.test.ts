@@ -53,6 +53,10 @@ describe('stack level generation', () => {
     expect(level.items.length).toBeLessThanOrEqual(14);
     expect(kinds.size).toBe(level.items.length);
     for (const count of kinds.values()) expect(count % 3).toBe(0);
+    const opening = freeCards(level.cards);
+    expect(opening.length).toBeGreaterThanOrEqual(6);
+    expect(opening.length).toBeLessThanOrEqual(8);
+    expect(opening.filter(card => card.source === 'side-left' || card.source === 'side-right')).toHaveLength(2);
 
     const main = level.cards.filter(item => item.source === 'pile');
     const layerNumbers = [...new Set(main.map(item => item.layer))].sort((a, b) => a - b);
