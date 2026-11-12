@@ -792,7 +792,6 @@ export class StackPage {
     fill(g,new Color(61,18,26,245),-300,-320,600,640,34);
     fill(g,gold,-292,-312,584,624,29);
     fill(g,new Color(176,34,42),-284,-304,568,608,24);
-    fill(g,new Color(199,48,47,170),-260,-238,520,170,22);
     const title = label(layer,'OverflowTitle','后备箱塞爆了',46,0,236);
     title.color = gold;
     const hint = label(layer,'OverflowHint','7 格全满，还差一件同款年货',22,0,190);

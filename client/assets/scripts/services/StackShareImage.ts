@@ -54,6 +54,34 @@ function frameDrawable(frame: SpriteFrame | undefined): FrameDrawable | null {
   }
 }
 
+/**
+ * Cocos may drop an image's DOM element after uploading it to the GPU (for example once the finish
+ * view has drawn the same goods), so reload the original file from its URL and only fall back to
+ * the cached element when that is impossible.
+ */
+async function freshDrawable(frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
+  if (!frame) return null;
+  try {
+    const url = (frame.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+    if (url && typeof Image !== 'undefined') {
+      const image = await new Promise<HTMLImageElement | null>(resolve => {
+        const element = new Image();
+        element.onload = () => resolve(element);
+        element.onerror = () => resolve(null);
+        element.src = url;
+      });
+      if (image && image.naturalWidth > 0) {
+        return {
+          image,
+          width: Math.max(1, Number(frame.rect?.width) || image.naturalWidth),
+          height: Math.max(1, Number(frame.rect?.height) || image.naturalHeight),
+        };
+      }
+    }
+  } catch { /* fall back to the cached element */ }
+  return frameDrawable(frame);
+}
+
 function roundedRect(
   context: CanvasRenderingContext2D,
   x: number,
@@ -331,6 +359,9 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
       loadArt('vehicles/sedan_v1_trunk'),
       ...STACK_SHARE_ITEM_KEYS.map(key => loadArt(`items/${key}`)),
     ]);
+    const [bodyArt, trunkArt, ...itemArt] = await Promise.all(
+      [bodyFrame, trunkFrame, ...itemFrames].map(freshDrawable),
+    );
     const canvas = document.createElement('canvas');
     canvas.width = STACK_SHARE_WIDTH;
     canvas.height = STACK_SHARE_HEIGHT;
@@ -339,13 +370,13 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     drawBackground(context);
     const copy = drawTexts(context, scene);
     const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
-    const body = frameDrawable(bodyFrame);
+    const body = bodyArt;
     if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
     else drawFallbackCar(context);
     drawCargo(
       context,
-      frameDrawable(trunkFrame),
-      itemFrames.map(frameDrawable),
+      trunkArt,
+      itemArt,
       bodyX,
       bodyY,
       bodyWidth,
