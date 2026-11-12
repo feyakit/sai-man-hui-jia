@@ -46,7 +46,7 @@ const RED_GOLD: VehiclePalette = {panel: [118, 22, 30], accent: [246, 195, 67], 
 
 export const VEHICLES: readonly VehicleDef[] = [
   {
-    key: 'moto', name: '摩托车', container: '摩托后尾箱+挂包', art: 'vehicles/moto', artSize: {w: 548, h: 678}, height: 540,
+    key: 'moto', name: '摩托车', container: '摩托后尾箱', art: 'vehicles/moto', artSize: {w: 548, h: 678}, height: 540,
     regions: [
       {x: .13, y: .325, w: .74, h: .165, style: 'box'},
       {x: 0, y: .56, w: .35, h: .32, style: 'bag'},

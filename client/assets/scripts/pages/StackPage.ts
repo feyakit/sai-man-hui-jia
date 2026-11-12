@@ -1106,7 +1106,7 @@ export class StackPage {
     fill(g,new Color(61,18,26,245),-300,-320,600,640,34);
     fill(g,gold,-292,-312,584,624,29);
     fill(g,new Color(176,34,42),-284,-304,568,608,24);
-    const title = label(layer,'OverflowTitle',this.isSedan ? '后备箱塞爆了' : `${this.vehicle.def.container.split('+')[0]}塞爆了`,46,0,236);
+    const title = label(layer,'OverflowTitle',this.isSedan ? '后备箱塞爆了' : `${this.vehicle.def.container}塞爆了`,46,0,236);
     title.color = gold;
     const hint = label(layer,'OverflowHint',`${this.capacity} 格全满，还差一件同款年货`,22,0,190);
     hint.color = cream;
@@ -1240,6 +1240,14 @@ export class StackPage {
       action => this.mapFinish(action),
       () => this.openShare(true),
       () => this.openRankPage(),
+      this.vehicle.def.art ? {
+        art:this.vehicle.def.art,
+        w:this.vehicle.def.artSize.w,
+        h:this.vehicle.def.artSize.h,
+        stretchX:this.vehicle.def.stretchX,
+        region:this.vehicle.def.regions[0],
+        tint:this.vehicle.tint,
+      } : undefined,
     );
     this.finishView.layout(this.height);
     this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
