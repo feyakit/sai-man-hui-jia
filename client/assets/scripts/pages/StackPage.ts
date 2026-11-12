@@ -38,6 +38,7 @@ import { fill, label, uiNode } from '../ui/UIKit';
 import { StackFinishView, type StackFinishStats } from '../ui/StackFinishView';
 import { StackHomecomingView } from '../ui/StackHomecomingView';
 import { RankPage } from './RankPage';
+import { PlateBadge } from '../ui/PlateBadge';
 
 /** Packs closer together than this count as a combo. */
 const STACK_COMBO_WINDOW_MS = 3_000;
@@ -125,6 +126,7 @@ export class StackPage {
   private readonly carDetail: Graphics;
   private readonly trunkImage: Sprite;
   private readonly bodyImage: Sprite;
+  private readonly plate: PlateBadge;
   private readonly lidImage: Sprite;
   private readonly carFrames: {body?: SpriteFrame; trunk?: SpriteFrame; lid?: SpriteFrame} = {};
   private carRect: Rect = {x:30,y:940,w:690,h:420};
@@ -240,6 +242,9 @@ export class StackPage {
     this.bodyImage = this.makeImageNode('CarBody',this.carLayer);
     this.lidImage = this.makeImageNode('TrunkLid',this.carLayer);
     this.vehicleImage = this.makeImageNode('VehicleRear',this.carLayer);
+    this.plate = this.vehicle.def.art
+      ? new PlateBadge(this.vehicleImage.node,this.vehicle.def.key,this.vehicle.def.artSize)
+      : new PlateBadge(this.bodyImage.node,'sedan',{w:STACK_BODY_SIZE.w,h:STACK_BODY_SIZE.h});
     this.carDetail = uiNode('TrunkDetails',this.carLayer,750,1334).addComponent(Graphics);
     if (this.vehicle.def.art) {
       void loadArt(this.vehicle.def.art).then(frame => {
@@ -527,6 +532,7 @@ export class StackPage {
     this.rect(g,new Color(8,4,8,90),art.x+art.w*.08,art.y+art.h*.9,art.w*.84,art.h*.08,art.h*.04);
     if (this.vehicleFrame) {
       this.showImage(this.vehicleImage,this.vehicleFrame,art.x+art.w/2,art.y+art.h/2,art.w,art.h);
+      this.plate.layout(art.w,art.h);
       this.vehicleImage.color = Color.WHITE;
     } else {
       this.vehicleImage.enabled = false;
@@ -650,6 +656,7 @@ export class StackPage {
         STACK_BODY_SIZE.h,
       );
       this.bodyImage.node.setScale(this.carScale,this.carScaleY*this.carScale,1);
+      this.plate.layout(STACK_BODY_SIZE.w,STACK_BODY_SIZE.h,this.carScaleY);
     }
     if (lid) {
       const lidW = 642*this.carScale, lidH = 82*this.carScale;
@@ -1301,6 +1308,7 @@ export class StackPage {
       () => this.openShare(true),
       () => this.openRankPage(),
       this.vehicle.def.art ? {
+        key:this.vehicle.def.key,
         art:this.vehicle.def.art,
         w:this.vehicle.def.artSize.w,
         h:this.vehicle.def.artSize.h,
@@ -1414,6 +1422,7 @@ export class StackPage {
       counted:(this.route === 1 || this.route === 2) && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
       ending:victory && this.route === ROAD_FINAL_STAGE,
       ride:{
+        key:def.key,
         name:this.vehicle.displayName,
         art:def.art,
         w:def.artSize.w,
@@ -1534,6 +1543,7 @@ export class StackPage {
       capacity:this.capacity,
       hideCovered:this.hideCovered,
       cartonCards:this.game.cards.filter(card => card.carton).length,
+      plate:this.plate.node.active ? this.plate.text : null,
       cartonBacks:[...this.cardViews.values()].filter(view => view.node.active && view.back.node.active).length,
       status:this.game.status,
       remaining:this.game.pileRemaining,

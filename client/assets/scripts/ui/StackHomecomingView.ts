@@ -1,3 +1,4 @@
+import { PlateBadge } from './PlateBadge';
 import { Color, Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import type { FinishState } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
@@ -29,6 +30,7 @@ export class StackHomecomingView {
   private readonly backdrop: Sprite;
   private readonly tractor: Sprite;
   private readonly sparks: Graphics;
+  private readonly plate: PlateBadge;
   private readonly title: Node;
   private readonly subtitle: Node;
   private readonly statsLabel: Node;
@@ -52,6 +54,7 @@ export class StackHomecomingView {
     fill(shade, new Color(10, 6, 18, 255), -375, -1000, 750, 2000, 0);
     this.backdrop = this.image('HomeBackdrop');
     this.tractor = this.image('HomeTractor');
+    this.plate = new PlateBadge(this.tractor.node, 'tractor', this.tractorSize);
     this.sparks = uiNode('HomeFirecrackers', this.node, 750, 1334).addComponent(Graphics);
     void loadArt('ui/bg_home').then(frame => {
       if (!frame || !this.node.isValid) return;
@@ -129,6 +132,7 @@ export class StackHomecomingView {
     // Tall screens crop the cover-scaled backdrop's sides; keep the parked tractor fully on screen.
     const x = Math.min(235 * scale, 375 - 14 - w / 2) * ease;
     this.show(this.tractor, x, startY + (parkY - startY) * ease + Math.sin(now / 90) * (1 - ease) * 4, w, h);
+    if (this.tractor.spriteFrame) this.plate.layout(w, h);
     this.title.active = arrive >= .7;
     this.subtitle.active = arrive >= .8;
     this.statsLabel.active = arrive >= .8;

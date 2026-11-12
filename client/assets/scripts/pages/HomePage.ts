@@ -8,6 +8,7 @@ import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
 import { ROAD_FINAL_STAGE, browserStorage, homeProgress, isDailyDone } from '../core/stack/stack-progress';
 import { RankPage } from './RankPage';
+import { PlateBadge } from '../ui/PlateBadge';
 import {
   CAR_HEIGHT, CAR_WIDTH, CLASSIC_HEIGHT, CLASSIC_WIDTH, PROGRESS_HEIGHT, PROVINCE_HEIGHT, RULES_HEIGHT, START_HEIGHT, START_WIDTH, TAG_HEIGHT,
   homeLayoutSlots, type HomeLayoutSlots,
@@ -75,6 +76,7 @@ export class HomePage {
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
   private readonly bodyImage: Sprite;
+  private readonly plate: PlateBadge;
   private readonly cargo: Node;
   private readonly cargoSprites: Sprite[] = [];
   private readonly touchWorld = new Vec3();
@@ -122,6 +124,7 @@ export class HomePage {
       this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
     }
     this.bodyImage = this.imageNode('CarBody', this.car);
+    this.plate = new PlateBadge(this.bodyImage.node, 'sedan', {w: 1024, h: 640});
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
@@ -189,6 +192,7 @@ export class HomePage {
         province:this.rankApi.province,
         overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
         progress:this.progressLabel?.string ?? '',
+        plate:this.plate.node.active ? this.plate.text : null,
       }),
     });
     if (typeof window !== 'undefined') {
@@ -355,6 +359,7 @@ export class HomePage {
     const holeH = Math.round((STACK_BODY_HOLE.bottom - STACK_BODY_HOLE.top) / 640 * trunkH);
     this.hole = {x:holeX, y:holeY, w:holeW, h:holeH};
     this.show(this.bodyImage, 0, 0, CAR_WIDTH, CAR_HEIGHT);
+    if (this.bodyImage.spriteFrame) this.plate.layout(CAR_WIDTH, CAR_HEIGHT);
     this.show(this.trunkImage, 0, holeY, holeW, holeH);
     const max = Math.min(holeW * .26, holeH * .55, 168);
     for (let index = 0; index < this.cargoSprites.length && index < STACK_CARGO_POSITIONS.length; index++) {
@@ -486,6 +491,8 @@ export class HomePage {
   private refreshProvinceLabel(): void {
     const province = this.rankApi.province;
     this.provinceLabel.string = province ? `你的省份 · ${province}` : '选择你的省份';
+    this.plate?.refresh();
+    if (this.bodyImage?.spriteFrame) this.plate.layout(CAR_WIDTH, CAR_HEIGHT);
   }
 
   private screenWidth(): number {
