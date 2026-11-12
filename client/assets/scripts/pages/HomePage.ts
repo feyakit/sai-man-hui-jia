@@ -6,8 +6,13 @@ import { loadArt } from '../services/OptionalResources';
 import { RankApi } from '../services/RankApi';
 import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
-import { browserStorage, homeProgressLabel, isDailyDone } from '../core/stack/stack-progress';
+import { ROAD_FINAL_STAGE, browserStorage, homeProgress, isDailyDone } from '../core/stack/stack-progress';
 import { RankPage } from './RankPage';
+import { PlateBadge } from '../ui/PlateBadge';
+import {
+  CAR_HEIGHT, CAR_WIDTH, CLASSIC_HEIGHT, CLASSIC_WIDTH, PROGRESS_HEIGHT, PROVINCE_HEIGHT, RULES_HEIGHT, START_HEIGHT, START_WIDTH, TAG_HEIGHT,
+  homeLayoutSlots, type HomeLayoutSlots,
+} from '../core/home-layout';
 
 const red = new Color(184, 29, 42);
 const deepRed = new Color(84, 18, 27);
@@ -18,12 +23,8 @@ const cream = new Color(255, 246, 229);
 const ink = new Color(75, 28, 20);
 const shadowInk = new Color(49, 8, 14, 180);
 
-const CAR_WIDTH = 700;
-const CAR_HEIGHT = 438;
-const START_WIDTH = 600;
-const START_HEIGHT = 88;
-const CLASSIC_WIDTH = 360;
-const CLASSIC_HEIGHT = 66;
+const PROGRESS_WIDTH = 540;
+const SEGMENT = {w: 24, h: 14, gap: 6} as const;
 
 interface HomeButtonRect {
   readonly x: number;
@@ -75,6 +76,7 @@ export class HomePage {
   private readonly carFallback: Graphics;
   private readonly trunkImage: Sprite;
   private readonly bodyImage: Sprite;
+  private readonly plate: PlateBadge;
   private readonly cargo: Node;
   private readonly cargoSprites: Sprite[] = [];
   private readonly touchWorld = new Vec3();
@@ -86,7 +88,10 @@ export class HomePage {
   private rankRect: HomeButtonRect = {x:225,y:0,w:300,h:58};
   private dailyRect: HomeButtonRect = {x:390,y:0,w:290,h:58};
   private dailyLabel!: Label;
-  private bestLabel!: Label;
+  private progressLabel!: Label;
+  private progressSteps = 0;
+  private progressDone = false;
+  private slots: HomeLayoutSlots = homeLayoutSlots(1334);
   private width = 750;
   private height = 1334;
   private layoutWidth = -1;
@@ -119,6 +124,7 @@ export class HomePage {
       this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
     }
     this.bodyImage = this.imageNode('CarBody', this.car);
+    this.plate = new PlateBadge(this.bodyImage.node, 'sedan', {w: 1024, h: 640});
     void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
@@ -155,7 +161,7 @@ export class HomePage {
     this.cargoTag.color = paleGold;
     this.ruleLineOne = label(this.node, 'RuleOne', '点没被压住的年货，凑齐 3 件同款就打包装车', 22, 0, 0);
     this.ruleLineOne.color = cream;
-    this.ruleLineTwo = label(this.node, 'RuleTwo', '7 格塞满就失败', 20, 0, 0);
+    this.ruleLineTwo = label(this.node, 'RuleTwo', '后备箱塞满就失败', 20, 0, 0);
     this.ruleLineTwo.color = paleGold;
 
     this.startNode = uiNode('HomeStart', this.node, START_WIDTH, START_HEIGHT);
@@ -171,19 +177,22 @@ export class HomePage {
     const storage = browserStorage();
     this.dailyLabel = label(this.node, 'HomeDailyText', isDailyDone(storage) ? '每日一关 · 今日已塞满' : '每日一关', 24, 0, 0);
     this.dailyLabel.color = paleGold;
-    this.bestLabel = label(this.startNode, 'HomeBestText', homeProgressLabel(storage), 19, 0, -26);
-    this.bestLabel.color = new Color(110, 40, 20);
-    if (this.bestLabel.string) this.startLabel.node.setPosition(0, 10);
+    const progress = homeProgress(storage);
+    this.progressSteps = progress.steps;
+    this.progressDone = progress.done;
+    this.progressLabel = label(this.node, 'HomeProgressText', progress.label, 23, 0, 0);
+    this.progressLabel.color = progress.done ? gold : paleGold;
     this.refreshProvinceLabel();
 
     this.node.on(Node.EventType.TOUCH_END, this.touch, this);
     this.debugHook = Object.freeze({
       getButtons: () => this.debugButtons(),
-      getLayout: () => ({viewport:{width:this.screenWidth(),height:this.screenHeight()},height:this.height}),
+      getLayout: () => ({viewport:{width:this.screenWidth(),height:this.screenHeight()},height:this.height,boxes:this.debugBoxes()}),
       getState: () => ({
         province:this.rankApi.province,
         overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
-        progress:this.bestLabel?.string ?? '',
+        progress:this.progressLabel?.string ?? '',
+        plate:this.plate.node.active ? this.plate.text : null,
       }),
     });
     if (typeof window !== 'undefined') {
@@ -219,29 +228,35 @@ export class HomePage {
     this.title.node.setPosition(0, this.height / 2 - 160);
     this.subtitle.node.setPosition(0, this.height / 2 - 296);
 
-    this.carTop = Math.round(Math.max(398, Math.min(this.height - 842, this.height * .30)));
-    this.car.setPosition(0, this.height / 2 - (this.carTop + CAR_HEIGHT / 2));
-    this.cargoTag.node.setPosition(0, this.height / 2 - (this.carTop + CAR_HEIGHT + 56));
+    const slots = homeLayoutSlots(this.height);
+    this.slots = slots;
+    this.carTop = slots.carTop;
+    this.car.setScale(slots.carScale, slots.carScale, 1);
+    this.car.setPosition(0, this.height / 2 - (this.carTop + CAR_HEIGHT * slots.carScale / 2));
+    this.cargoTag.node.setPosition(0, this.height / 2 - (slots.tag + TAG_HEIGHT / 2));
     this.layoutCar();
 
-    const rulesY = Math.round(this.height * .70);
-    this.ruleLineOne.node.setPosition(0, this.height / 2 - rulesY);
-    this.ruleLineTwo.node.setPosition(0, this.height / 2 - rulesY - 42);
+    const progressX = (750 - PROGRESS_WIDTH) / 2;
+    this.progressLabel.node.setPosition(progressX + 125 - 375, this.height / 2 - (slots.progress + PROGRESS_HEIGHT / 2));
 
-    const provinceY = Math.max(340, this.carTop - 112);
-    this.provinceRect = {x:(750 - 380) / 2, y:provinceY, w:380, h:56};
+    const rulesY = slots.rules;
+    this.ruleLineOne.node.setPosition(0, this.height / 2 - (rulesY + 32));
+    this.ruleLineTwo.node.setPosition(0, this.height / 2 - (rulesY + 68));
+
+    const provinceY = slots.province;
+    this.provinceRect = {x:(750 - 380) / 2, y:provinceY, w:380, h:PROVINCE_HEIGHT};
     this.provinceLabel.node.setPosition(0, this.height / 2 - (provinceY + 28));
 
-    const rankY = this.height - 382;
+    const rankY = slots.rank;
     this.rankRect = {x:70, y:rankY, w:290, h:58};
     this.rankLabel.node.setPosition(this.rankRect.x + 145 - 375, this.height / 2 - (rankY + 29));
     this.dailyRect = {x:390, y:rankY, w:290, h:58};
     this.dailyLabel.node.setPosition(this.dailyRect.x + 145 - 375, this.height / 2 - (rankY + 29));
 
-    const startY = this.height - 272;
+    const startY = slots.start;
     this.startRect = {x:(750 - START_WIDTH) / 2, y:startY, w:START_WIDTH, h:START_HEIGHT};
     this.startNode.setPosition(0, this.height / 2 - (startY + START_HEIGHT / 2));
-    const classicY = this.height - 158;
+    const classicY = slots.classic;
     this.classicRect = {x:(750 - CLASSIC_WIDTH) / 2, y:classicY, w:CLASSIC_WIDTH, h:CLASSIC_HEIGHT};
     this.classicNode.setPosition(0, this.height / 2 - (classicY + CLASSIC_HEIGHT / 2));
 
@@ -273,12 +288,24 @@ export class HomePage {
     rect(new Color(255, 229, 164, 150), 126, 224, 498, 2, 1);
     rect(gold, 292, 250, 166, 3, 1);
 
-    rect(new Color(48, 12, 23, 186), 54, rulesY - 34, 642, 106, 26);
-    rect(new Color(255, 211, 117, 42), 62, rulesY - 26, 626, 90, 22);
+    rect(new Color(48, 12, 23, 186), 54, rulesY, 642, RULES_HEIGHT, 26);
+    rect(new Color(255, 211, 117, 42), 62, rulesY + 8, 626, RULES_HEIGHT - 16, 22);
     g.strokeColor = new Color(255, 205, 105, 130);
     g.lineWidth = 2;
-    g.roundRect(left + 56, top - (rulesY - 32) - 102, 638, 102, 24);
+    g.roundRect(left + 56, top - rulesY - RULES_HEIGHT + 2, 638, RULES_HEIGHT - 4, 24);
     g.stroke();
+
+    // Road progress: label plus one lamp per level, lit up to the farthest level reached.
+    const px = (750 - PROGRESS_WIDTH) / 2;
+    const py = this.slots.progress;
+    rect(new Color(25, 8, 15, 190), px, py, PROGRESS_WIDTH, PROGRESS_HEIGHT, 24);
+    rect(new Color(84, 19, 31, 226), px + 3, py + 3, PROGRESS_WIDTH - 6, PROGRESS_HEIGHT - 6, 21);
+    const segLeft = px + PROGRESS_WIDTH - 30 - (ROAD_FINAL_STAGE * SEGMENT.w + (ROAD_FINAL_STAGE - 1) * SEGMENT.gap);
+    for (let index = 0; index < ROAD_FINAL_STAGE; index++) {
+      const lit = index < this.progressSteps;
+      const color = lit ? (this.progressDone || index === ROAD_FINAL_STAGE - 1 ? new Color(255, 214, 92) : gold) : new Color(255, 214, 140, 46);
+      rect(color, segLeft + index * (SEGMENT.w + SEGMENT.gap), py + (PROGRESS_HEIGHT - SEGMENT.h) / 2, SEGMENT.w, SEGMENT.h, 6);
+    }
 
     const start = this.startRect;
     rect(new Color(26, 8, 13, 150), start.x + 5, start.y + 10, start.w, start.h, 28);
@@ -332,6 +359,7 @@ export class HomePage {
     const holeH = Math.round((STACK_BODY_HOLE.bottom - STACK_BODY_HOLE.top) / 640 * trunkH);
     this.hole = {x:holeX, y:holeY, w:holeW, h:holeH};
     this.show(this.bodyImage, 0, 0, CAR_WIDTH, CAR_HEIGHT);
+    if (this.bodyImage.spriteFrame) this.plate.layout(CAR_WIDTH, CAR_HEIGHT);
     this.show(this.trunkImage, 0, holeY, holeW, holeH);
     const max = Math.min(holeW * .26, holeH * .55, 168);
     for (let index = 0; index < this.cargoSprites.length && index < STACK_CARGO_POSITIONS.length; index++) {
@@ -424,6 +452,22 @@ export class HomePage {
     });
   }
 
+  private debugBoxes(): Record<string, HomeButtonRect> {
+    const s = this.slots;
+    const carW = CAR_WIDTH * s.carScale;
+    return {
+      province:this.provinceRect,
+      car:{x:(750 - carW) / 2, y:s.carTop, w:carW, h:CAR_HEIGHT * s.carScale},
+      tag:{x:60, y:s.tag, w:630, h:TAG_HEIGHT},
+      progress:{x:(750 - PROGRESS_WIDTH) / 2, y:s.progress, w:PROGRESS_WIDTH, h:PROGRESS_HEIGHT},
+      rules:{x:54, y:s.rules, w:642, h:RULES_HEIGHT},
+      rank:this.rankRect,
+      daily:this.dailyRect,
+      start:this.startRect,
+      classic:this.classicRect,
+    };
+  }
+
   private openProvincePicker(): void {
     if (this.provincePicker) return;
     this.provincePicker = new ProvincePicker(this.node,this.height,this.rankApi.province,{
@@ -447,6 +491,8 @@ export class HomePage {
   private refreshProvinceLabel(): void {
     const province = this.rankApi.province;
     this.provinceLabel.string = province ? `你的省份 · ${province}` : '选择你的省份';
+    this.plate?.refresh();
+    if (this.bodyImage?.spriteFrame) this.plate.layout(CAR_WIDTH, CAR_HEIGHT);
   }
 
   private screenWidth(): number {

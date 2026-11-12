@@ -1,3 +1,6 @@
+import { plateBox, plateFontSize, plateText } from '../core/plate';
+import type { VehicleKey } from '../core/stack/stack-vehicles';
+const VEHICLE_ART_SIZE = {tractor: {w: 457, h: 647}} as const;
 import { assetManager, ImageAsset, resources, type SpriteFrame } from 'cc';
 import { GAME_TITLE } from '../config/brand';
 import {
@@ -20,6 +23,8 @@ import {
 import { loadArt } from './OptionalResources';
 
 export interface StackShareRide {
+  /** Which rear-view art, for the licence plate position. */
+  readonly key?: VehicleKey;
   readonly name: string;
   /** resources path of a non-sedan ride; null keeps the sedan art. */
   readonly art: string | null;
@@ -367,11 +372,40 @@ function drawPill(context: CanvasRenderingContext2D, text: string, y: number, si
 }
 
 /** Non-sedan ride: its rear art with the goods heaped on the load area. */
+function roundFill(context: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  context.beginPath();
+  if (typeof context.roundRect === 'function') context.roundRect(x, y, w, h, r);
+  else context.rect(x, y, w, h);
+  context.fill();
+}
+
+/** Festive province plate over the painted blank plate of a ride drawn at (x, y, w, h) on the card. */
+function drawPlate(context: CanvasRenderingContext2D, key: VehicleKey, art: {readonly w: number; readonly h: number}, x: number, y: number, w: number, h: number, text: string): void {
+  const box = plateBox(key, art);
+  const pw = box.w * w, ph = box.h * h;
+  const px = x + box.cx * w - pw / 2, py = y + box.cy * h - ph / 2;
+  const radius = Math.min(ph * .2, 10);
+  context.save();
+  context.fillStyle = '#16120e';
+  roundFill(context, px, py, pw, ph, radius);
+  const inset = Math.max(2, ph * .07);
+  context.fillStyle = '#ffcc26';
+  roundFill(context, px + inset, py + inset, pw - inset * 2, ph - inset * 2, Math.max(1, radius - inset));
+  const size = plateFontSize(text, pw - inset * 2, ph - inset * 2);
+  context.fillStyle = '#16120e';
+  context.font = `900 ${size.toFixed(1)}px ${FONT}`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(text, px + pw / 2, py + ph / 2 + size * .04);
+  context.restore();
+}
+
 function drawRide(
   context: CanvasRenderingContext2D,
   ride: StackShareRide,
   art: FrameDrawable | null,
   items: readonly (FrameDrawable | null)[],
+  plate: string,
 ): void {
   const maxH = 610, maxW = 900;
   let h = maxH, w = h * ride.w / ride.h * (ride.stretchX ?? 1);
@@ -384,6 +418,7 @@ function drawRide(
     context.shadowOffsetY = 18;
     drawFrame(context, art, x + w / 2, y + h / 2, w, h);
     context.restore();
+    if (ride.key) drawPlate(context, ride.key, {w: ride.w, h: ride.h}, x, y, w, h, plate);
   } else {
     drawFallbackCar(context);
   }
@@ -454,6 +489,7 @@ async function renderHomecomingCanvas(scene: StackShareScene): Promise<string | 
     context.shadowOffsetY = 14;
     drawFrame(context, tractor, 840, 1180 - h / 2, w, h);
     context.restore();
+    drawPlate(context, 'tractor', VEHICLE_ART_SIZE.tractor, 840 - w / 2, 1180 - h, w, h, plateText(scene.province));
   }
   const copy = drawTexts(context, scene);
   const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
@@ -484,13 +520,14 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     drawBackground(context);
     const copy = drawTexts(context, scene);
     if (scene.ride?.art) {
-      drawRide(context, scene.ride, bodyArt, itemArt);
+      drawRide(context, scene.ride, bodyArt, itemArt, plateText(scene.province));
     } else {
       const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
       const body = bodyArt;
       if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
       else drawFallbackCar(context);
       drawCargo(context, trunkArt, itemArt, bodyX, bodyY, bodyWidth, bodyHeight);
+      if (body) drawPlate(context, 'sedan', {w: 1024, h: 640}, bodyX, bodyY, bodyWidth, bodyHeight, plateText(scene.province));
     }
     const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
     if (provinceLine) drawPill(context, provinceLine, 422, 38, scene.result.victory ? 'rgba(120,12,22,.82)' : 'rgba(60,8,14,.82)', gold);

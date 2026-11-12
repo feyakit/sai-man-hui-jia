@@ -1,3 +1,5 @@
+import { PlateBadge } from './PlateBadge';
+import type { VehicleKey } from '../core/stack/stack-vehicles';
 import { Color, Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { FINISH_DURATION, type FinishAction, type FinishState } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
@@ -48,6 +50,7 @@ export class StackFinishView {
   private ready = false;
   private squeeze = 0;
   private trunkY = -39;
+  private readonly plate: PlateBadge;
   private hole = {x: 0, y: -39, w: 506, h: 226};
 
   constructor(
@@ -81,6 +84,7 @@ export class StackFinishView {
       this.cargoSprites.push(this.imageNode(`CargoItem${index}`, this.cargo));
     }
     this.bodyImage = this.imageNode('CarBody', this.car);
+    this.plate = new PlateBadge(this.bodyImage.node, ride?.key ?? 'sedan', ride ? {w: ride.w, h: ride.h} : {w: 1024, h: 640});
     if (ride) {
       // Cargo rides on top of the load area, so it must draw above the vehicle art.
       this.cargo.setSiblingIndex(this.car.children.length - 1);
@@ -239,6 +243,7 @@ export class StackFinishView {
       const r = this.ride.region;
       this.hole = {x: (r.x + r.w / 2 - .5) * bodyW, y: (.5 - (r.y + r.h / 2)) * bodyH + 40, w: r.w * bodyW, h: r.h * bodyH + 80};
       this.show(this.bodyImage, 0, 0, bodyW, bodyH);
+      if (this.bodyImage.enabled) this.plate.layout(bodyW, bodyH);
       this.trunkImage.enabled = false;
       this.layoutCargo();
       this.car.setScale(.98, .98, 1);
@@ -253,6 +258,7 @@ export class StackFinishView {
     this.hole = {x: holeX, y: holeY, w: holeW, h: holeH};
     this.trunkY = holeY;
     this.show(this.bodyImage, 0, 0, bodyW, bodyH);
+    if (this.bodyImage.spriteFrame) this.plate.layout(bodyW, bodyH);
     this.show(this.trunkImage, 0, this.trunkY, holeW, holeH);
     this.layoutCargo();
     this.car.setScale(.98, .98, 1);
@@ -306,6 +312,7 @@ export class StackFinishView {
 const BODY_HOLE = { left: 159, right: 878, top: 104, bottom: 425 } as const;
 
 export interface FinishRide {
+  readonly key: VehicleKey;
   readonly art: string;
   readonly w: number;
   readonly h: number;

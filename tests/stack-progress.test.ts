@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
-  homeProgressLabel, isDailyDone, isHomeDone, levelForRoute, markHomeDone, markDailyDone, nextRouteTitle, normalizeRoute, readBestLevel, recordLevelReached,
+  homeProgress, homeProgressLabel, isDailyDone, isHomeDone, levelForRoute, markHomeDone, markDailyDone, nextRouteTitle, normalizeRoute, readBestLevel, recordLevelReached,
   routeHeadline, vehicleLevelForRoute, type ProgressStorage,
 } from '../client/assets/scripts/core/stack/stack-progress';
 
@@ -56,6 +56,8 @@ describe('local progress', () => {
   it('remembers the farthest level reached', () => {
     const storage = memory();
     expect(readBestLevel(storage)).toBe(0);
+    expect(homeProgressLabel(storage)).toBe('回家进度 0/9');
+    expect(homeProgress(storage)).toEqual({steps: 0, label: '回家进度 0/9', done: false});
     expect(recordLevelReached(storage, 3)).toBe(3);
     expect(recordLevelReached(storage, 2)).toBe(3);
     expect(readBestLevel(storage)).toBe(3);
@@ -67,6 +69,7 @@ describe('local progress', () => {
     markHomeDone(storage);
     expect(isHomeDone(storage)).toBe(true);
     expect(homeProgressLabel(storage)).toBe('已到家');
+    expect(homeProgress(storage).steps).toBe(9);
   });
 
   it('marks today’s daily board done until the Beijing date changes', () => {
