@@ -31,6 +31,8 @@ export interface StackShareRide {
 
 export interface StackShareScene {
   readonly stage: number;
+  /** Overrides “第 N 关”, e.g. “每日一关”. */
+  readonly stageLabel?: string;
   readonly result: StackShareResult;
   readonly province?: string | null;
   readonly rank?: number | null;
@@ -268,7 +270,7 @@ function drawTexts(context: CanvasRenderingContext2D, scene: StackShareScene): R
   context.stroke();
   context.font = `700 34px ${FONT}`;
   context.fillStyle = pale;
-  context.fillText(copy.stageText, 540, 256);
+  context.fillText(scene.stageLabel ?? copy.stageText, 540, 256);
 
   fitFont(context, copy.statsText, 900, 45, '800');
   context.fillStyle = pale;

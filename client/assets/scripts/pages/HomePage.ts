@@ -6,6 +6,7 @@ import { loadArt } from '../services/OptionalResources';
 import { RankApi } from '../services/RankApi';
 import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
+import { browserStorage, isDailyDone, readBestLevel } from '../core/stack/stack-progress';
 import { RankPage } from './RankPage';
 
 const red = new Color(184, 29, 42);
@@ -33,11 +34,12 @@ interface HomeButtonRect {
 
 export interface HomePageActions {
   readonly onStart: () => void;
+  readonly onDaily?: () => void;
   readonly onClassic: () => void;
 }
 
 interface HomeButtonPoint {
-  readonly key: 'start' | 'classic' | 'province' | 'rank';
+  readonly key: 'start' | 'classic' | 'province' | 'rank' | 'daily';
   readonly screenX: number;
   readonly screenY: number;
   readonly screenLeft: number;
@@ -82,6 +84,9 @@ export class HomePage {
   private classicRect: HomeButtonRect = {x:195,y:0,w:CLASSIC_WIDTH,h:CLASSIC_HEIGHT};
   private provinceRect: HomeButtonRect = {x:185,y:0,w:380,h:56};
   private rankRect: HomeButtonRect = {x:225,y:0,w:300,h:58};
+  private dailyRect: HomeButtonRect = {x:390,y:0,w:290,h:58};
+  private dailyLabel!: Label;
+  private bestLabel!: Label;
   private width = 750;
   private height = 1334;
   private layoutWidth = -1;
@@ -163,6 +168,13 @@ export class HomePage {
     this.provinceLabel.color = paleGold;
     this.rankLabel = label(this.node, 'HomeRankText', '省份排行', 24, 0, 0);
     this.rankLabel.color = paleGold;
+    const storage = browserStorage();
+    this.dailyLabel = label(this.node, 'HomeDailyText', isDailyDone(storage) ? '每日一关 · 今日已塞满' : '每日一关', 24, 0, 0);
+    this.dailyLabel.color = paleGold;
+    const best = readBestLevel(storage);
+    this.bestLabel = label(this.startNode, 'HomeBestText', best >= 2 ? `最远到过第 ${best} 关` : '', 19, 0, -26);
+    this.bestLabel.color = new Color(110, 40, 20);
+    if (best >= 2) this.startLabel.node.setPosition(0, 10);
     this.refreshProvinceLabel();
 
     this.node.on(Node.EventType.TOUCH_END, this.touch, this);
@@ -221,8 +233,10 @@ export class HomePage {
     this.provinceLabel.node.setPosition(0, this.height / 2 - (provinceY + 28));
 
     const rankY = this.height - 382;
-    this.rankRect = {x:(750 - 300) / 2, y:rankY, w:300, h:58};
-    this.rankLabel.node.setPosition(0, this.height / 2 - (rankY + 29));
+    this.rankRect = {x:70, y:rankY, w:290, h:58};
+    this.rankLabel.node.setPosition(this.rankRect.x + 145 - 375, this.height / 2 - (rankY + 29));
+    this.dailyRect = {x:390, y:rankY, w:290, h:58};
+    this.dailyLabel.node.setPosition(this.dailyRect.x + 145 - 375, this.height / 2 - (rankY + 29));
 
     const startY = this.height - 272;
     this.startRect = {x:(750 - START_WIDTH) / 2, y:startY, w:START_WIDTH, h:START_HEIGHT};
@@ -298,6 +312,14 @@ export class HomePage {
     g.stroke();
     rect(new Color(255, 213, 132, 52), rank.x + 44, rank.y + 10, rank.w - 88, 2, 1);
 
+    const daily = this.dailyRect;
+    rect(new Color(120, 22, 30, 228), daily.x, daily.y, daily.w, daily.h, 20);
+    g.strokeColor = new Color(255, 207, 111, 220);
+    g.lineWidth = 2;
+    g.roundRect(left + daily.x + 2, top - (daily.y + daily.h) + 2, daily.w - 4, daily.h - 4, 18);
+    g.stroke();
+    rect(new Color(255, 213, 132, 52), daily.x + 44, daily.y + 10, daily.w - 88, 2, 1);
+
     this.drawCarFallback();
   }
 
@@ -359,6 +381,10 @@ export class HomePage {
       this.openRankPage();
       return;
     }
+    if (contains(this.dailyRect, point.x, point.y)) {
+      this.actions.onDaily?.();
+      return;
+    }
     if (contains(this.startRect, point.x, point.y)) {
       this.actions.onStart();
       return;
@@ -378,10 +404,11 @@ export class HomePage {
   private debugButtons(): HomeButtonPoint[] {
     const screenWidth = this.screenWidth();
     const screenHeight = this.screenHeight();
-    return (['start', 'classic', 'province', 'rank'] as const).map(key => {
+    return (['start', 'classic', 'province', 'rank', 'daily'] as const).map(key => {
       const rect = key === 'start' ? this.startRect
         : key === 'classic' ? this.classicRect
         : key === 'province' ? this.provinceRect
+        : key === 'daily' ? this.dailyRect
         : this.rankRect;
       return {
         key,
