@@ -5,9 +5,9 @@ import type {
   StackCard, StackLevel, StackPoint, StackProps, StackStatus, StackTapResult,
 } from './stack-types';
 
-import { PACK_SIZE, SLOT_CAPACITY } from './stack-constants';
+import { PACK_SIZE, SLOT_CAPACITY, slotCapacityOf } from './stack-constants';
 
-export { PACK_SIZE, SLOT_CAPACITY };
+export { PACK_SIZE, SLOT_CAPACITY, slotCapacityOf };
 export const MOM_INTERVAL_MS = 25_000;
 /** Solver budget per candidate placement of mom's goods. */
 export const MOM_SOLVE_NODES = 6_000;
@@ -70,6 +70,7 @@ export class StackGame {
   private lastMomSolvable = true;
   private nextMomAt: number;
   private maxCardId: number;
+  private reviveUsed = false;
 
   constructor(
     readonly level: StackLevel,
@@ -90,6 +91,8 @@ export class StackGame {
   get clearedGroups(): number { return this.groupsCleared; }
   get momEventCount(): number { return this.momEvents; }
   get props(): StackProps { return this.propState; }
+  get slotCapacity(): number { return slotCapacityOf(this.level); }
+  get canRevive(): boolean { return !this.reviveUsed; }
 
   canTap(id: number): boolean {
     if (this.currentStatus !== 'playing') return false;
@@ -119,7 +122,7 @@ export class StackGame {
       const packedIds = new Set(packed.map(candidate => candidate.id));
       this.slotList = this.slotList.filter(candidate => !packedIds.has(candidate.id));
       this.groupsCleared++;
-    } else if (this.slotList.length >= SLOT_CAPACITY) {
+    } else if (this.slotList.length >= this.slotCapacity) {
       this.currentStatus = 'lost';
     }
     if (this.cardList.length === 0 && this.slotList.length === 0) this.currentStatus = 'won';
@@ -146,7 +149,8 @@ export class StackGame {
   }
 
   revive(): StackCard[] {
-    if (this.currentStatus !== 'lost' || this.slotList.length < PACK_SIZE) return [];
+    if (this.reviveUsed || this.currentStatus !== 'lost' || this.slotList.length < PACK_SIZE) return [];
+    this.reviveUsed = true;
     const moved = this.moveOutCards();
     this.currentStatus = 'playing';
     this.history = undefined;
@@ -177,7 +181,7 @@ export class StackGame {
     for (let attempt = 0; attempt < MOM_PLACEMENT_ATTEMPTS && !chosen; attempt++) {
       const added = this.momPlacement(item, attempt);
       fallback ??= added;
-      const check = solveStackState([...this.cardList, ...added], slotKinds, {maxNodes: MOM_SOLVE_NODES});
+      const check = solveStackState([...this.cardList, ...added], slotKinds, {maxNodes: MOM_SOLVE_NODES, capacity: this.slotCapacity});
       if (check.solvable) chosen = added;
     }
     const added = chosen ?? fallback ?? [];
