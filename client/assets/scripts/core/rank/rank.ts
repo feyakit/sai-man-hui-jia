@@ -227,6 +227,52 @@ export function formatRankSummary(snapshot: RankSnapshot): string {
   return `全国累计 ${snapshot.totalClears} 次 · 今日 ${snapshot.todayClears} 次`;
 }
 
+export interface RankDisplayRow {
+  readonly province: Province;
+  readonly total: number;
+  readonly today: number;
+  readonly rank: number | null;
+  readonly badge: 1 | 2 | 3 | null;
+  readonly own: boolean;
+  readonly waiting: boolean;
+}
+
+/**
+ * Fills the public leaderboard to all 34 provincial regions. Returned API rows keep their
+ * server order and only positive totals are ranked; every missing region is appended as waiting.
+ */
+export function buildRankRows(snapshot: RankSnapshot, own: Province | null): RankDisplayRow[] {
+  const unique: RankEntry[] = [];
+  const seen = new Set<Province>();
+  for (const entry of snapshot.provinces) {
+    if (seen.has(entry.province)) continue;
+    seen.add(entry.province);
+    unique.push(entry);
+  }
+  const ranked = unique.filter(entry => entry.total > 0);
+  const ordered = ranked.length === 0 && own
+    ? [own, ...PROVINCES.filter(province => province !== own)]
+    : [...PROVINCES];
+  const rows: RankDisplayRow[] = [];
+  let rank = 0;
+  for (const entry of ranked) {
+    rank += 1;
+    rows.push({
+      ...entry,
+      rank,
+      badge: rank <= 3 ? rank as 1 | 2 | 3 : null,
+      own: entry.province === own,
+      waiting: false,
+    });
+  }
+  const rankedProvinces = new Set(ranked.map(entry => entry.province));
+  for (const province of ordered) {
+    if (rankedProvinces.has(province)) continue;
+    rows.push({province, total: 0, today: 0, rank: null, badge: null, own: province === own, waiting: true});
+  }
+  return rows;
+}
+
 export function formatRankToday(today: number): string {
   return `今日 +${Math.max(0,Math.floor(today))}`;
 }
