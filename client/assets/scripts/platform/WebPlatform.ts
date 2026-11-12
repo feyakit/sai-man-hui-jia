@@ -1,9 +1,13 @@
+import { resolveRoute, type AppRoute } from './route';
+
 export class WebPlatform {
   now(): number { return Date.now(); }
 
-  isMomMode(): boolean { return new URLSearchParams(window.location.search).get('mode') === 'mom'; }
+  route(): AppRoute { return resolveRoute(window.location.search); }
 
-  isStackMode(): boolean { return new URLSearchParams(window.location.search).get('mode') === 'stack'; }
+  isMomMode(): boolean { return this.route() === 'mom'; }
+
+  isStackMode(): boolean { return this.route() === 'stack'; }
 
   stackStage(): 1 | 2 {
     return new URLSearchParams(window.location.search).get('stage') === '2' ? 2 : 1;

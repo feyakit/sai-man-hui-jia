@@ -3,6 +3,8 @@ import { GAME_TITLE } from '../../config/brand';
 export const STACK_SHARE_WIDTH = 1080;
 export const STACK_SHARE_HEIGHT = 1440;
 export const STACK_SHARE_TITLE = `《${GAME_TITLE}》`;
+/** Above this many unpacked goods the share card calls the trunk overloaded instead of counting down. */
+export const STACK_SHARE_BACKLOG_THRESHOLD = 30;
 
 /** Goods visible in both the generated share card and the finish-screen trunk. */
 export const STACK_SHARE_ITEM_KEYS = [
@@ -48,7 +50,9 @@ export function formatStackShareStats(result: StackShareResult): string {
   if (result.victory) {
     return `用时 ${safeInteger(result.elapsedSec, 1)} 秒 · 打包 ${safeInteger(result.boxes)} 箱`;
   }
-  return `差 ${safeInteger(result.remaining)} 件就塞满`;
+  const remaining = safeInteger(result.remaining);
+  if (remaining > STACK_SHARE_BACKLOG_THRESHOLD) return '后备箱塞爆了，年货还剩一大堆';
+  return `差 ${remaining} 件就塞满`;
 }
 
 export function formatStackShareStage(stage: number): string {

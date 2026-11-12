@@ -141,7 +141,6 @@ function drawLantern(context: CanvasRenderingContext2D, x: number, y: number, sc
   context.ellipse(0, 0, 54, 67, 0, 0, Math.PI * 2);
   context.stroke();
   context.fillStyle = '#ffd77f';
-  fillRounded(context, '#ffd77f', -43, -7, 86, 14, 7);
   fillRounded(context, '#ffd77f', -36, -86, 72, 13, 6);
   context.fillStyle = '#a81b23';
   fillRounded(context, '#a81b23', -30, -79, 60, 11, 5);
