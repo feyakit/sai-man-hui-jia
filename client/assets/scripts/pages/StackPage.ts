@@ -180,6 +180,7 @@ export class StackPage {
     this.debugHook = {
       getState: () => this.debugState(),
       getClickable: () => this.debugClickable(),
+      getSolution: () => [...this.level.solution],
     };
     if (typeof window !== 'undefined') {
       (window as Window & {__stack?: object}).__stack = Object.freeze(this.debugHook);
@@ -701,6 +702,8 @@ export class StackPage {
       status:this.game.status,
       remaining:this.game.remaining,
       modal:this.modal ?? null,
+      busy:this.busy,
+      finishing:!!this.finish,
       slot:this.game.slot.map(card => ({id:card.id,kind:card.kind,name:card.name})),
       props:this.game.props,
       clickable:this.debugClickable(),
