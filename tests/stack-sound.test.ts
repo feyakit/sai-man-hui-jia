@@ -11,8 +11,8 @@ class MemoryStorage {
 
 describe('stack sound settings', () => {
   it('maps every requested game event to a distinct synthesized profile', () => {
-    expect(STACK_SOUND_EVENTS).toEqual(['tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop']);
-    expect(new Set(STACK_SOUND_EVENTS.map(event => STACK_SOUND_PROFILES[event].label)).size).toBe(10);
+    expect(STACK_SOUND_EVENTS).toEqual(['tap', 'fly', 'pack', 'combo', 'warn', 'mom', 'swap', 'win', 'fail', 'prop', 'home']);
+    expect(new Set(STACK_SOUND_EVENTS.map(event => STACK_SOUND_PROFILES[event].label)).size).toBe(11);
     expect(STACK_SOUND_PROFILES.pack.layers).toBeGreaterThan(1);
     expect(STACK_SOUND_PROFILES.win.layers).toBeGreaterThan(1);
   });
