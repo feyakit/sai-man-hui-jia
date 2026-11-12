@@ -9,6 +9,7 @@ import { StagePage } from './pages/StagePage';
 import { StackPage, type StackPageAction } from './pages/StackPage';
 import { WebPlatform } from './platform/WebPlatform';
 import { Api } from './services/Api';
+import { RankApi } from './services/RankApi';
 import { fill, label, uiNode } from './ui/UIKit';
 import { drawHomeRoad, drawWelcomeHome } from './ui/JourneyArt';
 
@@ -21,8 +22,10 @@ export class Bootstrap extends Component {
   private home?: HomePage;
   private readonly platform = new WebPlatform();
   private readonly api = new Api(this.platform);
+  private readonly rankApi = new RankApi();
 
   start(): void {
+    void this.rankApi.flushPending().catch(() => undefined);
     const route = this.platform.route();
     if (route === 'stack') this.startStack(this.platform.stackStage());
     else if (route === 'mom') void this.startMomMode();
