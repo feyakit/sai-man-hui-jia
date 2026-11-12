@@ -87,11 +87,15 @@ export function markHomeDone(storage: ProgressStorage | undefined): void {
   try { storage?.setItem(STACK_HOME_DONE_KEY, '1'); } catch { /* storage optional */ }
 }
 
-/** Home-screen progress: “回家进度 N/9”, or “已到家” once the finale is cleared. */
+/** Home-screen road progress: farthest level reached out of 9, or 已到家 once the finale is cleared. */
+export function homeProgress(storage: ProgressStorage | undefined): {steps: number; label: string; done: boolean} {
+  if (isHomeDone(storage)) return {steps: ROAD_FINAL_STAGE, label: '已到家', done: true};
+  const steps = Math.min(ROAD_FINAL_STAGE, readBestLevel(storage));
+  return {steps, label: `回家进度 ${steps}/${ROAD_FINAL_STAGE}`, done: false};
+}
+
 export function homeProgressLabel(storage: ProgressStorage | undefined): string {
-  if (isHomeDone(storage)) return '已到家';
-  const best = readBestLevel(storage);
-  return best >= 2 ? `回家进度 ${best}/${ROAD_FINAL_STAGE}` : '';
+  return homeProgress(storage).label;
 }
 
 export function browserStorage(): ProgressStorage | undefined {
