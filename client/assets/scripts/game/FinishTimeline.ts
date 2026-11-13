@@ -56,7 +56,7 @@ export function updateConfetti(pool: ConfettiParticle[], tMs: number, width: num
     p.angle=(i*47+age*.22)%360;
   }
 }
-export type FinishAction = 'next' | 'replay' | 'mom' | 'first';
+export type FinishAction = 'next' | 'replay' | 'mom' | 'first' | 'home';
 export function finishButtons(stage: number): readonly {title: string; action: FinishAction}[] {
   return stage === 1 ? [{title:'下一关',action:'next'}] :
     stage === 3 ? [{title:'再来一次',action:'replay'},{title:'回第 1 关',action:'first'}] :
