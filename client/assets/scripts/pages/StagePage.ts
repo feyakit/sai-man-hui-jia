@@ -1,5 +1,7 @@
 import { Color, EventTouch, Game, Graphics, Label, Node, Sprite, SpriteFrame, Tween, UITransform, Vec3, game, sys, tween, view } from 'cc';
 import { GAME_TITLE } from '../config/brand';
+import { HOME_BUTTON_CLASSIC, exitNeedsConfirm } from '../core/home-exit';
+import { HomeExit } from '../ui/HomeExit';
 import type { Point } from '../core/input';
 import { itemKey, itemMeta, itemScale } from '../core/items';
 import type { Level, PieceDef, Placement, Rotation } from '../core/types';
@@ -104,6 +106,8 @@ export class StagePage {
   private readonly guideArt: Graphics;
   private previewPlacement?: Placement;
   private modal: 'restart' | 'timeout' | undefined;
+  private homeExit!: HomeExit;
+  private safeTop = 0;
   private landscape = false;
   private mom?: MomSequence;
   private momIntroUntil = 0;
@@ -203,6 +207,17 @@ export class StagePage {
     this.guideArt = this.guideNode.addComponent(Graphics);
     this.guideHand = uiNode('GuideHand',this.guideNode,96,112);
     this.drawGuideHand(this.guideHand.addComponent(Graphics));
+    this.homeExit = new HomeExit(this.node,HOME_BUTTON_CLASSIC,() => this.onClear('home'));
+    if (typeof window !== 'undefined') {
+      const hook = Object.freeze({
+        getHomeExit:() => this.homeExit.debug(window.innerWidth,window.innerHeight),
+        getState:() => ({placements:this.session.placements.length,cleared:this.cleared,modal:this.modal ?? null}),
+      });
+      (window as Window & {__stage?: object}).__stage = hook;
+      this.node.once(Node.EventType.NODE_DESTROYED,() => {
+        if ((window as Window & {__stage?: object}).__stage === hook) delete (window as Window & {__stage?: object}).__stage;
+      });
+    }
     this.node.on(Node.EventType.TOUCH_START,this.start,this);
     this.node.on(Node.EventType.TOUCH_MOVE,this.move,this);
     this.node.on(Node.EventType.TOUCH_END,this.end,this);
@@ -276,6 +291,8 @@ export class StagePage {
     this.car=frame.car; this.trunk=frame.trunk; this.buttonY=frame.buttonY; this.buttonH=frame.buttonH;
     this.layoutTray();
     this.placeLabel('Title',64+top); this.placeLabel('Vehicle',116+top);
+    this.safeTop = top;
+    this.homeExit?.layout(this.height,this.homeRect());
     this.placeLabel('MomIntro',281+top);
     this.momIntroBubble.setPosition(0,this.height/2-281-top);
     this.placeLabel('Clock',187+top,190);
@@ -508,6 +525,7 @@ export class StagePage {
   }
   private updateOverlay(): void {
     this.overlay.active = this.landscape || !!this.modal;
+    this.homeExit?.bringToFront();
     if (!this.overlay.active) return;
     this.overlay.setSiblingIndex(this.node.children.length-1);
     const g = this.overlay.getComponent(Graphics)!; g.clear();
@@ -700,9 +718,17 @@ export class StagePage {
     this.touchPoint.x=local.x+375; this.touchPoint.y=this.height/2-local.y;
     return this.touchPoint;
   }
+  private homeRect(): {x:number;y:number;w:number;h:number} {
+    return {...HOME_BUTTON_CLASSIC,y:HOME_BUTTON_CLASSIC.y+this.safeTop};
+  }
+
   private start(event: EventTouch): void {
     this.dismissGuide();
     const p=this.point(event);
+    if (!this.landscape && this.homeExit.press(p.x,p.y,exitNeedsConfirm({
+      playing:!this.cleared && !this.finish && !this.session.expired && this.modal !== 'timeout',
+      moves:this.session.placements.length,
+    }))) { this.cancelDrag(); this.sync(); return; }
     if (this.finish) {
       if (!this.finish.state.buttons) this.finishView!.render(this.finish.skip());
       else if (!this.landscape) this.finishView!.press(p.x,p.y);
@@ -859,6 +885,8 @@ export class StagePage {
     this.finishView=new FinishView(this.node,this.level.stage,this.onClear);
     this.finishView.layout(this.height,this.board);
     this.finishView.render(this.finish.state);
+    this.homeExit.closeDialog();
+    this.homeExit.bringToFront();
   }
 
   private startMomSequence(): void {

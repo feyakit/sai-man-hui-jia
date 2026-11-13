@@ -13,6 +13,9 @@ import {
   stackPageHeight, unmapStackPoint, type StackBoardFit,
 } from '../core/stack/stack-layout';
 import { isBlocked, PACK_SIZE, SLOT_CAPACITY, StackGame, topCardAt } from '../core/stack/stack-rules';
+import { HOME_BUTTON, exitNeedsConfirm } from '../core/home-exit';
+import { HomeExit } from '../ui/HomeExit';
+import { displayIndex, displaySlot, readyPacks, type PendingPack } from '../core/stack/slot-display';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import {
   sedanScaleForPage, sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
@@ -162,6 +165,18 @@ export class StackPage {
   private readonly slotViewMap = new Map<number,CardView>();
   /** Card ids currently being packed; their nodes are the only ones allowed to vanish. */
   private packingIds = new Set<number>();
+  /** Cards logically in the slot (or packed) whose flyer has not landed yet. */
+  private readonly inFlight = new Set<number>();
+  /** Packs made by the logic that wait for a card still in flight. */
+  private pendingPacks: PendingPack[] = [];
+  /** Packs currently playing their squeeze + box animation (still drawn in the slot until they vanish). */
+  private packing: PendingPack[] = [];
+  private packAnims = 0;
+  private pendingOutcome?: 'lost' | 'won';
+  private readonly momBouncing = new Set<number>();
+  private homeExit!: HomeExit;
+  private readonly tapSeq = new Map<number,number>();
+  private tapCounter = 0;
   private slotRects: Rect[] = [];
   /** The ride for this level; it owns the whole bottom of the page (art, containers, label, buttons). */
   private readonly vehicle: LevelVehicle;
@@ -323,6 +338,8 @@ export class StackPage {
       this.momAvatar.getChildByName('MomFallback')!.active = false;
     });
 
+    this.homeExit = new HomeExit(this.node,HOME_BUTTON,() => this.onAction('home'));
+    this.homeExit.layout(this.height,HOME_BUTTON);
     this.node.on(Node.EventType.TOUCH_END,this.touch,this);
     game.on(Game.EVENT_HIDE,this.onHide);
     game.on(Game.EVENT_SHOW,this.onShow);
@@ -345,6 +362,7 @@ export class StackPage {
       })),
       getLayout: () => this.debugLayout(),
       getSlotViews: () => this.debugSlotViews(),
+      getHomeExit: () => this.homeExit.debug(typeof window === 'undefined' ? 750 : window.innerWidth,typeof window === 'undefined' ? this.height : window.innerHeight),
     };
     if (typeof window !== 'undefined') {
       (window as Window & {__stack?: object}).__stack = Object.freeze(this.debugHook);
@@ -388,7 +406,7 @@ export class StackPage {
       this.finishView!.render(this.finish.advance(Date.now()-this.finishStarted));
       return;
     }
-    if (!this.busy && !this.modal && this.game.status === 'playing') {
+    if (!this.busy && !this.animating() && !this.modal && !this.homeExit?.open && this.game.status === 'playing') {
       if (this.debugMomPending) {
         this.debugMomPending = false;
         const debugAdded = this.game.triggerMom();
@@ -453,6 +471,7 @@ export class StackPage {
     this.warnLayer.active = false;
     this.refresh();
     this.finishView?.layout(this.height);
+    this.homeExit?.layout(this.height,HOME_BUTTON);
   }
 
   private layoutBackground(): void {
@@ -730,7 +749,7 @@ export class StackPage {
     this.updateHud();
     this.updateReserve();
     this.syncPile();
-    this.renderSlot(this.game.slot,{animate:animateSlot});
+    this.renderSlot(this.displayCards(),{animate:animateSlot});
     this.updateWarning();
     this.drawActions();
   }
@@ -779,9 +798,13 @@ export class StackPage {
       const center = this.cardCenter(card);
       if (view.born) {
         view.node.setPosition(center.x,center.y+(card.source === 'mom' ? 120*this.board.scale : 0),0);
-        if (card.source === 'mom') tween(view.node).to(0.28,{position:center},{easing:'bounceOut'}).start();
+        if (card.source === 'mom') {
+          const bouncing = card.id;
+          this.momBouncing.add(bouncing);
+          tween(view.node).to(0.28,{position:center},{easing:'bounceOut'}).call(() => this.momBouncing.delete(bouncing)).start();
+        }
         view.born = false;
-      } else if (!this.busy || card.source !== 'mom') {
+      } else if (!this.momBouncing.has(card.id)) {
         view.node.setPosition(center);
       }
       const blocked = isBlocked(card,this.game.cards);
@@ -795,17 +818,18 @@ export class StackPage {
    * as it stays in the slot (never hidden, rebuilt or re-textured); cards that move tween to their
    * new cell, cards that left are destroyed, and `reserve` keeps an empty cell for a card in flight.
    */
-  private renderSlot(cards: readonly StackCard[],options: {animate?: boolean; reserve?: number} = {}): void {
+  private renderSlot(cards: readonly StackCard[],options: {animate?: boolean} = {}): void {
     const keep = new Set(cards.map(card => card.id));
     for (const [id,view] of this.slotViewMap) {
-      if (keep.has(id) && id !== options.reserve) continue;
+      if (this.packingIds.has(id)) continue;
+      if (keep.has(id) && !this.inFlight.has(id)) continue;
       Tween.stopAllByTarget(view.node);
       if (view.node.isValid) view.node.destroy();
       this.slotViewMap.delete(id);
     }
     for (let index=0;index<cards.length && index<this.slotRects.length;index++) {
       const card = cards[index];
-      if (card.id === options.reserve) continue;
+      if (this.inFlight.has(card.id) || this.packingIds.has(card.id)) continue;
       const rect = this.slotRects[index];
       const target = new Vec3(rect.x+rect.w/2-375,this.height/2-(rect.y+rect.h/2),0);
       let view = this.slotViewMap.get(card.id);
@@ -825,7 +849,7 @@ export class StackPage {
   }
 
   /** Snapshot for the frame-sampling slot check (tools/play-slot.mjs). */
-  private debugSlotViews(): {id:number;kind:string;uuid:string;active:boolean;opacity:number;spriteEnabled:boolean;frame:string;x:number;scale:number}[] {
+  private debugSlotViews(): {id:number;kind:string;uuid:string;active:boolean;opacity:number;spriteEnabled:boolean;frame:string;x:number;y:number;cell:number;scale:number}[] {
     return [...this.slotViewMap.values()].map(view => ({
       id:view.cardId,
       kind:view.kind,
@@ -835,8 +859,20 @@ export class StackPage {
       spriteEnabled:view.sprite.enabled,
       frame:view.sprite.spriteFrame ? `${view.sprite.spriteFrame.name}#${(view.sprite.spriteFrame as unknown as {_uuid?: string})._uuid ?? ''}` : 'fallback',
       x:view.node.position.x,
+      y:view.node.position.y,
+      cell:this.nearestSlotCell(view.node.position.x,view.node.position.y),
       scale:view.node.scale.x,
     }));
+  }
+
+  /** Index of the slot cell whose centre is closest to a slot-layer position. */
+  private nearestSlotCell(x: number,y: number): number {
+    let best = -1, bestD = Infinity;
+    this.slotRects.forEach((rect,index) => {
+      const d = Math.hypot(rect.x+rect.w/2-375-x,this.height/2-(rect.y+rect.h/2)-y);
+      if (d < bestD) { bestD = d; best = index; }
+    });
+    return best;
   }
 
   private makeCardView(card: StackCard,size: number,parent: Node): CardView {
@@ -947,6 +983,8 @@ export class StackPage {
     const p = this.point(event);
     if (this.rankPage) { this.rankPage.press(p.x,p.y); return; }
     if (this.provincePicker) { this.provincePicker.press(p.x,p.y); return; }
+    // “← 主页”: asks first only while a round is under way; after a win or a full trunk it just leaves.
+    if (this.homeExit.press(p.x,p.y,exitNeedsConfirm({playing:this.game.status === 'playing' && !this.finish,moves:this.tapCounter}))) return;
     if (this.finish) { this.finishView?.press(p.x,p.y); return; }
     if (this.modal === 'fail') {
       for (const button of this.failButtons) {
@@ -971,6 +1009,8 @@ export class StackPage {
     if (this.busy || this.game.status !== 'playing') return;
     for (const action of this.actions) {
       if (!contains(action.rect,p.x,p.y)) continue;
+      // Props rewrite the slot, so they wait until every flying card has landed.
+      if (this.animating()) { this.sounds.play('tap'); return; }
       this.useAction(action.key);
       return;
     }
@@ -989,33 +1029,54 @@ export class StackPage {
     return this.touchPoint;
   }
 
+  /**
+   * Every tap is applied to the game at once (so rapid taps never get dropped); the card then flies
+   * to its cell and any pack it completes plays once all three of its cards have landed.
+   */
   private tapCard(id: number): void {
     const result = this.game.tap(id,Date.now());
     if (!result.ok || !result.card) { this.sounds.play('tap'); return; }
-    this.busy = true;
+    const card = result.card;
+    this.inFlight.add(card.id);
+    this.tapSeq.set(card.id,++this.tapCounter);
+    if (result.packed.length === PACK_SIZE) this.pendingPacks.push({ids:result.packed.map(item => item.id),cards:result.packed,seq:this.tapCounter});
+    if (result.status === 'lost' || result.status === 'won') this.pendingOutcome = result.status;
     this.sounds.play('tap');
     setTimeout(() => { if (this.node.isValid) this.sounds.play('fly'); },35);
-    const flyer = this.makeCardView(result.card,result.card.w*this.board.scale,this.fxLayer);
-    flyer.node.setPosition(this.cardCenter(result.card));
-    const targetIndex = Math.min(result.insertIndex,this.slotRects.length-1);
+    const flyer = this.makeCardView(card,card.w*this.board.scale,this.fxLayer);
+    flyer.node.setPosition(this.cardCenter(card));
+    const display = this.displayCards();
+    const targetIndex = Math.max(0,Math.min(displayIndex(display,card.id),this.slotRects.length-1));
     const slot = this.slotRects[targetIndex];
     const target = new Vec3(slot.x+slot.w/2-375,this.height/2-(slot.y+slot.h/2),0);
-    const scale = Math.max(.35,(slot.w-6)/(result.card.w*this.board.scale));
+    const scale = Math.max(.35,(slot.w-6)/(card.w*this.board.scale));
     this.syncPile();
     this.updateHud();
     // Neighbours after the insert point slide right now, leaving a gap the flyer lands in.
-    this.renderSlot(result.slotBeforePack,{animate:true,reserve:result.card.id});
-    const landed = result.card;
+    this.renderSlot(display,{animate:true});
     tween(flyer.node).to(.2,{position:target,scale:new Vec3(scale,scale,1)},{easing:'quadOut'}).call(() => {
       if (flyer.node.isValid) flyer.node.destroy();
-      this.renderSlot(result.slotBeforePack,{animate:true});
-      void landed;
-      if (result.packed.length === PACK_SIZE) this.playPack(result);
-      else this.finishTap(result);
+      this.inFlight.delete(card.id);
+      if (!this.node.isValid) return;
+      this.renderSlot(this.displayCards(),{animate:true});
+      for (const pack of readyPacks(this.pendingPacks,this.inFlight)) {
+        this.pendingPacks = this.pendingPacks.filter(item => item !== pack);
+        this.playPack(pack);
+      }
+      this.settle();
     }).start();
   }
 
-  private playPack(result: StackTapResult): void {
+  /** What the slot shows: logical slot + packs waiting for a flyer + packs mid-animation. */
+  private displayCards(): StackCard[] {
+    return displaySlot(this.game.slot,[...this.pendingPacks,...this.packing],id => this.tapSeq.get(id) ?? 0);
+  }
+
+  private animating(): boolean {
+    return this.inFlight.size > 0 || this.pendingPacks.length > 0 || this.packAnims > 0;
+  }
+
+  private playPack(pack: PendingPack): void {
     this.sounds.play('pack');
     const now = Date.now();
     this.comboCount = now - this.lastPackAt <= STACK_COMBO_WINDOW_MS ? this.comboCount + 1 : 1;
@@ -1025,12 +1086,16 @@ export class StackPage {
       setTimeout(() => { if (this.node.isValid) this.sounds.play('combo',{level}); },120);
       this.showCombo(this.comboCount);
     }
-    const packed = new Set(result.packed.map(card => card.id));
-    this.packingIds = packed;
-    const views = [...this.slotViewMap.values()].filter(view => packed.has(view.cardId));
-    const first = views[0];
-    if (!first) { this.packingIds = new Set(); this.finishTap(result); return; }
+    const views = pack.ids.map(id => this.slotViewMap.get(id)).filter((view): view is CardView => !!view);
+    if (!views.length) { this.settle(); return; }
+    this.packAnims++;
+    this.packing.push(pack);
+    for (const id of pack.ids) this.packingIds.add(id);
     const center = views[Math.min(1,views.length-1)].node.position.clone();
+    const release = () => {
+      this.packing = this.packing.filter(item => item !== pack);
+      for (const id of pack.ids) this.packingIds.delete(id);
+    };
     setTimeout(() => {
       if (!this.node.isValid) return;
       for (let i=0;i<views.length;i++) {
@@ -1047,9 +1112,12 @@ export class StackPage {
           this.slotViewMap.delete(view.cardId);
         }
         this.slotViews = [...this.slotViewMap.values()];
-        this.packingIds = new Set();
-        this.renderSlot(this.game.slot,{animate:true});
-        this.showPackedBox(center,() => this.finishTap(result));
+        release();
+        this.renderSlot(this.displayCards(),{animate:true});
+        this.showPackedBox(center,() => {
+          this.packAnims--;
+          if (this.node.isValid) this.settle();
+        });
       },250);
     },80);
   }
@@ -1078,11 +1146,14 @@ export class StackPage {
     },360);
   }
 
-  private finishTap(result: StackTapResult): void {
-    this.busy = false;
+  /** Once nothing is flying or packing, redraw and show the outcome the logic already decided. */
+  private settle(): void {
+    if (this.animating()) { this.updateWarning(); return; }
     this.refresh(true);
-    if (result.status === 'lost') this.openFail();
-    else if (result.status === 'won') this.beginFinish();
+    const outcome = this.pendingOutcome;
+    this.pendingOutcome = undefined;
+    if (outcome === 'lost' && this.game.status === 'lost' && this.modal !== 'fail') this.openFail();
+    else if (outcome === 'won' && this.game.status === 'won') this.beginFinish();
   }
 
   private useAction(key: ActionButton['key']): void {
@@ -1166,6 +1237,7 @@ export class StackPage {
     else label(layer,'ReviveUsed','本局复活已用过',22,0,-98).color = cream;
     this.failButtons.push(share,restart);
     this.sounds.play('fail');
+    this.homeExit.bringToFront();
     this.refreshFailButtons();
   }
 
@@ -1289,6 +1361,8 @@ export class StackPage {
       });
       this.finishView.layout(this.height);
       this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
+      // The homecoming scene has its own “回首页” button.
+      this.homeExit.setVisible(false);
       if (typeof window !== 'undefined' && isDebugRun(window.location.search)) this.finishView.setRankStatus(RANK_DEBUG_TEXT);
       return;
     }
@@ -1318,6 +1392,8 @@ export class StackPage {
     );
     this.finishView.layout(this.height);
     this.finishView.render(instant ? this.finish.advance(FINISH_DURATION) : this.finish.state);
+    this.homeExit.closeDialog();
+    this.homeExit.bringToFront();
     // Any ?debug=… run (win/fail/mom/…) is a test drive: it never reaches the leaderboard.
     if (typeof window !== 'undefined' && isDebugRun(window.location.search)) {
       this.finishView.setRankStatus(RANK_DEBUG_TEXT);
@@ -1400,6 +1476,7 @@ export class StackPage {
 
   private mapFinish(action: FinishAction): void {
     if (action === 'next') this.onAction('next');
+    else if (action === 'home') this.onAction('home');
     else if (action === 'first') this.onAction('first');
     else this.onAction('replay');
   }
@@ -1550,7 +1627,7 @@ export class StackPage {
       pileRemaining:this.game.pileRemaining,
       totalRemaining:this.game.remaining,
       modal:this.modal ?? null,
-      busy:this.busy,
+      busy:this.busy || this.animating(),
       finishing:!!this.finish,
       momEvents:this.game.momEventCount,
       momVisible:this.momLayer.active,
