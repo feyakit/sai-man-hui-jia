@@ -36,8 +36,8 @@ export const VEHICLE_PLATES: Readonly<Record<VehicleKey, PlateRect>> = {
  * Where to draw the plate badge, as 0..1 fractions of the art: centred on the painted plate, a bit
  * larger than it and never flatter than 3.4:1 so the text stays legible at small sizes.
  */
-export function plateBox(key: VehicleKey, art: {readonly w: number; readonly h: number}): {cx: number; cy: number; w: number; h: number} {
-  const p = VEHICLE_PLATES[key];
+export function plateBox(key: VehicleKey | PlateRect, art: {readonly w: number; readonly h: number}): {cx: number; cy: number; w: number; h: number} {
+  const p = typeof key === 'string' ? VEHICLE_PLATES[key] : key;
   const w = p.w * 1.1;
   const h = Math.max(p.h * 1.15, w / 3.4);
   return {cx: (p.x + p.w / 2) / art.w, cy: (p.y + p.h / 2) / art.h, w: w / art.w, h: h / art.h};
