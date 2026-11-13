@@ -1,8 +1,11 @@
 import { GAME_TITLE } from '../../config/brand';
 import { PROVINCES } from '../provinces';
+import { findCity } from '../cities';
 
 export const RANK_DEFAULT_API_BASE = 'https://smhj-api.feyakit.workers.dev';
 export const RANK_PROVINCE_STORAGE_KEY = 'smhj.province';
+/** City within the stored province (local only: plates and the home seal; the board stays per province). */
+export const CITY_STORAGE_KEY = 'smhj.city';
 export const RANK_DEVICE_STORAGE_KEY = 'smhj.deviceId';
 export const RANK_PENDING_STORAGE_KEY = 'smhj.pendingClears';
 export const RANK_REQUEST_TIMEOUT_MS = 5_000;
@@ -142,6 +145,25 @@ export function readStoredProvince(storage: RankStorage | undefined): Province |
 
 export function writeStoredProvince(storage: RankStorage | undefined, province: Province): void {
   try { storage?.setItem(RANK_PROVINCE_STORAGE_KEY, province); } catch { /* Storage is optional. */ }
+}
+
+/** The stored city, only if it belongs to the stored province (old saves have no city: null). */
+export function readStoredCity(storage: RankStorage | undefined): string | null {
+  try {
+    const city = storage?.getItem(CITY_STORAGE_KEY);
+    return findCity(readStoredProvince(storage), city)?.name ?? null;
+  } catch { return null; }
+}
+
+/** Saves province + city together; a province without a city clears any old city. */
+export function writeStoredRegion(storage: RankStorage | undefined, province: Province, city: string | null): void {
+  writeStoredProvince(storage, province);
+  try {
+    const valid = findCity(province, city);
+    if (valid) storage?.setItem(CITY_STORAGE_KEY, valid.name);
+    else if (storage?.removeItem) storage.removeItem(CITY_STORAGE_KEY);
+    else storage?.setItem(CITY_STORAGE_KEY, '');
+  } catch { /* Storage is optional. */ }
 }
 
 export function parsePendingClears(raw: string | null): PendingClear[] {

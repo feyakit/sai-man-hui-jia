@@ -40,6 +40,7 @@ export interface StackShareScene {
   readonly stageLabel?: string;
   readonly result: StackShareResult;
   readonly province?: string | null;
+  readonly city?: string | null;
   readonly rank?: number | null;
   /** False for levels/runs the leaderboard does not count. */
   readonly counted?: boolean;
@@ -489,7 +490,7 @@ async function renderHomecomingCanvas(scene: StackShareScene): Promise<string | 
     context.shadowOffsetY = 14;
     drawFrame(context, tractor, 840, 1180 - h / 2, w, h);
     context.restore();
-    drawPlate(context, 'tractor', VEHICLE_ART_SIZE.tractor, 840 - w / 2, 1180 - h, w, h, plateText(scene.province));
+    drawPlate(context, 'tractor', VEHICLE_ART_SIZE.tractor, 840 - w / 2, 1180 - h, w, h, plateText(scene.province, scene.city));
   }
   const copy = drawTexts(context, scene);
   const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
@@ -520,14 +521,14 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     drawBackground(context);
     const copy = drawTexts(context, scene);
     if (scene.ride?.art) {
-      drawRide(context, scene.ride, bodyArt, itemArt, plateText(scene.province));
+      drawRide(context, scene.ride, bodyArt, itemArt, plateText(scene.province, scene.city));
     } else {
       const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
       const body = bodyArt;
       if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
       else drawFallbackCar(context);
       drawCargo(context, trunkArt, itemArt, bodyX, bodyY, bodyWidth, bodyHeight);
-      if (body) drawPlate(context, 'sedan', {w: 1024, h: 640}, bodyX, bodyY, bodyWidth, bodyHeight, plateText(scene.province));
+      if (body) drawPlate(context, 'sedan', {w: 1024, h: 640}, bodyX, bodyY, bodyWidth, bodyHeight, plateText(scene.province, scene.city));
     }
     const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
     if (provinceLine) drawPill(context, provinceLine, 422, 38, scene.result.victory ? 'rgba(120,12,22,.82)' : 'rgba(60,8,14,.82)', gold);
