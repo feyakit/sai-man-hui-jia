@@ -10,12 +10,15 @@ const options = {
   outDir: null,
   api: null,
   province: '广东',
+  // v13 two-step picker: after the province comes a city step (skipped for municipalities / 港澳台).
+  city: '深圳',
   viewport: { width: 390, height: 844 },
   test: false,
 };
 const RANK_API = 'https://smhj-api.feyakit.workers.dev';
 const TEST_HEADER = 'x-smhj-test';
 const TEST_KEY_FILE = path.join(os.homedir(), '.secrets', 'smhj-test.env');
+const PLATE_ABBR = {北京:'京',天津:'津',河北:'冀',山西:'晋',内蒙古:'蒙',辽宁:'辽',吉林:'吉',黑龙江:'黑',上海:'沪',江苏:'苏',浙江:'浙',安徽:'皖',福建:'闽',江西:'赣',山东:'鲁',河南:'豫',湖北:'鄂',湖南:'湘',广东:'粤',广西:'桂',海南:'琼',重庆:'渝',四川:'川',贵州:'贵',云南:'云',西藏:'藏',陕西:'陕',甘肃:'甘',青海:'青',宁夏:'宁',新疆:'新',香港:'港',澳门:'澳',台湾:'台'};
 const positional = [];
 for (let index = 2; index < process.argv.length; index++) {
   const arg = process.argv[index];
@@ -23,6 +26,8 @@ for (let index = 2; index < process.argv.length; index++) {
   else if (arg.startsWith('--api=')) options.api = arg.slice('--api='.length);
   else if (arg === '--province') options.province = process.argv[++index] ?? options.province;
   else if (arg.startsWith('--province=')) options.province = arg.slice('--province='.length);
+  else if (arg === '--city') options.city = process.argv[++index] ?? options.city;
+  else if (arg.startsWith('--city=')) options.city = arg.slice('--city='.length);
   else if (arg === '--viewport') options.viewport = parseViewport(process.argv[++index] ?? '');
   else if (arg.startsWith('--viewport=')) options.viewport = parseViewport(arg.slice('--viewport='.length));
   else if (arg === '--test') options.test = true;
@@ -80,7 +85,12 @@ try {
   });
   let currentLabel = 'home';
   context.on('request', request => {
-    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/clear') clearPosts.push({label: currentLabel});
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/clear') {
+      // Reports must carry the province only: the city is a local plate/seal detail.
+      let body = null;
+      try { body = JSON.parse(request.postData() ?? 'null'); } catch { /* checked below */ }
+      clearPosts.push({label: currentLabel, province: body?.province ?? null, keys: body ? Object.keys(body).sort() : null, mentionsCity: !!options.city && (request.postData() ?? '').includes(options.city)});
+    }
   });
   if (testKey) {
     // Every rank request from the game carries the test key, so it lands in test_clears only.
@@ -252,11 +262,53 @@ try {
     if (!target) throw new Error(`province ${options.province} is not in the picker`);
     assertInside(target, `province ${options.province}`);
     await screenshot(home, '02-province-picker.png');
-    await home.touchscreen.tap(target.screenX, target.screenY);
-    await home.waitForFunction(province => {
+    const abbr = PLATE_ABBR[options.province];
+    if (!abbr) throw new Error(`no plate abbreviation known for ${options.province}`);
+    const homeRegion = () => home.evaluate(() => ({...window.__home.getState(), storedCity: localStorage.getItem('smhj.city'), storedProvince: localStorage.getItem('smhj.province')}));
+    const pickerState = () => home.evaluate(() => window.__provincePicker?.getState() ?? null);
+    const waitHome = () => home.waitForFunction(province => {
       const state = window.__home?.getState();
       return state?.province === province && state?.overlay === null;
     }, options.province, { timeout: 5_000 });
+    await home.touchscreen.tap(target.screenX, target.screenY);
+    await home.waitForTimeout(500);
+    let step = await pickerState();
+    if (step?.step === 'city') {
+      // a) “只选<省>”: province kept, no city, capital letter A on the plate.
+      if (!step.skip) throw new Error('city step has no 只选省份 button');
+      if (!options.city) throw new Error(`${options.province} has a city step; pass --city`);
+      const city = step.points.find(point => point.key === options.city);
+      if (!city) throw new Error(`city ${options.city} is not offered for ${options.province}: ${step.points.map(p => p.key).join(',')}`);
+      assertInside(city, `city ${options.city}`);
+      assertInside(step.skip, '只选省份');
+      if (step.back) assertNoOverlap(step.back, step.skip);
+      await screenshot(home, '02b-city-picker.png');
+      await home.touchscreen.tap(step.skip.screenX, step.skip.screenY);
+      await waitHome();
+      let region = await homeRegion();
+      if (region.storedProvince !== options.province || region.storedCity || region.seal !== options.province || region.plate !== `${abbr}A·春节`) {
+        throw new Error(`只选${options.province} gave ${JSON.stringify({province: region.storedProvince, city: region.storedCity, seal: region.seal, plate: region.plate})}`);
+      }
+      await screenshot(home, '03a-home-province-only.png');
+      // b) pick the city: same province stored for the board, city shown on the seal.
+      await tapHome(home, 'province');
+      await home.waitForFunction(() => window.__provincePicker?.getState().step === 'province', undefined, { timeout: 5_000 });
+      const again = (await pickerState()).points.find(point => point.province === options.province);
+      await home.touchscreen.tap(again.screenX, again.screenY);
+      await home.waitForFunction(() => window.__provincePicker?.getState().step === 'city', undefined, { timeout: 5_000 });
+      step = await pickerState();
+      const cityPoint = step.points.find(point => point.key === options.city);
+      await home.touchscreen.tap(cityPoint.screenX, cityPoint.screenY);
+      await waitHome();
+      region = await homeRegion();
+      if (region.storedProvince !== options.province || region.storedCity !== options.city || region.seal !== options.city || !/^.[A-Z]·春节$/.test(region.plate ?? '') || !region.plate.startsWith(abbr)) {
+        throw new Error(`picking ${options.city} gave ${JSON.stringify({province: region.storedProvince, city: region.storedCity, seal: region.seal, plate: region.plate})}`);
+      }
+      testReport.region = {province: region.storedProvince, city: region.storedCity, plate: region.plate, seal: region.seal};
+    } else {
+      await waitHome();
+      testReport.region = {province: options.province, city: null};
+    }
     await screenshot(home, '03-home-with-province.png');
 
     await tapHome(home, 'rank');
@@ -376,6 +428,14 @@ try {
 
     if (pageErrors.length) throw new Error(pageErrors.join('\n'));
     const debugPosts = clearPosts.filter(post => post.label.startsWith('debug'));
+    for (const post of clearPosts) {
+      if (post.province !== options.province || post.mentionsCity || (post.keys ?? []).includes('city')) {
+        throw new Error(`clear report must carry only the province ${options.province}: ${JSON.stringify(post)}`);
+      }
+    }
+    if (testKey && testReport.stage1Post?.body?.province && testReport.stage1Post.body.province !== options.province) {
+      throw new Error(`server recorded province ${testReport.stage1Post.body.province}`);
+    }
     if (debugPosts.length) throw new Error(`debug runs posted ${debugPosts.length} clear(s)`);
     if (testKey) {
       testReport.publicAfter = await publicTotals();
