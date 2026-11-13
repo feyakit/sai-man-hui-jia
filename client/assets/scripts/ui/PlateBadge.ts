@@ -1,5 +1,5 @@
 import { Color, Graphics, Label, Node, UITransform } from 'cc';
-import { plateBox, plateFontSize, plateText } from '../core/plate';
+import { plateBox, plateFontSize, plateText, type PlateRect } from '../core/plate';
 import { browserStorage } from '../core/stack/stack-progress';
 import { readStoredProvince } from '../core/rank/rank';
 import type { VehicleKey } from '../core/stack/stack-vehicles';
@@ -22,7 +22,7 @@ export class PlateBadge {
   private readonly graphics: Graphics;
   private readonly label: Label;
 
-  constructor(parent: Node, private readonly key: VehicleKey, private readonly artSize: {readonly w: number; readonly h: number}) {
+  constructor(parent: Node, private readonly key: VehicleKey | PlateRect, private readonly artSize: {readonly w: number; readonly h: number}) {
     this.node = uiNode('Plate', parent, 10, 10);
     this.graphics = this.node.addComponent(Graphics);
     const text = uiNode('PlateText', this.node, 10, 10);

@@ -21,5 +21,10 @@ export const ART: ArtEntry[] = [...ITEM_ART,...[
   ['vehicles/bus',519,661,'大巴车'],['vehicles/tractor',457,647,'拖拉机'],['ui/btn_rotate',240,240,'旋转'],
   ['ui/btn_undo',160,160,'撤销'],['ui/btn_restart',160,160,'重开'],['ui/mom',512,512,'妈妈'],
   ['ui/hand',160,160,'手指'],['ui/bg_night',750,1334,'夜色归家'],['ui/bg_home',750,1334,'到家了'],
+  ['ui/bg_poster',750,1700,'年画夜街'],['ui/plaque_poster',750,305,'年画牌匾'],
+  ['ui/couplet_left',90,576,'上联'],['ui/couplet_right',92,576,'下联'],['ui/car_poster',656,484,'满载红车'],
+  ['ui/coin_rank',158,162,'奖杯徽章'],['ui/coin_daily',158,162,'日历徽章'],['ui/coin_classic',158,162,'礼盒徽章'],
+  ['ui/road_home',657,170,'回家路'],['ui/car_marker',62,44,'小车里程碑'],
+  ['ui/btn_start_poster',545,130,'开始装车按钮'],['ui/help_poster',66,66,'说明按钮'],
   ...Array.from({length:4},(_,i) => [`fx/confetti_${i+1}`,32,32,'彩纸']),
 ].map(([file,width,height,name]) => ({file:`${file}.png`,width:Number(width),height:Number(height),name:String(name)}))];

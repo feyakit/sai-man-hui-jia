@@ -42,7 +42,7 @@ export class Bootstrap extends Component {
     this.stage = undefined;
     this.stack = undefined;
     this.home = new HomePage(this.node,{
-      onStart:() => this.startStack(1),
+      onStart:(route?: StackRoute) => this.startStack(route ?? 1),
       onDaily:() => this.startStack('daily'),
       onClassic:() => this.startPack(),
     });

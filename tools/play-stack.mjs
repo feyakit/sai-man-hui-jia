@@ -169,7 +169,8 @@ async function tapSolutionCard(page, id) {
 try {
   const startPage = await openHome('');
   const startButton = await homeButton(startPage, 'start');
-  if (startButton.screenW < 300) throw new Error(`home start button is too narrow: ${JSON.stringify(startButton)}`);
+  // The approved poster mockup draws the start button at ~58% of the screen width (≈226px on a 390px phone).
+  if (startButton.screenW < 210) throw new Error(`home start button is too narrow: ${JSON.stringify(startButton)}`);
   await screenshot(startPage, '00-home.png');
   await tapHomeButton(startPage, 'start');
   await startPage.waitForFunction(() => !!window.__stack, undefined, { timeout: 10_000 });

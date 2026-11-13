@@ -69,6 +69,29 @@ try {
     }
     await context.close();
   }
+  // Poster home: every painted block and control must keep its own rectangle on all phone sizes.
+  for (const [width, height] of VIEWPORTS) {
+    const context = await browser.newContext({ viewport: { width, height }, screen: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    const page = await context.newPage();
+    page.on('pageerror', error => errors.push(`home ${width}x${height}: ${error.message}`));
+    await page.goto(new URL('?api=off', base).href, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => !!window.__home, undefined, { timeout: 20_000 });
+    await page.waitForTimeout(1200);
+    const { boxes, height: designH } = await page.evaluate(() => window.__home.getLayout());
+    const row = { viewport: `${width}x${height}`, home:'ok', carScale: boxes.car ? +(boxes.car.h / 452).toFixed(2) : 0 };
+    report.push(row);
+    const fail = msg => errors.push(`home ${width}x${height}: ${msg}`);
+    const keys = Object.keys(boxes ?? {});
+    if (keys.length < 12) fail('poster boxes missing');
+    for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+      const a = boxes[keys[i]], b = boxes[keys[j]];
+      if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fail(`${keys[i]} overlaps ${keys[j]}`);
+    }
+    const bottom = Math.max(...keys.map(k => boxes[k].y + boxes[k].h));
+    if (bottom > designH - 16) fail(`controls reach the bottom edge (${bottom}/${designH})`);
+    await page.screenshot({ path: path.join(outDir, `${width}x${height}-home-layout.png`) });
+    await context.close();
+  }
   // Every ride at 390x844 on the heavier stage-2 board, one opening screenshot each.
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, screen: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   await mkdir(path.join(outDir, 'vehicles'), { recursive: true });
