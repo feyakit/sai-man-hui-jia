@@ -1,16 +1,17 @@
 import { Color, Graphics, Label, Node, UITransform } from 'cc';
 import { plateBox, plateFontSize, plateText, type PlateRect } from '../core/plate';
 import { browserStorage } from '../core/stack/stack-progress';
-import { readStoredProvince } from '../core/rank/rank';
+import { readStoredCity, readStoredProvince } from '../core/rank/rank';
 import type { VehicleKey } from '../core/stack/stack-vehicles';
 import { uiNode } from './UIKit';
 
 const plateYellow = new Color(255, 204, 38);
 const plateInk = new Color(22, 18, 14);
 
-/** Text for the plate of the player's currently chosen province. */
+/** Text for the plate of the player's chosen city (or province). */
 export function currentPlateText(): string {
-  return plateText(readStoredProvince(browserStorage()));
+  const storage = browserStorage();
+  return plateText(readStoredProvince(storage),readStoredCity(storage));
 }
 
 /**

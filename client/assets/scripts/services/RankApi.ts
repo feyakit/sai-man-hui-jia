@@ -11,7 +11,9 @@ import {
   parseClearResult,
   parseRankSnapshot,
   readPendingClears,
+  readStoredCity,
   readStoredProvince,
+  writeStoredRegion,
   removePendingClear,
   resolveRankApi,
   retryDelayMs,
@@ -74,6 +76,15 @@ export class RankApi {
 
   setProvince(province: Province): void {
     writeStoredProvince(this.storage,province);
+  }
+
+  /** Local-only city (plate letter + home seal); reports still carry the province alone. */
+  get city(): string | null {
+    return readStoredCity(this.storage);
+  }
+
+  setRegion(province: Province, city: string | null): void {
+    writeStoredRegion(this.storage,province,city);
   }
 
   async fetchRank(): Promise<RankSnapshot> {

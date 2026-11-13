@@ -1,5 +1,7 @@
 import { PROVINCES } from './provinces';
 import type { VehicleKey } from './stack/stack-vehicles';
+import { plateLetter } from './cities';
+import type { Province } from './rank/rank';
 
 /** One-character plate abbreviation for each of the 34 provincial-level regions. */
 export const PROVINCE_PLATE_ABBR: Readonly<Record<typeof PROVINCES[number], string>> = {
@@ -10,10 +12,13 @@ export const PROVINCE_PLATE_ABBR: Readonly<Record<typeof PROVINCES[number], stri
   澳门: '澳', 台湾: '台',
 };
 
-/** Festive (never real-format) plate text: “豫A·春节” for a chosen province, “回家·春节” before one is picked. */
-export function plateText(province: string | null | undefined): string {
+/**
+ * Festive plate text: “豫C·春节” for 洛阳 (the city's real 发牌机关 letter), “豫A·春节” (the capital's letter)
+ * when only the province is known, “回家·春节” before anything is picked.
+ */
+export function plateText(province: string | null | undefined, city?: string | null): string {
   const abbr = province ? (PROVINCE_PLATE_ABBR as Record<string, string>)[province] : undefined;
-  return abbr ? `${abbr}A·春节` : '回家·春节';
+  return abbr ? `${abbr}${plateLetter(province as Province, city)}·春节` : '回家·春节';
 }
 
 /** A plate rectangle in art pixels. */

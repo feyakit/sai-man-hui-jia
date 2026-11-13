@@ -59,6 +59,7 @@ export class Bootstrap extends Component {
     this.home = undefined;
     this.stage = new StagePage(this.node,level,() => this.platform.now(),action => {
       if (action === 'next') void this.challenge();
+      else if (action === 'home') this.showHome();
       else if (action === 'mom') void this.startMomMode();
       else if (action === 'first') this.show(stage1(shanghaiDate()));
       else this.show(level);

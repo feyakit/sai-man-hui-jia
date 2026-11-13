@@ -40,6 +40,7 @@ export interface StackShareScene {
   readonly stageLabel?: string;
   readonly result: StackShareResult;
   readonly province?: string | null;
+  readonly city?: string | null;
   readonly rank?: number | null;
   /** False for levels/runs the leaderboard does not count. */
   readonly counted?: boolean;
@@ -90,9 +91,15 @@ function frameDrawable(frame: SpriteFrame | undefined): FrameDrawable | null {
 async function freshDrawable(path: string, frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
   try {
     const info = resources.getInfoWithPath(path, ImageAsset);
+    // Opaque backgrounds may ship as .jpg after the web build is optimised: take the extension from the
+    // loaded ImageAsset (its _native is “.png” / “.jpg”) instead of assuming PNG.
+    const asset = resources.get(path, ImageAsset) as unknown as {_native?: string; nativeUrl?: string} | null;
+    const loaded = asset?.nativeUrl || (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+    const hint = `${asset?._native ?? ''} ${loaded ?? ''}`;
+    const ext = /\.jpe?g/i.test(hint) ? '.jpg' : '.png';
     const url = info
-      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: '.png', bundle: 'resources'} as never)
-      : (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: ext, bundle: 'resources'} as never)
+      : loaded;
     if (url && typeof Image !== 'undefined') {
       const image = await new Promise<HTMLImageElement | null>(resolve => {
         const element = new Image();
@@ -489,7 +496,7 @@ async function renderHomecomingCanvas(scene: StackShareScene): Promise<string | 
     context.shadowOffsetY = 14;
     drawFrame(context, tractor, 840, 1180 - h / 2, w, h);
     context.restore();
-    drawPlate(context, 'tractor', VEHICLE_ART_SIZE.tractor, 840 - w / 2, 1180 - h, w, h, plateText(scene.province));
+    drawPlate(context, 'tractor', VEHICLE_ART_SIZE.tractor, 840 - w / 2, 1180 - h, w, h, plateText(scene.province, scene.city));
   }
   const copy = drawTexts(context, scene);
   const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
@@ -520,14 +527,14 @@ async function renderShareCanvas(scene: StackShareScene): Promise<string | null>
     drawBackground(context);
     const copy = drawTexts(context, scene);
     if (scene.ride?.art) {
-      drawRide(context, scene.ride, bodyArt, itemArt, plateText(scene.province));
+      drawRide(context, scene.ride, bodyArt, itemArt, plateText(scene.province, scene.city));
     } else {
       const bodyX = 90, bodyY = 474, bodyWidth = 900, bodyHeight = 562;
       const body = bodyArt;
       if (body) drawFrame(context, body, bodyX + bodyWidth / 2, bodyY + bodyHeight / 2, bodyWidth, bodyHeight);
       else drawFallbackCar(context);
       drawCargo(context, trunkArt, itemArt, bodyX, bodyY, bodyWidth, bodyHeight);
-      if (body) drawPlate(context, 'sedan', {w: 1024, h: 640}, bodyX, bodyY, bodyWidth, bodyHeight, plateText(scene.province));
+      if (body) drawPlate(context, 'sedan', {w: 1024, h: 640}, bodyX, bodyY, bodyWidth, bodyHeight, plateText(scene.province, scene.city));
     }
     const provinceLine = formatStackShareProvince(scene.province, scene.result.victory, scene.rank ?? null, Math.random, scene.counted ?? true);
     if (provinceLine) drawPill(context, provinceLine, 422, 38, scene.result.victory ? 'rgba(120,12,22,.82)' : 'rgba(60,8,14,.82)', gold);
