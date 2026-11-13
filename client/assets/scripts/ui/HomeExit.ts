@@ -31,8 +31,7 @@ export class HomeExit {
     const text = label(this.pill, 'HomeExitText', '← 主页', 23, 0, 0);
     text.color = paleGold;
     text.isBold = true;
-    text.node.getComponent(UITransform)!.setContentSize(w - 10, h);
-    text.overflow = Label.Overflow.SHRINK;
+    // “← 主页” at 23px is ~92px wide: fits the 128px pill without shrinking.
   }
 
   get open(): boolean { return !!this.dialog; }
