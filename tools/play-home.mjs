@@ -5,8 +5,8 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
-const base = process.argv[2] ?? 'http://127.0.0.1:8772/';
-const outDir = process.argv[3] ?? '/workspace/play-check/match3-v12';
+const base = process.argv[2] ?? 'http://127.0.0.1:8773/';
+const outDir = process.argv[3] ?? '/workspace/play-check/v13/home';
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const errors = [];
@@ -17,15 +17,20 @@ const states = [
   ['best6', { 'smhj.bestLevel': '6' }, '回家进度 6/9', '继续回家 · 第6关'],
   ['arrived', { 'smhj.bestLevel': '9', 'smhj.homeDone': '1' }, '已到家', '继续回家 · 第9关'],
   ['henan', { 'smhj.province': '河南' }, '回家进度 0/9', '开始装车'],
+  ['luoyang', { 'smhj.province': '河南', 'smhj.city': '洛阳' }, '回家进度 0/9', '开始装车'],
+  ['qiqihar', { 'smhj.province': '黑龙江', 'smhj.city': '齐齐哈尔' }, '回家进度 0/9', '开始装车'],
+  ['stale-city', { 'smhj.province': '河南', 'smhj.city': '深圳' }, '回家进度 0/9', '开始装车'],
 ];
-const expectedPlate = { henan: ['豫A·春节', '河南'] };
+// Old province-only saves keep the capital's A; a city shows its own letter and its name on the seal.
+const expectedPlate = { henan: ['豫A·春节', '河南'], luoyang: ['豫C·春节', '洛阳'], qiqihar: ['黑B·春节', '齐齐哈尔'], 'stale-city': ['豫A·春节', '河南'] };
+const cityStates = new Set(['henan', 'luoyang', 'qiqihar', 'stale-city']);
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const required = ['help', 'plaque', 'seal', 'coupletLeft', 'coupletRight', 'car', 'road', 'house', 'progress', 'start', 'rank', 'daily', 'classic'];
 try {
   for (const [width, height] of viewports) {
     for (const [name, storage, expected, expectedStart] of states) {
       if (name !== 'fresh' && !(width === 390 || width === 360 && height === 676)) continue;
-      if (name === 'henan' && width !== 390) continue;
+      if (cityStates.has(name) && width !== 390) continue;
       const context = await browser.newContext({ viewport: { width, height }, screen: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await context.addInitScript(items => { for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v); }, storage);
       const page = await context.newPage();

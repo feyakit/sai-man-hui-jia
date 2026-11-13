@@ -1409,8 +1409,8 @@ export class StackPage {
     const province = this.rankApi.province;
     if (!province) {
       this.provincePicker = new ProvincePicker(this.node,this.height,null,{
-        onSelect:selected => {
-          this.rankApi.setProvince(selected);
+        onSelect:(selected,city) => {
+          this.rankApi.setRegion(selected,city);
           this.provincePicker = undefined;
           void this.sendClear(1,selected,elapsedMs);
         },
@@ -1429,8 +1429,8 @@ export class StackPage {
     const province = this.rankApi.province;
     if (!province) {
       this.provincePicker = new ProvincePicker(this.node,this.height,null,{
-        onSelect:selected => {
-          this.rankApi.setProvince(selected);
+        onSelect:(selected,city) => {
+          this.rankApi.setRegion(selected,city);
           this.provincePicker = undefined;
           this.sendClear(2,selected,elapsedMs);
         },
@@ -1495,6 +1495,7 @@ export class StackPage {
       stageLabel:routeHeadline(this.route).stage,
       result,
       province:this.rankApi.province,
+      city:this.rankApi.city,
       rank:victory ? this.lastProvinceRank : null,
       counted:(this.route === 1 || this.route === 2) && !(typeof window !== 'undefined' && isDebugRun(window.location.search)),
       ending:victory && this.route === ROAD_FINAL_STAGE,
@@ -1637,6 +1638,7 @@ export class StackPage {
       kindCounts,
       clickable:this.debugClickable(),
       province:this.rankApi.province,
+      city:this.rankApi.city,
       overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : null,
     };
   }

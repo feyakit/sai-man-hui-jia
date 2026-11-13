@@ -343,13 +343,13 @@ export class HomePage {
   private openProvincePicker(): void {
     if (this.provincePicker) return;
     this.provincePicker = new ProvincePicker(this.node,this.height,this.rankApi.province,{
-      onSelect:province => {
-        this.rankApi.setProvince(province);
+      onSelect:(province,city) => {
+        this.rankApi.setRegion(province,city);
         this.provincePicker = undefined;
         this.refreshProvinceLabel();
       },
       onCancel:() => { this.provincePicker = undefined; },
-    });
+    },this.rankApi.city);
   }
 
   private openRankPage(): void {
@@ -412,7 +412,12 @@ export class HomePage {
 
   private refreshProvinceLabel(): void {
     const province = this.rankApi.province;
-    this.provinceLabel.string = province || '选省份';
+    const text = this.rankApi.city || province || '选省份';
+    this.provinceLabel.string = text;
+    // Long names (齐齐哈尔, 黔西南州) shrink so they stay inside the seal.
+    this.provinceLabel.fontSize = sealFontSize(text);
+    this.provinceLabel.lineHeight = this.provinceLabel.fontSize + 4;
+    this.provinceLabel.overflow = Label.Overflow.SHRINK;
     this.plate.refresh();
     if (this.carImage?.spriteFrame) this.plate.layout(ART_RECTS.car.w, ART_RECTS.car.h);
   }
@@ -459,4 +464,10 @@ function outlined(value: Label, color: Color, width: number): Label {
 
 function contains(rect: HomeButtonRect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+}
+
+/** Seal text size: 30px for two characters, smaller for longer city names. */
+export function sealFontSize(text: string): number {
+  const n = [...text].length;
+  return n <= 2 ? 30 : n === 3 ? 28 : n === 4 ? 24 : 20;
 }
