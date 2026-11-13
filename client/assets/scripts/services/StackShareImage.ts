@@ -91,9 +91,15 @@ function frameDrawable(frame: SpriteFrame | undefined): FrameDrawable | null {
 async function freshDrawable(path: string, frame: SpriteFrame | undefined): Promise<FrameDrawable | null> {
   try {
     const info = resources.getInfoWithPath(path, ImageAsset);
+    // Opaque backgrounds may ship as .jpg after the web build is optimised: take the extension from the
+    // loaded ImageAsset (its _native is “.png” / “.jpg”) instead of assuming PNG.
+    const asset = resources.get(path, ImageAsset) as unknown as {_native?: string; nativeUrl?: string} | null;
+    const loaded = asset?.nativeUrl || (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+    const hint = `${asset?._native ?? ''} ${loaded ?? ''}`;
+    const ext = /\.jpe?g/i.test(hint) ? '.jpg' : '.png';
     const url = info
-      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: '.png', bundle: 'resources'} as never)
-      : (frame?.texture as {image?: {nativeUrl?: string}} | null)?.image?.nativeUrl;
+      ? assetManager.utils.getUrlWithUuid(info.uuid, {isNative: true, nativeExt: ext, bundle: 'resources'} as never)
+      : loaded;
     if (url && typeof Image !== 'undefined') {
       const image = await new Promise<HTMLImageElement | null>(resolve => {
         const element = new Image();

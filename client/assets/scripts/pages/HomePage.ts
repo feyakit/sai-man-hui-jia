@@ -53,6 +53,7 @@ export class HomePage {
   private readonly coupletLeftImage: Sprite;
   private readonly coupletRightImage: Sprite;
   private readonly provinceLabel: Label;
+  private artReady = false;
   private readonly carImage: Sprite;
   private readonly plate: PlateBadge;
   private readonly roadImage: Sprite;
@@ -132,6 +133,7 @@ export class HomePage {
     void Promise.all(art.map(([, key]) => loadArt(key))).then(frames => {
       if (!this.node.isValid) return;
       frames.forEach((frame, index) => { if (frame) art[index][0].spriteFrame = frame; });
+      this.artReady = true;
       this.layout();
     });
 
@@ -141,6 +143,7 @@ export class HomePage {
       getLayout: () => ({viewport:{width:this.screenWidth(),height:this.screenHeight()},height:this.height,boxes:{...this.boxes}}),
       getState: () => ({
         province:this.rankApi.province,
+        artReady:this.artReady,
         overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : this.rulesNode ? 'rules' : null,
         progress:this.progressLabel?.string ?? '',
         plate:this.plate.node.active ? this.plate.text : null,

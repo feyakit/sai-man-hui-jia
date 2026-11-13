@@ -12,6 +12,7 @@ vi.mock('cc',() => {
     addComponent(Type: new () => any) { const c=new Type(); c.node=this; this.components.set(Type,c); return c; }
     getComponent(Type: any) { return this.components.get(Type); }
     addChild(node: Node) { this.children.push(node); node.parent=this; }
+    setSiblingIndex(index: number) { const list=this.parent?.children; if (!list) return; list.splice(list.indexOf(this),1); list.splice(Math.min(index,list.length),0,this); }
     setPosition=vi.fn(); setScale=vi.fn(); on=vi.fn(); once=vi.fn();
     getChildByName(name: string) { return this.children.find(n => n.name===name); }
   }
