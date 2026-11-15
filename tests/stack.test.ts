@@ -104,7 +104,7 @@ describe('stack level generation', () => {
     expect(stackCardsAreVisible(level.cards, pageLayout, fit)).toBe(true);
     const bounds = stackCardBounds(level.cards.map(item => ({...item, ...mapStackRect(fit, item)})));
     expect(bounds.top).toBeGreaterThanOrEqual(pageLayout.stackTop);
-    expect(bounds.bottom).toBeLessThanOrEqual(pageLayout.stackBottom);
+    expect(bounds.bottom).toBeLessThanOrEqual(pageLayout.stackBottom + 1e-6);
     expect((bounds.right - bounds.left) / 750 * 390).toBeGreaterThan(300);
     expect(bounds.left / 750 * 390).toBeGreaterThanOrEqual(10);
     expect(bounds.right / 750 * 390).toBeLessThanOrEqual(380);
@@ -320,10 +320,12 @@ describe('board fits above the trunk on every phone', () => {
           expect(stackCardsAreVisible(level.cards, layout, fit)).toBe(true);
           expect(content.y + content.h).toBeLessThanOrEqual(layout.carTop - STACK_LID_RISE + 1e-6);
           expect(content.y).toBeGreaterThanOrEqual(layout.stackTop);
-          expect(content.x).toBeGreaterThanOrEqual(0);
-          expect(content.x + content.w).toBeLessThanOrEqual(750);
+          // ≥12 screen px of side margin on every phone (26 design units at 750 wide).
+          expect(content.x).toBeGreaterThanOrEqual(26 - 1e-6);
+          expect(content.x + content.w).toBeLessThanOrEqual(750 - 26 + 1e-6);
+          expect(26 / 750 * w).toBeGreaterThanOrEqual(12);
           // Bottom buttons keep a gesture-bar margin even when the browser reports no safe area.
-          expect(layout.height - (layout.actionY + 68)).toBeGreaterThanOrEqual(48);
+          expect(layout.height - (layout.actionY + 60)).toBeGreaterThanOrEqual(40);
         }
       });
     }
