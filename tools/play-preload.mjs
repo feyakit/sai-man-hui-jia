@@ -73,7 +73,7 @@ async function scenario(name, { url = `${base}?api=off`, bestLevel = null, waitP
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     const status = await page.evaluate(() => window.__stack?.getArtStatus?.() ?? null).catch(error => { if (process.env.DEBUG) console.error(error.message); return null; });
-    const up = status && status.text + status.image + status.back > 0;
+    const up = status && status.textCards + status.imageCards + status.backCards > 0;
     await page.screenshot({ path: path.join(dir, `${String(shot++).padStart(3, '0')}-${Date.now() - t0}ms${up ? '-pile' : ''}.png`) });
     if (up && pileSince == null) pileSince = Date.now();
     if (pileSince != null && Date.now() - pileSince > 1200) break;
