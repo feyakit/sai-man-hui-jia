@@ -1,0 +1,23 @@
+# 美术与音频资源许可
+# Asset License (CC BY-NC 4.0)
+
+Copyright (c) 2026 Feyakit
+
+本仓库中的美术资源（包括但不限于 `client/assets/resources/art/` 下的图片，以及由这些素材衍生的界面图、分享图）以及 `client/assets/resources/audio/` 目录中的音频文件（如有），采用「知识共享 署名-非商业性使用 4.0 国际许可协议」（CC BY-NC 4.0）授权。
+
+The artwork in this repository (including, without limitation, images under `client/assets/resources/art/`, and screenshots or share images derived from that art) and any audio files under `client/assets/resources/audio/` are licensed under the Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+
+禁止任何商业用途；商用授权请通过 GitHub Issues 联系作者。
+
+Commercial use is not permitted. For a commercial license, please contact the author via GitHub Issues.
+
+使用这些资源时，你必须注明原作者 Feyakit，提供本许可协议的链接，并说明是否对原作做了修改。你不得将上述资源用于商业目的。
+
+You must give appropriate credit to Feyakit, provide a link to the license, and indicate if changes were made. You may not use the material for commercial purposes.
+
+完整协议文本：
+
+- https://creativecommons.org/licenses/by-nc/4.0/
+- 法律文本：https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+程序源代码（含 `client/assets/scripts/core/audio/` 中运行时合成背景音乐与音效的代码）适用仓库根目录的 `LICENSE`（PolyForm Noncommercial License 1.0.0），同样禁止商业使用。

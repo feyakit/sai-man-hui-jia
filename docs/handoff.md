@@ -9,7 +9,7 @@ M1 核心规则和 M2 关卡工具已通过云端验收。Node.js 24 环境执�
 
 ## M3 春运主题试玩与官方构建
 
-[私密试玩](https://example.feyakit.dev) 已更新为 Cocos Creator 3.8.8 的正式 Web Mobile 导出。两关用归家夜路、车厢、年货标签和到家画面串起春运主题。浏览器需要 WebGL，链接限项目所有者访问。
+当前公开试玩页是 [塞满回家试玩版](https://feyakit.github.io/smhj-play/)（Cocos Creator 3.8.8 Web Mobile）。早期还有一页仅项目所有者可访问的私密试玩，现已停用。浏览器需要 WebGL。
 
 [官方构建与浏览器验收](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950) 提供 `trunk-home-web-mobile`。同一导出包在桌面鼠标与 Pixel 7 模拟触屏各通关两关，旋转、非法落点、拖回托盘、URL 直达及后台计时通过。实体手机仍待复测。
 

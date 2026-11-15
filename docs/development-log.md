@@ -78,7 +78,7 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 | --- | --- |
 | Cocos 3.8.8 引擎预览包 | 从 `6f6aa2a` 的游戏源码构建，编译 Web 引擎与 UI 材质，使用官方默认 2D 场景 |
 | `node --import tsx tools/cocos/smoke-web-mobile.mjs <试玩目录> <截图目录>` | 桌面鼠标和 Pixel 7 模拟触屏均通关两关。非法落点、点按旋转、拖回托盘、URL 直达挑战与冻结 10 秒后的倒计时均通过 |
-| [部署私密试玩](https://example.feyakit.dev) | 仅项目所有者可访问。部署源码版本 `202433254ed06bc1918453b38a6d161bae552043` |
+| 早期私密试玩页（已停用，当时仅项目所有者可访问） | 部署源码版本 `202433254ed06bc1918453b38a6d161bae552043` |
 | [官方 Web Mobile 构建](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42625147699) | 已启用调整后的下载时限。正式编辑器出包和真机复测仍待确认 |
 
 试玩直接使用 Cocos 开源 Web 引擎和同一套游戏源码。测试环境使用 Chromium 软件 WebGL。试玩页会在浏览器无法启动 WebGL 时提示，实体手机、微信和官方 Web Mobile 导出不计入本轮通过项。
@@ -94,7 +94,7 @@ M3 仍需生成 Web Mobile 构建并在手机和桌面浏览器验证两关、�
 
 - [第一轮官方构建及浏览器 CI](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42633780090) 已通过。最后一版优化年货卡片尺寸，并关闭性能面板。
 - [新版官方导出](https://github.com/feyakit/sai-man-hui-jia/actions/runs/42634064950/artifacts/13681543848) 来自 `82a69cd`。发布前用该导出包复跑桌面和模拟手机两关，保留两关和到家画面截图。
-- [原私密试玩页](https://example.feyakit.dev) 已替换为正式 Web Mobile 导出。网页入口增加中文标题与 WebGL 不可用提示，游戏逻辑沿用导出产物。部署源码版本 `91a10bd23937543f1a9459d9a82ae2adc2bd15a7`。
+- 原私密试玩页（已停用）当时已替换为正式 Web Mobile 导出。网页入口增加中文标题与 WebGL 不可用提示，游戏逻辑沿用导出产物。部署源码版本 `91a10bd23937543f1a9459d9a82ae2adc2bd15a7`。
 
 ## 2026-11-09 · 任务 1：CI、证据与 V1 关卡地基（进行中）
 
