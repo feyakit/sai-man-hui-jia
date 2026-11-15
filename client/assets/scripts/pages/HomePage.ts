@@ -1,5 +1,6 @@
 import { Color, Graphics, Label, Node, Sprite, UITransform, Vec3, view } from 'cc';
-import { loadArt } from '../services/OptionalResources';
+import { loadArt, preloadArt } from '../services/OptionalResources';
+import { stackArtFilesForRoute } from '../core/stack/stack-preload';
 import { RankApi } from '../services/RankApi';
 import { ProvincePicker } from '../ui/ProvincePicker';
 import { fill, label, uiNode } from '../ui/UIKit';
@@ -54,6 +55,9 @@ export class HomePage {
   private readonly coupletRightImage: Sprite;
   private readonly provinceLabel: Label;
   private artReady = false;
+  /** Background art prefetch for level 1 and the saved level: 'idle' → 'running' → 'done'. */
+  private prefetch: 'idle' | 'running' | 'done' = 'idle';
+  private prefetchTimer?: ReturnType<typeof setTimeout>;
   private readonly carImage: Sprite;
   private readonly plate: PlateBadge;
   private readonly roadImage: Sprite;
@@ -135,6 +139,7 @@ export class HomePage {
       frames.forEach((frame, index) => { if (frame) art[index][0].spriteFrame = frame; });
       this.artReady = true;
       this.layout();
+      this.schedulePrefetch();
     });
 
     this.node.on(Node.EventType.TOUCH_END, this.touch, this);
@@ -144,6 +149,7 @@ export class HomePage {
       getState: () => ({
         province:this.rankApi.province,
         artReady:this.artReady,
+        prefetch:this.prefetch,
         overlay:this.rankPage ? 'rank' : this.provincePicker ? 'province' : this.rulesNode ? 'rules' : null,
         progress:this.progressLabel?.string ?? '',
         plate:this.plate.node.active ? this.plate.text : null,
@@ -455,6 +461,24 @@ export class HomePage {
 
   private placeCenter(node: Node, centerX: number, centerY: number): void {
     node.setPosition(centerX - 375, this.height / 2 - centerY);
+  }
+
+  /**
+   * Once the poster is up and the player is just looking at it, warm level 1 and the saved level
+   * (goods + ride) so “开始装车 / 继续回家” opens with every card already an image.
+   */
+  private schedulePrefetch(): void {
+    if (this.prefetch !== 'idle') return;
+    this.prefetchTimer = setTimeout(() => {
+      if (!this.node.isValid) return;
+      this.prefetch = 'running';
+      const routes = [...new Set([1, Math.max(1, this.progressSteps)])];
+      void routes.reduce<Promise<void>>((chain, route) => chain.then(() => {
+        if (!this.node.isValid) return;
+        return preloadArt(stackArtFilesForRoute(route), undefined, 60_000);
+      }), Promise.resolve()).then(() => { this.prefetch = 'done'; });
+    }, 400);
+    this.node.once(Node.EventType.NODE_DESTROYED, () => { if (this.prefetchTimer) clearTimeout(this.prefetchTimer); });
   }
 }
 

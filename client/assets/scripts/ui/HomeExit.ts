@@ -31,7 +31,7 @@ export class HomeExit {
     const text = label(this.pill, 'HomeExitText', '← 主页', 23, 0, 0);
     text.color = paleGold;
     text.isBold = true;
-    // “← 主页” at 23px is ~92px wide: fits the 128px pill without shrinking.
+    // “← 主页” at 23px is ~92px wide: fits the 120px pill without shrinking.
   }
 
   get open(): boolean { return !!this.dialog; }

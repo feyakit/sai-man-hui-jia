@@ -6,7 +6,10 @@ import { stage1 } from './core/stage1';
 import type { Level } from './core/types';
 import { HomePage } from './pages/HomePage';
 import { StagePage } from './pages/StagePage';
-import { StackPage, type StackPageAction } from './pages/StackPage';
+import { StackPage, forcedVehicleParam, type StackPageAction } from './pages/StackPage';
+import { stackArtFilesForRoute } from './core/stack/stack-preload';
+import { artSettled, preloadArt } from './services/OptionalResources';
+import { StackLoading } from './ui/StackLoading';
 import type { StackRoute } from './core/stack/stack-progress';
 import { WebPlatform } from './platform/WebPlatform';
 import { Api } from './services/Api';
@@ -21,6 +24,8 @@ export class Bootstrap extends Component {
   private stage?: StagePage;
   private stack?: StackPage;
   private home?: HomePage;
+  private loading?: StackLoading;
+  private loadToken = 0;
   private readonly platform = new WebPlatform();
   private readonly api = new Api(this.platform);
   private readonly rankApi = new RankApi();
@@ -35,9 +40,11 @@ export class Bootstrap extends Component {
     else this.showHome();
   }
 
-  update(): void { this.stage?.tick(); this.stack?.tick(); this.home?.tick(); }
+  update(): void { this.stage?.tick(); this.stack?.tick(); this.home?.tick(); this.loading?.tick(); }
 
   private showHome(): void {
+    this.loadToken++;
+    this.loading = undefined;
     this.node.destroyAllChildren();
     this.stage = undefined;
     this.stack = undefined;
@@ -66,7 +73,29 @@ export class Bootstrap extends Component {
     });
   }
 
+  /**
+   * Loads the level's goods and ride art first (red-gold loading card meanwhile, capped so a dead
+   * network still lets the level open), so the pile never shows text placeholders.
+   */
   private startStack(route: StackRoute): void {
+    const token = ++this.loadToken;
+    const files = stackArtFilesForRoute(route,forcedVehicleParam());
+    if (files.every(artSettled)) { this.openStack(route); return; }
+    this.node.destroyAllChildren();
+    this.stage = undefined;
+    this.home = undefined;
+    this.stack = undefined;
+    const loading = new StackLoading(this.node);
+    this.loading = loading;
+    void preloadArt(files,(done,total) => { if (token === this.loadToken && loading.node.isValid) loading.progress(done,total); }).then(() => {
+      if (token !== this.loadToken || !this.node.isValid) return;
+      this.openStack(route);
+    });
+  }
+
+  private openStack(route: StackRoute): void {
+    this.loadToken++;
+    this.loading = undefined;
     this.node.destroyAllChildren();
     this.stage = undefined;
     this.home = undefined;

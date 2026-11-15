@@ -113,10 +113,17 @@ export function vehicleForLevel(level: number): LevelVehicle {
   return {def, displayName: def.name};
 }
 
-/** Short phones (page under 1450 design units tall) shrink the ride so the board keeps ~44px cards. */
+/**
+ * The ride takes 25.5% of a short page (under 1450 design units: 375×667, 390×664 Safari) and 28.5%
+ * of a tall one, 320–540 units, so the board keeps ≥44px cards with the whole ride on show.
+ */
+export function ridePageShare(pageHeight: number): number { return pageHeight < 1450 ? .255 : .285; }
 export function vehicleScaleForPage(pageHeight: number): number {
-  return pageHeight < 1450 ? .76 : 1;
+  return Math.max(320, Math.min(540, pageHeight * ridePageShare(pageHeight))) / 540;
 }
+
+/** Gap between the bottom of a ride's art and the prop buttons. */
+export const RIDE_BUTTON_GAP = 8;
 
 /**
  * The code-built sedan is wider and taller than the sprite rides, so short pages shrink it a bit
@@ -131,14 +138,13 @@ export function vehicleSlotLabel(def: VehicleDef, capacity: number): string {
 }
 
 /**
- * The art is bottom-anchored so its wheels tuck behind the prop buttons (starting at `actionY`),
- * but never so low that a cargo cell slips under them.
+ * The whole ride (wheels, rear lights and plate) sits just above the prop buttons, which start at
+ * `actionY`; nothing of it hides behind them.
  */
 export function vehicleArtRect(def: VehicleDef, actionY: number, designWidth = 750, scale = 1): StackRect {
   const h = def.height * scale;
   const w = h * def.artSize.w / def.artSize.h * (def.stretchX ?? 1);
-  const lowestCargo = Math.max(0, ...def.regions.map(region => region.y + region.h));
-  const bottom = Math.min(actionY + 80, actionY - 12 + (1 - lowestCargo) * h);
+  const bottom = actionY - RIDE_BUTTON_GAP;
   return {x: (designWidth - w) / 2, y: bottom - h, w, h};
 }
 
