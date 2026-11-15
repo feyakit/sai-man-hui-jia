@@ -88,7 +88,7 @@
 
 ### 2.4 已知问题
 - `work/m1-core` 最新提交 `3e5230c` 的 Cocos 构建任务失败（约 1.5 分钟即失败，浏览器验收被跳过），上一提交 `82a69cd` 是绿的。开工前先查明原因并修复或重跑成功。
-- 私密试玩页 `sai-man-hui-jia-playtest.feya0517.chatgpt.site` 是手工部署，CI 不会更新它。
+- 早期私密试玩页（已停用）是手工部署，CI 不会更新它。当前公开试玩见 https://feyakit.github.io/smhj-play/ 。
 - 实体手机尚未测试。
 
 ---
