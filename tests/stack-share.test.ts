@@ -1,0 +1,68 @@
+import { describe, expect, it } from 'vitest';
+import {
+  STACK_SHARE_BACKLOG_THRESHOLD,
+  STACK_SHARE_CAPTIONS,
+  STACK_SHARE_HEIGHT,
+  STACK_SHARE_TITLE,
+  STACK_SHARE_WIDTH,
+  createStackShareCopy,
+  formatStackShareStage,
+  formatStackShareStats,
+  pickStackShareCaption,
+  stackShareFileName,
+} from '../client/assets/scripts/core/stack/stack-share';
+
+describe('stack share copy', () => {
+  it('formats victory and failure statistics without browser state', () => {
+    expect(formatStackShareStats({victory:true,elapsedSec:18,boxes:6})).toBe('用时 18 秒 · 打包 6 箱');
+    expect(formatStackShareStats({victory:true,elapsedSec:NaN,boxes:-3})).toBe('用时 1 秒 · 打包 0 箱');
+    expect(STACK_SHARE_BACKLOG_THRESHOLD).toBe(30);
+    expect(formatStackShareStats({victory:false,remaining:17})).toBe('差 17 件就塞满');
+    expect(formatStackShareStats({victory:false,remaining:30})).toBe('差 30 件就塞满');
+    expect(formatStackShareStats({victory:false,remaining:31})).toBe('后备箱塞爆了，年货还剩一大堆');
+    expect(formatStackShareStats({victory:false,remaining:NaN})).toBe('差 0 件就塞满');
+    expect(formatStackShareStage(2)).toBe('第 2 关');
+    expect(formatStackShareStage(-1)).toBe('第 1 关');
+  });
+
+  it('picks only festive captions deterministically', () => {
+    expect(pickStackShareCaption(() => 0)).toBe(STACK_SHARE_CAPTIONS[0]);
+    expect(pickStackShareCaption(() => 0.999)).toBe(STACK_SHARE_CAPTIONS.at(-1));
+    expect(pickStackShareCaption(() => Number.NaN)).toBe(STACK_SHARE_CAPTIONS[0]);
+    const copy = createStackShareCopy(1, {victory:true,elapsedSec:32,boxes:3}, () => 0.4);
+    expect(copy.title).toBe(STACK_SHARE_TITLE);
+    expect(copy.stageText).toBe('第 1 关');
+    expect(copy.statsText).toBe('用时 32 秒 · 打包 3 箱');
+    expect(STACK_SHARE_CAPTIONS).toContain(copy.caption);
+  });
+
+  it('uses a portrait share canvas and safe file name', () => {
+    expect(STACK_SHARE_WIDTH).toBe(1080);
+    expect(STACK_SHARE_HEIGHT).toBe(1440);
+    expect(STACK_SHARE_WIDTH / STACK_SHARE_HEIGHT).toBeCloseTo(3 / 4);
+    expect(stackShareFileName(2, false)).toBe('塞满回家-第2关-差一点.png');
+  });
+});
+
+import {formatStackShareProvince, formatStackShareVehicle, STACK_SHARE_LINK} from '../client/assets/scripts/core/stack/stack-share';
+
+describe('share card province and ride lines', () => {
+  it('claims +1 and the rank on a counted win', () => {
+    expect(formatStackShareProvince('四川', true)).toBe('我为四川省塞满回家 +1');
+    expect(formatStackShareProvince('北京', true, 3)).toBe('我为北京市塞满回家 +1，北京市排第 3');
+  });
+  it('taunts the province on a loss', () => {
+    expect(formatStackShareProvince('广东', false, null, () => 0)).toBe('广东省还差我一箱');
+    expect(formatStackShareProvince('广东', false, null, () => .99)).toContain('广东省');
+  });
+  it('prints nothing without a province and never claims +1 for uncounted levels', () => {
+    expect(formatStackShareProvince(null, true)).toBeNull();
+    expect(formatStackShareProvince(undefined, false)).toBeNull();
+    expect(formatStackShareProvince('河南', true, 2, Math.random, false)).not.toContain('+1');
+  });
+  it('names the ride and carries the trial link', () => {
+    expect(formatStackShareVehicle('摩托车')).toBe('本关座驾：摩托车');
+    expect(formatStackShareVehicle(null)).toBeNull();
+    expect(STACK_SHARE_LINK).toBe('feyakit.github.io/smhj-play');
+  });
+});

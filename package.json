@@ -1,0 +1,34 @@
+{
+  "name": "trunk-home",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && vitest run --coverage",
+    "test:watch": "vitest",
+    "test:performance": "RUN_M1_PERFORMANCE=1 vitest run tests/performance.test.ts",
+    "levels:generate": "node --import tsx tools/generate-levels.ts",
+    "levels:evaluate": "node --import tsx tools/evaluate-levels.ts",
+    "levels:upload": "node --import tsx tools/upload-levels.ts",
+    "levels:copy-dev": "node --import tsx tools/copy-dev-levels.ts",
+    "art:templates": "node --import tsx tools/art-templates.ts",
+    "levels:v1": "node --import tsx tools/generate-v1-levels.ts",
+    "art:placeholders": "node --import tsx tools/art-placeholders.ts",
+    "art:check": "node --import tsx tools/art-check.ts"
+  },
+  "devDependencies": {
+    "@cocos/creator-types": "^3.8.8",
+    "@electron/asar": "4.3.1",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "4.1.4",
+    "playwright": "1.65.0",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.4"
+  }
+}

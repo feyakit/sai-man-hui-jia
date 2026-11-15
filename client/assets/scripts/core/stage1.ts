@@ -1,0 +1,9 @@
+import type { Level } from './types';
+export function stage1(date: string): Level {
+ return { date, stage:1, vehicle:'sedan', width:4, height:3, blocked:[], timeLimitSec:60, pieces:[
+  {id:1,shape:'I4',item:'sugarcane',initialRotation:0},
+  {id:2,shape:'O4',item:'milk',initialRotation:0},
+  {id:3,shape:'I2',item:'liquor',initialRotation:0},
+  {id:4,shape:'I2',item:'liquor',initialRotation:0},
+ ]};
+}

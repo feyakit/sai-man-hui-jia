@@ -1,0 +1,38 @@
+name: Verify game core and level tools
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run art:check
+      - run: npm run test:performance
+      - name: Verify committed V1 levels are reproducible
+        run: |
+          npm run levels:v1
+          git diff --exit-code -- client/assets/resources/levels/v1 tests/fixtures/v1
+          test -z "$(git ls-files --others --exclude-standard client/assets/resources/levels/v1 tests/fixtures/v1)"
+      - name: Verify seven-day level generation
+        run: |
+          export LEVEL_SECRET="$(node -p "require('node:crypto').randomBytes(32).toString('hex')")"
+          npm run levels:generate -- --from 2027-01-15 --days 7
+          npm run levels:upload -- --from 2027-01-15 --days 7 --dry-run
+          npm run levels:copy-dev
+          npm run --silent levels:evaluate -- --vehicle wuling --samples 3
+          npm run art:templates
+          test "$(find tools/out/art-templates -name '*.svg' | wc -l)" -eq 19
