@@ -4,11 +4,11 @@ import {
 } from 'cc';
 import {
   ROAD_FINAL_STAGE, browserStorage, levelForRoute, markDailyDone, markHomeDone, nextRouteTitle, recordLevelReached, routeHeadline,
-  vehicleLevelForRoute,
   type StackRoute,
 } from '../core/stack/stack-progress';
 import {
-  STACK_ACTION_HEIGHT, STACK_BODY_HOLE, STACK_BODY_SIZE, STACK_BODY_SLICE, STACK_CAR_SCALE_Y,
+  STACK_ACTION_HEIGHT, STACK_LID_RISE, STACK_BODY_HOLE, STACK_BODY_SIZE, STACK_BODY_SLICE, STACK_CAR_SCALE_Y,
+  STACK_BANNER, STACK_BOARD_SIDE, STACK_SOUND_BUTTON, STACK_SOUND_MENU, STACK_SOUND_ROWS, STACK_SUBTITLE,
   IDENTITY_BOARD, createStackPageLayout, fitStackBoard, mapStackRect, stackCardBounds, stackContentBounds,
   stackPageHeight, unmapStackPoint, type StackBoardFit,
 } from '../core/stack/stack-layout';
@@ -18,7 +18,7 @@ import { HomeExit } from '../ui/HomeExit';
 import { displayIndex, displaySlot, readyPacks, type PendingPack } from '../core/stack/slot-display';
 import type { StackCard, StackLevel, StackTapResult } from '../core/stack/stack-types';
 import {
-  sedanScaleForPage, sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleByKey, vehicleForLevel, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
+  sedanScaleForPage, sedanSlotCells, vehicleArtRect, vehicleScaleForPage, vehicleRegionRects, vehicleSlotCells, vehicleSlotLabel,
   type LevelVehicle, type Rgb,
 } from '../core/stack/stack-vehicles';
 import { createRng } from '../core/rng';
@@ -32,7 +32,13 @@ import {
 } from '../core/rank/rank';
 import { FINISH_DURATION, FinishPlayback, type FinishAction } from '../game/FinishTimeline';
 import type { Rect } from '../game/InteractionGeometry';
-import { loadArt } from '../services/OptionalResources';
+import { loadArt, peekArt } from '../services/OptionalResources';
+import { SEDAN_ART, rideForRoute } from '../core/stack/stack-preload';
+
+/** `?vehicle=moto` forces a ride for layout checks. */
+export function forcedVehicleParam(): string | null {
+  return typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vehicle');
+}
 import { RankApi } from '../services/RankApi';
 import { StackSound } from '../services/StackSound';
 import { showStackShareImage } from '../services/StackShareImage';
@@ -142,8 +148,13 @@ export class StackPage {
   private readonly soundButton: Node;
   private readonly soundButtonArt: Graphics;
   private readonly soundButtonLabel: Label;
-  private soundRect: Rect = {x:655,y:150,w:86,h:40};
-  private musicRect: Rect = {x:655,y:196,w:86,h:40};
+  private readonly soundRect: Rect = {...STACK_SOUND_ROWS[0]};
+  private readonly musicRect: Rect = {...STACK_SOUND_ROWS[1]};
+  private readonly speakerButton: Node;
+  private readonly speakerArt: Graphics;
+  private readonly speakerLabel: Label;
+  private readonly soundMenu: Node;
+  private readonly soundMenuArt: Graphics;
   private readonly musicButton: Node;
   private readonly musicButtonArt: Graphics;
   private readonly musicButtonLabel: Label;
@@ -234,10 +245,7 @@ export class StackPage {
     this.level = levelForRoute(route);
     if (route !== 'daily') recordLevelReached(browserStorage(),route);
     this.capacity = (this.level as StackLevel & {slotCapacity?: number}).slotCapacity ?? SLOT_CAPACITY;
-    const forcedVehicle = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('vehicle');
-    const levelVehicle = vehicleForLevel(vehicleLevelForRoute(route));
-    const forcedDef = forcedVehicle ? vehicleByKey(forcedVehicle) : undefined;
-    this.vehicle = forcedDef ? {def:forcedDef,displayName:forcedDef.name} : levelVehicle;
+    this.vehicle = rideForRoute(route,forcedVehicleParam());
     this.game = new StackGame(this.level, createRng(`${this.level.seed}:runtime`), Date.now());
     this.node = uiNode('StackPage',parent,750,1334);
     this.sounds = new StackSound();
@@ -245,7 +253,10 @@ export class StackPage {
     this.bgImage.sizeMode = Sprite.SizeMode.CUSTOM;
     this.bgImage.trim = false;
     this.bgImage.enabled = false;
-    void loadArt('ui/bg_night').then(frame => {
+    // Bootstrap preloads the level's art, so these usually resolve synchronously (first frame drawn with art).
+    const bgReady = peekArt('ui/bg_night');
+    if (bgReady) { this.bgImage.spriteFrame = bgReady; this.bgImage.enabled = true; }
+    else void loadArt('ui/bg_night').then(frame => {
       if (!frame || !this.node.isValid) return;
       this.bgImage.spriteFrame = frame;
       this.bgImage.enabled = true;
@@ -261,7 +272,8 @@ export class StackPage {
       ? new PlateBadge(this.vehicleImage.node,this.vehicle.def.key,this.vehicle.def.artSize)
       : new PlateBadge(this.bodyImage.node,'sedan',{w:STACK_BODY_SIZE.w,h:STACK_BODY_SIZE.h});
     this.carDetail = uiNode('TrunkDetails',this.carLayer,750,1334).addComponent(Graphics);
-    if (this.vehicle.def.art) {
+    if (this.vehicle.def.art && peekArt(this.vehicle.def.art)) this.vehicleFrame = peekArt(this.vehicle.def.art);
+    else if (this.vehicle.def.art) {
       void loadArt(this.vehicle.def.art).then(frame => {
         if (!frame || !this.node.isValid) return;
         this.vehicleFrame = frame;
@@ -269,7 +281,9 @@ export class StackPage {
         if (this.failLayer?.isValid) this.drawOverflowCar(this.failLayer);
       });
     }
-    void Promise.all([
+    if (SEDAN_ART.every(file => peekArt(file))) {
+      [this.carFrames.body,this.carFrames.trunk,this.carFrames.lid] = SEDAN_ART.map(file => peekArt(file));
+    } else void Promise.all([
       loadArt('vehicles/sedan_v1_body'),
       loadArt('vehicles/sedan_v1_trunk'),
       loadArt('vehicles/sedan_v1_lid'),
@@ -280,21 +294,19 @@ export class StackPage {
       if (this.failLayer?.isValid) this.drawOverflowCar(this.failLayer);
     });
     this.hud = uiNode('StackHud',this.node,750,1334);
-    this.stageLabel = label(this.hud,'Stage','第 1 关',29,0,0);
+    this.stageLabel = label(this.hud,'Stage','第 1 关',20,0,0);
     this.stageLabel.color = paleGold;
-    this.remainingLabel = label(this.hud,'Remaining','剩余 18 件',24,0,0);
+    this.remainingLabel = label(this.hud,'Remaining','剩余 18 件',20,0,0);
     this.remainingLabel.color = paleGold;
-    label(this.hud,'ModeTitle','年货三消',38,0,0).color = gold;
+    label(this.hud,'ModeTitle','年货三消',32,0,0).color = gold;
     const headline = routeHeadline(route);
-    const subtitle = label(this.hud,'Subtitle',headline.subtitle ?? '点没被压住的年货 · 三件装一箱',headline.subtitle ? 22 : 19,0,0);
+    const subtitle = label(this.hud,'Subtitle',headline.subtitle ?? '点没被压住的年货 · 三件装一箱',headline.subtitle ? 20 : 18,0,0);
     subtitle.color = cream;
-    this.soundButton = uiNode('SoundToggle',this.hud,86,40);
-    this.soundButtonArt = this.soundButton.addComponent(Graphics);
-    this.soundButtonLabel = label(this.soundButton,'SoundLabel','音效 开',15,0,0);
-    this.musicButton = uiNode('MusicToggle',this.hud,86,40);
-    this.musicButtonArt = this.musicButton.addComponent(Graphics);
-    this.musicButtonLabel = label(this.musicButton,'MusicLabel','音乐 开',15,0,0);
-    this.drawSoundButton();
+    // One speaker button in the top bar; its popover holds the 音效 / 音乐 switches.
+    this.speakerButton = uiNode('SoundButton',this.hud,STACK_SOUND_BUTTON.w,STACK_SOUND_BUTTON.h);
+    this.speakerArt = this.speakerButton.addComponent(Graphics);
+    this.speakerLabel = label(this.speakerButton,'SoundButtonText','声音',22,18,0);
+    this.speakerLabel.isBold = true;
     this.reserveLayer = uiNode('ReserveZone',this.node,750,1334);
     this.reserveShelf = this.reserveLayer.addComponent(Graphics);
     this.reserveLayer.active = false;
@@ -338,6 +350,17 @@ export class StackPage {
       this.momAvatar.getChildByName('MomFallback')!.active = false;
     });
 
+    this.soundMenu = uiNode('SoundMenu',this.node,750,1334);
+    this.soundMenuArt = this.soundMenu.addComponent(Graphics);
+    this.soundButton = uiNode('SoundToggle',this.soundMenu,STACK_SOUND_ROWS[0].w,STACK_SOUND_ROWS[0].h);
+    this.soundButtonArt = this.soundButton.addComponent(Graphics);
+    this.soundButtonLabel = label(this.soundButton,'SoundLabel','音效 开',21,0,0);
+    this.musicButton = uiNode('MusicToggle',this.soundMenu,STACK_SOUND_ROWS[1].w,STACK_SOUND_ROWS[1].h);
+    this.musicButtonArt = this.musicButton.addComponent(Graphics);
+    this.musicButtonLabel = label(this.musicButton,'MusicLabel','音乐 开',21,0,0);
+    this.soundMenu.active = false;
+    this.drawSoundButton();
+
     this.homeExit = new HomeExit(this.node,HOME_BUTTON,() => this.onAction('home'));
     this.homeExit.layout(this.height,HOME_BUTTON);
     this.node.on(Node.EventType.TOUCH_END,this.touch,this);
@@ -361,6 +384,7 @@ export class StackPage {
         x:card.x, y:card.y, w:card.w, h:card.h,
       })),
       getLayout: () => this.debugLayout(),
+      getArtStatus: () => this.debugArtStatus(),
       getSlotViews: () => this.debugSlotViews(),
       getHomeExit: () => this.homeExit.debug(typeof window === 'undefined' ? 750 : window.innerWidth,typeof window === 'undefined' ? this.height : window.innerHeight),
     };
@@ -446,20 +470,24 @@ export class StackPage {
       const bottomY = Math.max(...this.slotRects.map(r => r.y+r.h));
       this.trunk = {x:left-10,y:this.slotY-10,w:right-left+20,h:bottomY-this.slotY+20};
     }
-    this.stageLabel.node.setPosition(-242,this.height/2-61);
-    this.remainingLabel.node.setPosition(198,this.height/2-61);
-    this.soundButton.setPosition(323,this.height/2-170);
-    this.musicButton.setPosition(323,this.height/2-216);
-    this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-61);
-    this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-105);
+    const banner = STACK_BANNER;
+    this.hud.getChildByName('ModeTitle')!.setPosition(0,this.height/2-(banner.y+38));
+    this.stageLabel.node.setPosition(-140,this.height/2-(banner.y+39));
+    this.remainingLabel.node.setPosition(136,this.height/2-(banner.y+39));
+    this.hud.getChildByName('Subtitle')!.setPosition(0,this.height/2-(STACK_SUBTITLE.y+STACK_SUBTITLE.h/2));
+    this.speakerButton.setPosition(STACK_SOUND_BUTTON.x+STACK_SOUND_BUTTON.w/2-375,this.height/2-(STACK_SOUND_BUTTON.y+STACK_SOUND_BUTTON.h/2));
+    this.soundButton.setPosition(this.soundRect.x+this.soundRect.w/2-375,this.height/2-(this.soundRect.y+this.soundRect.h/2));
+    this.musicButton.setPosition(this.musicRect.x+this.musicRect.w/2-375,this.height/2-(this.musicRect.y+this.musicRect.h/2));
     this.slotTitle.node.setPosition(0,this.height/2-(this.slotY-(this.isSedan ? 17 : 24)));
     this.reserveTitle.node.setPosition(-235,this.height/2-920);
-    this.momLayer.getChildByName('MomBubble')!.setPosition(40,this.height/2-204);
-    this.momAvatar.setPosition(-250,this.height/2-204);
+    this.momLayer.getChildByName('MomBubble')!.setPosition(40,this.height/2-226);
+    this.momAvatar.setPosition(-250,this.height/2-226);
     this.showVehicleIntro();
     for (let i=0;i<this.actions.length;i++) {
       const rect = this.actions[i].rect;
-      rect.x = 44 + i*222; rect.y = this.actionY; rect.w = 210; rect.h = this.actionH;
+      // Three equal buttons across the pile's width, 18 apart.
+      rect.w = Math.floor((750-STACK_BOARD_SIDE*2-36)/3); rect.h = this.actionH;
+      rect.x = STACK_BOARD_SIDE + i*(rect.w+18); rect.y = this.actionY;
       this.actions[i].label.node.setPosition(rect.x+rect.w/2-375,this.height/2-(rect.y+rect.h/2));
     }
     this.layoutBackground();
@@ -493,17 +521,14 @@ export class StackPage {
     const g = this.background;
     g.clear();
     this.rect(g,new Color(17,10,20,45),0,0,750,this.height);
-    // Festival header.
-    this.rect(g,new Color(45,19,29,232),32,14,686,118,26);
-    this.rect(g,gold,38,20,674,106,22);
-    this.rect(g,new Color(144,31,39),46,28,658,90,18);
-    this.rect(g,new Color(205,51,45),55,36,640,72,13);
-    this.rect(g,new Color(255,222,161,150),95,110,560,2,1);
-    this.rect(g,new Color(255,224,165),302,25,146,4,2);
-    // A soft night-market wash makes the pile read as one cargo mountain without boxing it in.
-    this.rect(g,new Color(21,14,28,42),34,136,682,982,42);
-    this.rect(g,new Color(255,194,102,24),74,912,602,206,44);
-    this.rect(g,new Color(246,195,67,62),132,1032,486,2,1);
+    // Festival banner in the middle of the top bar (home pill on its left, sound button on its right).
+    const b = STACK_BANNER;
+    this.rect(g,new Color(45,19,29,232),b.x,b.y,b.w,b.h,26);
+    this.rect(g,gold,b.x+6,b.y+6,b.w-12,b.h-12,22);
+    this.rect(g,new Color(144,31,39),b.x+13,b.y+13,b.w-26,b.h-26,17);
+    this.rect(g,new Color(205,51,45),b.x+20,b.y+20,b.w-40,b.h-40,12);
+    this.rect(g,new Color(255,222,161,120),b.x+40,b.y+60,b.w-80,2,1);
+    this.rect(g,new Color(255,224,165),375-60,b.y+3,120,4,2);
 
     if (!this.isSedan) {
       this.drawVehicle();
@@ -716,19 +741,64 @@ export class StackPage {
   }
 
   private drawSoundButton(): void {
-    this.drawToggle(this.soundButtonArt,this.soundButtonLabel,this.sounds.soundEnabled,'音效');
-    this.drawToggle(this.musicButtonArt,this.musicButtonLabel,this.sounds.musicEnabled,'音乐');
+    this.drawToggle(this.soundButtonArt,this.soundButtonLabel,this.sounds.soundEnabled,'音效',this.soundRect);
+    this.drawToggle(this.musicButtonArt,this.musicButtonLabel,this.sounds.musicEnabled,'音乐',this.musicRect);
+    this.drawSpeaker();
   }
 
-  private drawToggle(g: Graphics,text: Label,on: boolean,name: string): void {
+  /** Red-gold pill matching “← 主页”: a speaker glyph (struck through when both are off) and 声音. */
+  private drawSpeaker(): void {
+    const g = this.speakerArt;
+    const {w,h} = STACK_SOUND_BUTTON;
+    const on = this.sounds.soundEnabled || this.sounds.musicEnabled;
+    const open = this.soundMenu.active;
     g.clear();
-    fill(g,on ? gold : new Color(96,87,89),-43,-20,86,40,14);
-    fill(g,on ? new Color(139,31,38) : new Color(67,61,64),-40,-17,80,34,11);
+    fill(g,new Color(30,6,10,130),-w/2+2,-h/2-3,w,h,h/2);
+    fill(g,gold,-w/2,-h/2,w,h,h/2);
+    fill(g,open ? new Color(128,20,30) : new Color(178,30,40),-w/2+3,-h/2+3,w-6,h-6,h/2-3);
+    g.strokeColor = new Color(255,226,150,150); g.lineWidth = 1.2;
+    g.roundRect(-w/2+7,-h/2+7,w-14,h-14,h/2-7); g.stroke();
+    const cx = -28;
+    g.fillColor = on ? paleGold : new Color(205,198,194);
+    g.rect(cx-14,-6,8,12); g.fill();
+    g.moveTo(cx-6,-6); g.lineTo(cx+4,-14); g.lineTo(cx+4,14); g.lineTo(cx-6,6); g.close(); g.fill();
+    g.strokeColor = on ? paleGold : new Color(205,198,194); g.lineWidth = 2.4;
+    if (on) {
+      g.arc(cx+6,0,7,-Math.PI/3,Math.PI/3,true); g.stroke();
+      g.arc(cx+6,0,13,-Math.PI/3,Math.PI/3,true); g.stroke();
+    } else {
+      g.moveTo(cx+9,-8); g.lineTo(cx+21,8); g.moveTo(cx+21,-8); g.lineTo(cx+9,8); g.stroke();
+    }
+    this.speakerLabel.color = paleGold;
+    // Popover panel under the button.
+    const m = STACK_SOUND_MENU;
+    const p = this.soundMenuArt;
+    p.clear();
+    this.rect(p,new Color(30,6,10,150),m.x+3,m.y+5,m.w,m.h,22);
+    this.rect(p,gold,m.x,m.y,m.w,m.h,22);
+    this.rect(p,new Color(150,26,36),m.x+4,m.y+4,m.w-8,m.h-8,19);
+    // Little pointer up to the speaker button.
+    const tipX = STACK_SOUND_BUTTON.x+STACK_SOUND_BUTTON.w/2-375, tipY = this.height/2-m.y;
+    p.fillColor = gold;
+    p.moveTo(tipX-12,tipY); p.lineTo(tipX,tipY+12); p.lineTo(tipX+12,tipY); p.close(); p.fill();
+  }
+
+  private drawToggle(g: Graphics,text: Label,on: boolean,name: string,rect: Rect): void {
+    const w = rect.w, h = rect.h;
+    g.clear();
+    fill(g,on ? gold : new Color(96,87,89),-w/2,-h/2,w,h,16);
+    fill(g,on ? new Color(139,31,38) : new Color(67,61,64),-w/2+3,-h/2+3,w-6,h-6,13);
     g.strokeColor = on ? new Color(255,226,164) : new Color(155,146,146);
     g.lineWidth = 1.5;
-    g.roundRect(-41,-18,82,36,12); g.stroke();
+    g.roundRect(-w/2+2,-h/2+2,w-4,h-4,14); g.stroke();
     text.string = `${name} ${on ? '开' : '关'}`;
     text.color = on ? paleGold : new Color(205,198,194);
+  }
+
+  private setSoundMenu(open: boolean): void {
+    this.soundMenu.active = open;
+    if (open) this.soundMenu.setSiblingIndex(Number.MAX_SAFE_INTEGER);
+    this.drawSpeaker();
   }
 
   private drawActions(): void {
@@ -762,13 +832,14 @@ export class StackPage {
     const minY = Math.min(...reserve.map(card => card.y));
     const maxX = Math.max(...reserve.map(card => card.x+card.w));
     const maxY = Math.max(...reserve.map(card => card.y+card.h));
-    const shelfX = Math.max(20,minX-12);
+    const shelfX = Math.max(STACK_BOARD_SIDE-10,minX-12);
     const shelfY = minY-10;
-    const shelfW = Math.min(710,maxX-minX+24);
+    const shelfW = Math.min(750-2*(STACK_BOARD_SIDE-10),maxX-minX+24);
     const shelfH = maxY-minY+20;
     this.reserveShelf.clear();
-    this.rect(this.reserveShelf,new Color(35,22,31,214),shelfX,shelfY,shelfW,shelfH,18);
-    this.stroke(this.reserveShelf,new Color(246,195,67,132),2,shelfX+2,shelfY+2,shelfW-4,shelfH-4,16);
+    // Red-gold tray for moved-out goods (was a dark translucent box).
+    this.rect(this.reserveShelf,new Color(128,24,32,168),shelfX,shelfY,shelfW,shelfH,18);
+    this.stroke(this.reserveShelf,new Color(246,195,67,190),2,shelfX+2,shelfY+2,shelfW-4,shelfH-4,16);
     this.reserveTitle.node.setPosition(shelfX+70-375,this.height/2-(shelfY-5));
   }
 
@@ -912,6 +983,10 @@ export class StackPage {
     view.fallback.lineHeight = view.fallback.fontSize+3;
     view.fallback.node.active = true;
     view.sprite.enabled = false;
+    if (!this.itemFrames.get(card.kind)) {
+      const ready = peekArt(`items/${card.kind}`);
+      if (ready) this.itemFrames.set(card.kind,cropItemFrame(card.kind,ready));
+    }
     const cached = this.itemFrames.get(card.kind);
     if (cached) this.showItemFrame(view,cached);
     else if (!this.itemFrames.has(card.kind)) {
@@ -983,6 +1058,13 @@ export class StackPage {
     const p = this.point(event);
     if (this.rankPage) { this.rankPage.press(p.x,p.y); return; }
     if (this.provincePicker) { this.provincePicker.press(p.x,p.y); return; }
+    // The open sound popover takes the tap: a switch toggles, anything else just closes it.
+    if (this.soundMenu.active) {
+      if (contains(this.soundRect,p.x,p.y)) { this.sounds.toggleSound(); this.drawSoundButton(); }
+      else if (contains(this.musicRect,p.x,p.y)) { this.sounds.toggleMusic(); this.drawSoundButton(); }
+      else this.setSoundMenu(false);
+      return;
+    }
     // “← 主页”: asks first only while a round is under way; after a win or a full trunk it just leaves.
     if (this.homeExit.press(p.x,p.y,exitNeedsConfirm({playing:this.game.status === 'playing' && !this.finish,moves:this.tapCounter}))) return;
     if (this.finish) { this.finishView?.press(p.x,p.y); return; }
@@ -996,16 +1078,7 @@ export class StackPage {
       }
       return;
     }
-    if (contains(this.soundRect,p.x,p.y)) {
-      this.sounds.toggleSound();
-      this.drawSoundButton();
-      return;
-    }
-    if (contains(this.musicRect,p.x,p.y)) {
-      this.sounds.toggleMusic();
-      this.drawSoundButton();
-      return;
-    }
+    if (contains(STACK_SOUND_BUTTON,p.x,p.y)) { this.setSoundMenu(!this.soundMenu.active); return; }
     if (this.busy || this.game.status !== 'playing') return;
     for (const action of this.actions) {
       if (!contains(action.rect,p.x,p.y)) continue;
@@ -1560,6 +1633,41 @@ export class StackPage {
     }));
   }
 
+  private screenRect(r: Rect): {left:number;top:number;right:number;bottom:number} {
+    const a = this.toScreen(r.x,r.y), b = this.toScreen(r.x+r.w,r.y+r.h);
+    return {left:a.x,top:a.y,right:b.x,bottom:b.y};
+  }
+
+  /** A node's rendered world box mapped to CSS px (the canvas shows the visible design area edge to edge). */
+  private nodeScreenRect(node: Node): {left:number;top:number;right:number;bottom:number} | null {
+    if (!node.activeInHierarchy) return null;
+    const box = node.getComponent(UITransform)!.getBoundingBoxToWorld();
+    const size = view.getVisibleSize();
+    const sw = typeof window === 'undefined' ? size.width : window.innerWidth;
+    const sh = typeof window === 'undefined' ? size.height : window.innerHeight;
+    const kx = sw/size.width, ky = sh/size.height;
+    return {left:box.x*kx,right:(box.x+box.width)*kx,top:sh-(box.y+box.height)*ky,bottom:sh-box.y*ky};
+  }
+
+  private unionRects(rects: ({left:number;top:number;right:number;bottom:number} | null)[]): {left:number;top:number;right:number;bottom:number} | null {
+    const live = rects.filter((r): r is {left:number;top:number;right:number;bottom:number} => !!r);
+    if (!live.length) return null;
+    return {left:Math.min(...live.map(r => r.left)),top:Math.min(...live.map(r => r.top)),right:Math.max(...live.map(r => r.right)),bottom:Math.max(...live.map(r => r.bottom))};
+  }
+
+  /** Cards on screen still showing the text placeholder (face-up, no sprite yet). */
+  private debugArtStatus(): {textCards: number; imageCards: number; backCards: number; vehicleArt: boolean; slotTextCards: number} {
+    const views = [...this.cardViews.values()].filter(view => view.node.active && view.node.activeInHierarchy);
+    const faceUp = views.filter(view => !view.back.node.active);
+    return {
+      textCards:faceUp.filter(view => !view.sprite.enabled).length,
+      imageCards:faceUp.filter(view => view.sprite.enabled).length,
+      backCards:views.length-faceUp.length,
+      vehicleArt:this.isSedan ? !!this.carFrames.body : !!this.vehicleFrame,
+      slotTextCards:this.slotViews.filter(view => view.node.active && !view.sprite.enabled && !view.back.node.active).length,
+    };
+  }
+
   private debugLayout(): object {
     const viewport = this.toScreen(750,this.height);
     const origin = this.toScreen(0,0);
@@ -1568,7 +1676,7 @@ export class StackPage {
     const layout = this.isSedan ? createStackPageLayout(this.height,this.safeBottom,undefined,this.carScale) : createStackPageLayout(this.height,this.safeBottom,this.artRect.y);
     const topLeft = this.toScreen(bounds.left,bounds.top);
     const bottomRight = this.toScreen(bounds.right,bounds.bottom);
-    const lidTop = this.isSedan ? this.carRect.y-75*this.carScale : this.artRect.y;
+    const lidTop = this.isSedan ? this.carRect.y-STACK_LID_RISE*this.carScale : this.artRect.y;
     const actionsBottom = this.actionY+this.actionH;
     return {
       viewport:{width:typeof window === 'undefined' ? 750 : window.innerWidth,height:typeof window === 'undefined' ? this.height : window.innerHeight},
@@ -1603,6 +1711,18 @@ export class StackPage {
         bottom:this.toScreen(0,layout.stackBottom).y,
         ratio:layout.stackRatio,
       },
+      // Rendered rects (screen px) for the no-overlap checks in tools/play-layout.mjs.
+      hud:{
+        home:this.screenRect(HOME_BUTTON),
+        banner:this.screenRect(STACK_BANNER),
+        sound:this.screenRect(STACK_SOUND_BUTTON),
+      },
+      ride:this.isSedan
+        ? this.unionRects([this.nodeScreenRect(this.bodyImage.node),this.nodeScreenRect(this.lidImage.node)])
+        : this.nodeScreenRect(this.vehicleImage.node),
+      plateRect:this.plate.node.activeInHierarchy ? this.nodeScreenRect(this.plate.node) : null,
+      actionRects:this.actions.map(action => this.screenRect(action.rect)),
+      soundMenu:{open:this.soundMenu.active,panel:this.screenRect(STACK_SOUND_MENU),rows:[this.screenRect(this.soundRect),this.screenRect(this.musicRect)]},
       sideCounts:{
         left:cards.filter(card => card.source === 'side-left').length,
         right:cards.filter(card => card.source === 'side-right').length,

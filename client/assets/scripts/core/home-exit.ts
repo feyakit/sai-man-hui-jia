@@ -2,8 +2,8 @@
 
 export interface ExitRect { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
 
-/** Small pill at the top-left, inside the red HUD banner of both game pages. */
-export const HOME_BUTTON: ExitRect = {x:40, y:80, w:128, h:42};
+/** Left block of the match-3 top bar (banner at x 156–594, sound button at 606–726, all centred on y 65). */
+export const HOME_BUTTON: ExitRect = {x:24, y:38, w:120, h:54};
 /** Classic mode banner is one line taller; the pill sits on the title row instead. */
 export const HOME_BUTTON_CLASSIC: ExitRect = {x:44, y:40, w:128, h:42};
 

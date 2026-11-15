@@ -1,3 +1,4 @@
+import { plateBox } from '../client/assets/scripts/core/plate';
 import {describe, expect, it} from 'vitest';
 import {createStackPageLayout} from '../client/assets/scripts/core/stack/stack-layout';
 import {
@@ -50,8 +51,12 @@ describe('vehicle slot cells', () => {
             }
             const layout = createStackPageLayout(height, safe, art.y);
             expect(layout.stackBottom).toBeLessThan(art.y);
-            // The board loses at most 60 design units against the sedan's open lid.
-            expect(layout.stackBottom).toBeGreaterThanOrEqual(base.stackBottom - 60);
+            // The whole ride, plate included, stays above the prop buttons.
+            expect(art.y + art.h).toBeLessThanOrEqual(base.actionY - 8);
+            const plate = plateBox(vehicle.key, vehicle.artSize);
+            expect(art.y + (plate.cy + plate.h / 2) * art.h).toBeLessThan(base.actionY);
+            // …and the board keeps at least 40% of the page.
+            expect(layout.stackBottom - layout.stackTop).toBeGreaterThanOrEqual(height * .4);
           }
         }
       });
